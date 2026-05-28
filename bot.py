@@ -73,6 +73,26 @@ COIN_NAMES_RO = {
     "BTCUSDT": "Bitcoin (BTC)", "ETHUSDT": "Ethereum (ETH)",
     "SOLUSDT": "Solana (SOL)",  "BNBUSDT": "BNB (BNB)",
 }
+COIN_LOGOS = {
+    "BTCUSDT": "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
+    "ETHUSDT": "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+    "SOLUSDT": "https://assets.coingecko.com/coins/images/4128/small/solana.png",
+    "BNBUSDT": "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+}
+BOT_ICON = "https://assets.coingecko.com/coins/images/1/small/bitcoin.png"
+SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+def rsi_bar(rsi: float) -> str:
+    filled = max(0, min(20, int(rsi / 5)))
+    bar = "█" * filled + "░" * (20 - filled)
+    zone = "🔴 OB" if rsi > 70 else ("🟢 OS" if rsi < 30 else "🟡 Neutral")
+    return f"`{bar}` **{round(rsi, 1)}** {zone}"
+
+def conf_stars(confidence: str) -> str:
+    mapping = {"HIGH": "★★★★★", "MEDIUM": "★★★☆☆", "LOW": "★★☆☆☆"}
+    stars = mapping.get(confidence.upper(), "★★★☆☆")
+    color = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}.get(confidence.upper(), "⚪")
+    return f"{color} {stars}  `{confidence}`"
 
 intents = discord.Intents.default()
 intents.members = True
@@ -381,97 +401,192 @@ def generate_chart(df, symbol, signal=None):
 # =========================
 
 def build_free_embed(symbol, signal, price, rsi, confidence):
-    color  = discord.Color.green() if signal == "BUY" else discord.Color.red()
+    coin   = symbol.replace("USDT", "")
     emoji  = COIN_EMOJI.get(symbol, "🪙")
-    coin   = symbol.replace("USDT","")
+    logo   = COIN_LOGOS.get(symbol)
     sl     = round(price * 0.97, 2)
     tp1    = round(price * 1.02, 2)
+    is_buy = signal == "BUY"
 
-    if signal == "BUY":
-        title_en = "🟢 BUY SIGNAL — ENTER NOW"
-        title_ro = "🟢 SEMNAL BUY — INTRĂ ACUM"
-        desc_en  = f"Market shows signs of reversal.\nIf no position → **enter carefully**.\nIf already in → **hold and watch TP**."
-        desc_ro  = f"Piața arată semne de revenire.\nDacă nu ai poziție → **poți intra cu atenție**.\nDacă ai deja → **ține poziția**, urmărește TP."
-        steps_en = f"1. Open Binance / Bybit\n2. SPOT → {coin} → BUY\n3. Max 5–10% of capital\n4. Set SL at ${sl}"
-        steps_ro = f"1. Deschide Binance / Bybit\n2. SPOT → {coin} → BUY\n3. Max 5–10% din capital\n4. Setează SL la ${sl}"
-    else:
-        title_en = "🔴 SELL SIGNAL — STAY OUT"
-        title_ro = "🔴 SEMNAL SELL — STAI PE MARGINE"
-        desc_en  = f"Market is dropping.\nIf holding → **consider selling**.\nIf no position → **do NOT buy now**. Wait for 🟢."
-        desc_ro  = f"Piața merge în jos.\nDacă ai cumpărat → **ia în considerare să vinzi**.\nDacă nu ai → **nu cumpăra acum**. Așteaptă 🟢."
-        steps_en = f"1. SPOT → {coin} → SELL\n2. Don't go SHORT if beginner\n3. Wait for 🟢 BUY signal\n4. Protect your capital first"
-        steps_ro = f"1. SPOT → {coin} → SELL\n2. Nu intra SHORT dacă ești la început\n3. Așteaptă semnal 🟢 verde\n4. Protejează capitalul"
+    color  = 0x00c853 if is_buy else 0xff1744
+    banner = "🟢  B U Y   S I G N A L" if is_buy else "🔴  S E L L   S I G N A L"
+    banner_ro = "🟢  S E M N A L   B U Y" if is_buy else "🔴  S E M N A L   S E L L"
+    action_en = ("📥 **ENTER NOW** — Signs of reversal detected.\n"
+                 f"▸ No position? Enter carefully with **max 5–10% capital**.\n"
+                 f"▸ Already in? **Hold** and watch TP1.") if is_buy else \
+                ("📤 **STAY OUT / SELL** — Bearish momentum active.\n"
+                 f"▸ Holding? Consider **taking profit or cutting losses**.\n"
+                 f"▸ No position? **Wait for 🟢 BUY signal**.")
+    action_ro = ("📥 **INTRĂ ACUM** — Semne de revenire detectate.\n"
+                 f"▸ Fără poziție? Intră cu atenție, **max 5–10% capital**.\n"
+                 f"▸ Ai deja? **Ține poziția**, urmărește TP1.") if is_buy else \
+                ("📤 **STAI PE MARGINE / VINDE** — Momentum bearish activ.\n"
+                 f"▸ Ai cumpărat? Consideră **să vinzi / protejezi capitalul**.\n"
+                 f"▸ Fără poziție? **Așteaptă semnalul 🟢 BUY**.")
+    steps_en = (f"① Open **Binance / Bybit**\n"
+                f"② SPOT → `{coin}` → **BUY**\n"
+                f"③ Max **5–10%** of portfolio\n"
+                f"④ Set Stop-Loss at `${sl:,}`") if is_buy else \
+               (f"① SPOT → `{coin}` → **SELL** (if holding)\n"
+                f"② Avoid SHORTING if beginner\n"
+                f"③ Wait for next 🟢 BUY signal\n"
+                f"④ **Capital protection first**")
+    steps_ro = (f"① Deschide **Binance / Bybit**\n"
+                f"② SPOT → `{coin}` → **BUY**\n"
+                f"③ Max **5–10%** din portofoliu\n"
+                f"④ Stop-Loss la `${sl:,}`") if is_buy else \
+               (f"① SPOT → `{coin}` → **SELL** (dacă ai)\n"
+                f"② Nu intra SHORT dacă ești la început\n"
+                f"③ Așteaptă semnalul 🟢 BUY\n"
+                f"④ **Protejează capitalul primul**")
 
     embed = discord.Embed(
-        title=f"{title_en}\n{title_ro}",
-        description=f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}** — `${round(price, 2)}`",
+        title=f"{banner}\n{banner_ro}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**\n"
+            f"{SEP}\n"
+            f"💰 **Price / Preț:** `${price:,.4f}`  |  🎯 **TP1:** `${tp1:,.4f}`  |  🛑 **SL:** `${sl:,.4f}`"
+        ),
         color=color,
         timestamp=datetime.utcnow()
     )
-    embed.add_field(name="📊 Indicators / Indicatori",
-                    value=f"RSI: `{round(rsi,2)}` | Confidence / Calitate: **{confidence}** | TP1: `${tp1}`",
-                    inline=False)
-    embed.add_field(name="🇬🇧 Situation", value=desc_en, inline=True)
-    embed.add_field(name="🇷🇴 Situație",  value=desc_ro, inline=True)
-    embed.add_field(name="🇬🇧 Steps",     value=steps_en, inline=True)
-    embed.add_field(name="🇷🇴 Pași",      value=steps_ro, inline=True)
-    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    if logo:
+        embed.set_thumbnail(url=logo)
+    embed.set_author(name="🤖 Crypto Signals Bot — Free Signal", icon_url=BOT_ICON)
+
+    embed.add_field(name="📊 RSI (14)", value=rsi_bar(rsi), inline=False)
+    embed.add_field(name="⭐ Confidence / Calitate", value=conf_stars(confidence), inline=False)
+    embed.add_field(name="\u200b", value=SEP, inline=False)
+    embed.add_field(name="🇬🇧 Situation",  value=action_en, inline=False)
+    embed.add_field(name="🇷🇴 Situație",   value=action_ro, inline=False)
+    embed.add_field(name="\u200b", value=SEP, inline=False)
+    embed.add_field(name="🇬🇧 Steps",      value=steps_en,  inline=True)
+    embed.add_field(name="🇷🇴 Pași",       value=steps_ro,  inline=True)
+    embed.add_field(
+        name="💎 Want TP2, TP3 & AI Analysis?",
+        value=f"🇬🇧 Upgrade to **VIP** for full signal details!\n🇷🇴 Fă upgrade la **VIP** pentru semnale complete!",
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
     return embed
 
 def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_15m=False):
-    color = COIN_COLORS.get(symbol, 0x00c896)
-    emoji = COIN_EMOJI.get(symbol, "🪙")
-    coin  = symbol.replace("USDT","")
+    coin   = symbol.replace("USDT", "")
+    emoji  = COIN_EMOJI.get(symbol, "🪙")
+    logo   = COIN_LOGOS.get(symbol)
+    color  = COIN_COLORS.get(symbol, 0x00c896)
+    is_buy = signal == "BUY"
+
+    entry  = price
+    tp1    = round(price * (1.020 if is_buy else 0.980), 4)
+    tp2    = round(price * (1.040 if is_buy else 0.960), 4)
+    tp3    = round(price * (1.065 if is_buy else 0.935), 4)
+    sl     = round(price * (0.970 if is_buy else 1.030), 4)
+    rr     = "2.2 : 1"
+
+    sig_label = "🟢  V I P   B U Y" if is_buy else "🔴  V I P   S E L L"
+    mtf_badge = "✅ **MULTI-TF CONFIRMED**  •  5m + 15m aligned" if confirmed_15m else "⚠️ Single-TF signal  •  Use smaller position"
 
     embed = discord.Embed(
-        title=f"💎 VIP SIGNAL — {'🟢 BUY' if signal=='BUY' else '🔴 SELL'} {coin}",
-        description=f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**",
+        title=f"💎 {sig_label} — {coin}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**\n"
+            f"{SEP}\n"
+            f"{mtf_badge}"
+        ),
         color=color,
         timestamp=datetime.utcnow()
     )
-    embed.add_field(name="💰 Entry",      value=f"`${round(price,2)}`",       inline=True)
-    embed.add_field(name="🎯 TP1",        value=f"`${round(price*1.02,2)}`",  inline=True)
-    embed.add_field(name="🎯 TP2",        value=f"`${round(price*1.04,2)}`",  inline=True)
-    embed.add_field(name="🛑 SL",         value=f"`${round(price*0.97,2)}`",  inline=True)
-    embed.add_field(name="📊 RSI",        value=f"`{round(rsi,2)}`",          inline=True)
-    embed.add_field(name="⭐ Confidence", value=confidence,                   inline=True)
-    if confirmed_15m:
-        embed.add_field(name="✅ Multi-Timeframe",
-                        value="🇬🇧 Confirmed on 15m chart!\n🇷🇴 Confirmat și pe graficul 15m!",
-                        inline=False)
-    embed.add_field(name="🧠 AI Analysis",
-                    value=ai_text,
-                    inline=False)
-    embed.add_field(name="⚠️ Risk Management",
-                    value="🇬🇧 Leverage: 1x–3x max | Max 10% capital per trade | Always respect SL!\n"
-                          "🇷🇴 Leverage: 1x–3x max | Max 10% capital pe trade | Respectă mereu SL!",
-                    inline=False)
-    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    if logo:
+        embed.set_thumbnail(url=logo)
+    embed.set_author(name="💎 Crypto Signals Bot — VIP Exclusive", icon_url=BOT_ICON)
+
+    embed.add_field(
+        name="📍 Trade Levels / Niveluri Trade",
+        value=(
+            f"```\n"
+            f"{'Entry':<10} ${entry:>14,.4f}\n"
+            f"{'TP1  +2%':<10} ${tp1:>14,.4f}\n"
+            f"{'TP2  +4%':<10} ${tp2:>14,.4f}\n"
+            f"{'TP3  +6.5%':<10} ${tp3:>14,.4f}\n"
+            f"{'SL   -3%':<10} ${sl:>14,.4f}\n"
+            f"{'R:R':<10} {'2.2 : 1':>14}\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(name="📊 RSI (14)", value=rsi_bar(rsi), inline=False)
+    embed.add_field(name="⭐ Signal Quality", value=conf_stars(confidence), inline=True)
+    embed.add_field(name="📐 Direction", value=f"`{'LONG 📈' if is_buy else 'SHORT / AVOID 📉'}`", inline=True)
+    embed.add_field(name="\u200b", value=SEP, inline=False)
+    embed.add_field(
+        name="🧠 AI Analysis / Analiză AI",
+        value=ai_text if ai_text else "_Analysis unavailable_",
+        inline=False
+    )
+    embed.add_field(name="\u200b", value=SEP, inline=False)
+    embed.add_field(
+        name="⚠️ Risk Rules / Reguli de Risc",
+        value=(
+            "🇬🇧 `Leverage: 1x–3x MAX`  •  `Max 10% capital/trade`  •  `Always set SL!`\n"
+            "🇷🇴 `Leverage: 1x–3x MAX`  •  `Max 10% capital/trade`  •  `Setează mereu SL!`"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot — VIP  •  {DISCLAIMER_RO}")
     return embed
 
 def build_price_embed(symbol):
-    info = get_price_info(symbol)
-    df   = get_data(symbol)
-    ind  = calc_indicators(df) if df is not None else None
+    info  = get_price_info(symbol)
+    df    = get_data(symbol)
+    ind   = calc_indicators(df) if df is not None else None
     emoji = COIN_EMOJI.get(symbol, "🪙")
-    color = discord.Color.green() if (info and info["change"] >= 0) else discord.Color.red()
+    logo  = COIN_LOGOS.get(symbol)
+    is_up = info and info["change"] >= 0
+    color = 0x00c853 if is_up else 0xff1744
 
     embed = discord.Embed(
-        title=f"{emoji} {COIN_NAMES_EN.get(symbol, symbol)} — Live Price",
+        title=f"{emoji}  {COIN_NAMES_EN.get(symbol, symbol)}",
+        description=f"{'📈' if is_up else '📉'} **Live Market Data**  •  Real-time via Binance\n{SEP}",
         color=color,
         timestamp=datetime.utcnow()
     )
+    if logo:
+        embed.set_thumbnail(url=logo)
+    embed.set_author(name="📊 Crypto Signals Bot — Price Dashboard", icon_url=BOT_ICON)
+
     if info:
-        ch_emoji = "📈" if info["change"] >= 0 else "📉"
-        embed.add_field(name="💰 Price",    value=f"`${info['price']:,.4f}`",              inline=True)
-        embed.add_field(name=f"{ch_emoji} 24h Change", value=f"`{info['change']:+.2f}%`", inline=True)
-        embed.add_field(name="📊 24h High", value=f"`${info['high']:,.4f}`",               inline=True)
-        embed.add_field(name="📉 24h Low",  value=f"`${info['low']:,.4f}`",                inline=True)
-        embed.add_field(name="💵 Volume",   value=f"`${info['volume']:,.0f}`",             inline=True)
+        ch_sign  = "▲" if is_up else "▼"
+        ch_color = "🟢" if is_up else "🔴"
+        embed.add_field(
+            name="💰 Price / Preț",
+            value=f"## `${info['price']:,.4f}`",
+            inline=False
+        )
+        embed.add_field(
+            name=f"{ch_color} 24h Change",
+            value=f"`{ch_sign} {abs(info['change']):.2f}%`",
+            inline=True
+        )
+        embed.add_field(name="🔺 24h High", value=f"`${info['high']:,.4f}`", inline=True)
+        embed.add_field(name="🔻 24h Low",  value=f"`${info['low']:,.4f}`",  inline=True)
+        embed.add_field(
+            name="📦 24h Volume",
+            value=f"`${info['volume']:,.0f}`",
+            inline=True
+        )
+        range_pct = round((info["high"] - info["low"]) / info["low"] * 100, 2) if info["low"] else 0
+        embed.add_field(name="↔️ Day Range", value=f"`{range_pct}%`", inline=True)
+
     if ind:
-        rsi_status = "🔴 Overbought" if ind["rsi"] > 70 else ("🟢 Oversold" if ind["rsi"] < 30 else "⚪ Neutral")
-        embed.add_field(name="📐 RSI (14)", value=f"`{ind['rsi']:.2f}` {rsi_status}", inline=True)
-    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+        embed.add_field(name="\u200b", value=SEP, inline=False)
+        embed.add_field(name="📊 RSI (14)", value=rsi_bar(ind["rsi"]), inline=False)
+        macd_trend = "🟢 Bullish" if ind.get("macd_hist", 0) > 0 else "🔴 Bearish"
+        embed.add_field(name="📉 MACD Trend", value=macd_trend, inline=True)
+        ema_trend  = "🟢 Above EMA50" if info and info["price"] > ind.get("ema50", 0) else "🔴 Below EMA50"
+        embed.add_field(name="📐 EMA (50)",  value=ema_trend,  inline=True)
+
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
     return embed
 
 # =========================
