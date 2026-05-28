@@ -723,59 +723,58 @@ async def on_ready():
         )
         await status_ch.send(embed=embed)
 
-    rules_ch = client.get_channel(RULES_CHANNEL)
-    if rules_ch:
-        embed = discord.Embed(title="📜 Rules / Reguli", color=discord.Color.orange())
-        embed.add_field(name="🇬🇧 Rules",
-                        value="• No spam\n• No scams\n• Respect everyone\n• Signals are NOT financial advice", inline=True)
-        embed.add_field(name="🇷🇴 Reguli",
-                        value="• Fără spam\n• Fără scam\n• Respectă pe toată lumea\n• Semnalele NU sunt sfaturi financiare", inline=True)
-        await rules_ch.send(embed=embed)
-
-    howto_ch = client.get_channel(HOWTO_CHANNEL)
-    if howto_ch:
-        already = False
-        async for msg in howto_ch.history(limit=20):
+    async def send_once(channel, embed, keyword):
+        """Send embed only if bot hasn't posted it before (checks last 30 msgs)."""
+        if not channel:
+            return
+        async for msg in channel.history(limit=30):
             if msg.author == client.user and msg.embeds:
-                already = True
-                break
-        if not already:
-            embed = discord.Embed(
-                title="📊 How to Use Signals / Cum să folosești semnalele",
-                color=discord.Color.blue()
-            )
-            embed.add_field(name="🇬🇧 Steps",
-                value="1. Use Binance / Bybit (SPOT, not futures if beginner)\n"
-                      "2. Follow Entry / TP1 / TP2 / SL exactly\n"
-                      "3. Max 5–10% of capital per trade\n"
-                      "4. Always set Stop Loss before entering\n"
-                      "5. Wait for 🟢 BUY before entering", inline=False)
-            embed.add_field(name="🇷🇴 Pași",
-                value="1. Folosește Binance / Bybit (SPOT, nu futures la început)\n"
-                      "2. Urmează Entry / TP1 / TP2 / SL exact\n"
-                      "3. Max 5–10% din capital pe trade\n"
-                      "4. Setează mereu Stop Loss înainte să intri\n"
-                      "5. Așteaptă semnal 🟢 verde înainte să cumperi", inline=False)
-            embed.add_field(name="📋 Commands / Comenzi", value="Type `/help` to see all commands.", inline=False)
-            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-            await howto_ch.send(embed=embed)
+                title = msg.embeds[0].title or ""
+                if keyword.lower() in title.lower():
+                    return
+        await channel.send(embed=embed)
 
+    rules_embed = discord.Embed(title="📜 Rules / Reguli", color=discord.Color.orange())
+    rules_embed.add_field(name="🇬🇧 Rules",
+                    value="• No spam\n• No scams\n• Respect everyone\n• Signals are NOT financial advice", inline=True)
+    rules_embed.add_field(name="🇷🇴 Reguli",
+                    value="• Fără spam\n• Fără scam\n• Respectă pe toată lumea\n• Semnalele NU sunt sfaturi financiare", inline=True)
+    rules_ch = client.get_channel(RULES_CHANNEL)
+    await send_once(rules_ch, rules_embed, "Rules")
+
+    howto_embed = discord.Embed(
+        title="📊 How to Use Signals / Cum să folosești semnalele",
+        color=discord.Color.blue()
+    )
+    howto_embed.add_field(name="🇬🇧 Steps",
+        value="1. Use Binance / Bybit (SPOT, not futures if beginner)\n"
+              "2. Follow Entry / TP1 / TP2 / SL exactly\n"
+              "3. Max 5–10% of capital per trade\n"
+              "4. Always set Stop Loss before entering\n"
+              "5. Wait for 🟢 BUY before entering", inline=False)
+    howto_embed.add_field(name="🇷🇴 Pași",
+        value="1. Folosește Binance / Bybit (SPOT, nu futures la început)\n"
+              "2. Urmează Entry / TP1 / TP2 / SL exact\n"
+              "3. Max 5–10% din capital pe trade\n"
+              "4. Setează mereu Stop Loss înainte să intri\n"
+              "5. Așteaptă semnal 🟢 verde înainte să cumperi", inline=False)
+    howto_embed.add_field(name="📋 Commands / Comenzi", value="Type `/help` to see all commands.", inline=False)
+    howto_embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    howto_ch = client.get_channel(HOWTO_CHANNEL)
+    await send_once(howto_ch, howto_embed, "How to Use")
+
+    vip_embed = discord.Embed(title="💎 GET VIP ACCESS", color=discord.Color.gold())
+    vip_embed.add_field(name="🇬🇧 What you get",
+        value="✅ Signals with TP1 / TP2 / SL\n✅ RSI + MACD charts attached\n✅ AI trade analysis\n"
+              "✅ Multi-timeframe confirmation\n✅ On-demand `/signal` command\n✅ Price alerts via DM", inline=True)
+    vip_embed.add_field(name="🇷🇴 Ce primești",
+        value="✅ Semnale cu TP1 / TP2 / SL\n✅ Grafice RSI + MACD atașate\n✅ Analiză AI per semnal\n"
+              "✅ Confirmare multi-timeframe\n✅ Comanda `/signal` on-demand\n✅ Alerte de preț via DM", inline=True)
+    vip_embed.add_field(name="📩 Contact",
+        value="👤 <@1426677891269267618>\n👤 <@1463583046962909410>", inline=False)
+    vip_embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     vip_ch = client.get_channel(GET_VIP_CHANNEL)
-    if vip_ch:
-        embed = discord.Embed(
-            title="💎 GET VIP ACCESS",
-            color=discord.Color.gold()
-        )
-        embed.add_field(name="🇬🇧 What you get",
-            value="✅ Signals with TP1 / TP2 / SL\n✅ RSI + MACD charts attached\n✅ AI trade analysis\n"
-                  "✅ Multi-timeframe confirmation\n✅ On-demand `/signal` command\n✅ Price alerts via DM", inline=True)
-        embed.add_field(name="🇷🇴 Ce primești",
-            value="✅ Semnale cu TP1 / TP2 / SL\n✅ Grafice RSI + MACD atașate\n✅ Analiză AI per semnal\n"
-                  "✅ Confirmare multi-timeframe\n✅ Comanda `/signal` on-demand\n✅ Alerte de preț via DM", inline=True)
-        embed.add_field(name="📩 Contact",
-            value="👤 <@1426677891269267618>\n👤 <@1463583046962909410>", inline=False)
-        embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-        await vip_ch.send(embed=embed)
+    await send_once(vip_ch, vip_embed, "VIP")
 
     client.loop.create_task(signal_loop())
     client.loop.create_task(market_news_loop())
