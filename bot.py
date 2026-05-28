@@ -41,47 +41,60 @@ PERFORMANCE_CHANNEL   = 1509524196139466852
 # =========================
 
 SYMBOLS       = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
+ALL_SYMBOLS   = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
+                 "XRPUSDT", "ADAUSDT", "AVAXUSDT", "DOGEUSDT"]
 VIP_ROLE_NAME = "VIP"
 DISCLAIMER_EN = "Crypto Signals Bot | Not financial advice. Invest responsibly."
 DISCLAIMER_RO = "Crypto Signals Bot | Nu e sfat financiar. Investește responsabil."
 
-LAST_SIGNAL    = {}
-SIGNAL_STATS   = {"BUY": 0, "SELL": 0, "total": 0}
-PRICE_ALERTS   = {}
-SIGNAL_HISTORY = []   # {symbol, signal, price, rsi, confidence, timestamp}
+LAST_SIGNAL      = {}
+SIGNAL_STATS     = {"BUY": 0, "SELL": 0, "total": 0}
+PRICE_ALERTS     = {}
+SIGNAL_HISTORY   = []
+USER_PORTFOLIOS  = {}   # {user_id: [{symbol, entry, amount, ts}]}
+USER_WATCHLISTS  = {}   # {user_id: [symbol, ...]}
+WATCHLIST_NOTIF  = {}   # {user_id_symbol: last_ts}
+PREDICTIONS      = {}   # {user_id: {symbol, direction, price, ts}}
+PRED_SCORES      = {}   # {user_id: {correct, total, username}}
 
 SCAM_KEYWORDS = [
     "dm me", "free crypto", "100x guaranteed", "dm for profit",
     "recovery service", "tripling funds", "click here", "t.me/",
     "investment platform", "double your", "recuperare fonduri",
-    "trimiteti", "castig garantat", "dm pentru profit"
+    "trimiteti", "castig garantat", "dm pentru profit", "profit garantat",
+    "invest now", "guaranteed returns", "pasive income", "passive income crypto"
 ]
 
 COIN_COLORS = {
-    "BTCUSDT": 0xF7931A,
-    "ETHUSDT": 0x627EEA,
-    "SOLUSDT": 0x9945FF,
-    "BNBUSDT": 0xF0B90B,
+    "BTCUSDT": 0xF7931A, "ETHUSDT": 0x627EEA,
+    "SOLUSDT": 0x9945FF, "BNBUSDT": 0xF0B90B,
+    "XRPUSDT": 0x00AAE4, "ADAUSDT": 0x0033AD,
+    "AVAXUSDT":0xE84142, "DOGEUSDT":0xC3A634,
 }
 COIN_EMOJI = {
-    "BTCUSDT": "₿", "ETHUSDT": "Ξ", "SOLUSDT": "◎", "BNBUSDT": "⬡",
+    "BTCUSDT": "₿",  "ETHUSDT": "Ξ",  "SOLUSDT": "◎",  "BNBUSDT": "⬡",
+    "XRPUSDT": "✕",  "ADAUSDT": "₳",  "AVAXUSDT":"🔺", "DOGEUSDT":"🐶",
 }
 COIN_NAMES_EN = {
-    "BTCUSDT": "Bitcoin (BTC)", "ETHUSDT": "Ethereum (ETH)",
-    "SOLUSDT": "Solana (SOL)",  "BNBUSDT": "BNB (BNB)",
+    "BTCUSDT":  "Bitcoin (BTC)",   "ETHUSDT":  "Ethereum (ETH)",
+    "SOLUSDT":  "Solana (SOL)",    "BNBUSDT":  "BNB (BNB)",
+    "XRPUSDT":  "XRP (XRP)",       "ADAUSDT":  "Cardano (ADA)",
+    "AVAXUSDT": "Avalanche (AVAX)","DOGEUSDT": "Dogecoin (DOGE)",
 }
-COIN_NAMES_RO = {
-    "BTCUSDT": "Bitcoin (BTC)", "ETHUSDT": "Ethereum (ETH)",
-    "SOLUSDT": "Solana (SOL)",  "BNBUSDT": "BNB (BNB)",
-}
+COIN_NAMES_RO = COIN_NAMES_EN
 COIN_LOGOS = {
-    "BTCUSDT": "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
-    "ETHUSDT": "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
-    "SOLUSDT": "https://assets.coingecko.com/coins/images/4128/small/solana.png",
-    "BNBUSDT": "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+    "BTCUSDT":  "https://assets.coingecko.com/coins/images/1/small/bitcoin.png",
+    "ETHUSDT":  "https://assets.coingecko.com/coins/images/279/small/ethereum.png",
+    "SOLUSDT":  "https://assets.coingecko.com/coins/images/4128/small/solana.png",
+    "BNBUSDT":  "https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png",
+    "XRPUSDT":  "https://assets.coingecko.com/coins/images/44/small/xrp-symbol-white-128.png",
+    "ADAUSDT":  "https://assets.coingecko.com/coins/images/975/small/cardano.png",
+    "AVAXUSDT": "https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png",
+    "DOGEUSDT": "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
 }
 BOT_ICON = "https://assets.coingecko.com/coins/images/1/small/bitcoin.png"
-SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+SEP  = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+SEP2 = "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬"
 
 def rsi_bar(rsi: float) -> str:
     filled = max(0, min(20, int(rsi / 5)))
@@ -459,7 +472,14 @@ def generate_chart(df, symbol, signal=None):
     )
     fig.patch.set_facecolor("#0d1117")
     close   = df["close"]
+    x       = range(len(close))
+
+    ema20   = EMAIndicator(close=close, window=20).ema_indicator()
     ema50   = EMAIndicator(close=close, window=50).ema_indicator()
+    bb      = BollingerBands(close=close, window=20, window_dev=2)
+    bb_up   = bb.bollinger_hband()
+    bb_lo   = bb.bollinger_lband()
+    bb_mid  = bb.bollinger_mavg()
     rsi_s   = RSIIndicator(close=close, window=14).rsi()
     macd_o  = MACD(close=close)
     macd_l  = macd_o.macd()
@@ -470,38 +490,56 @@ def generate_chart(df, symbol, signal=None):
     for ax in (ax1, ax2, ax3):
         ax.set_facecolor("#161b22")
         ax.tick_params(colors="#8b949e")
-        ax.grid(True, alpha=0.1, color="white")
+        ax.grid(True, alpha=0.08, color="white")
         for s in ax.spines.values():
             s.set_edgecolor("#30363d")
 
-    ax1.plot(close, color=color,    linewidth=1.5, label="Price", zorder=3)
-    ax1.plot(ema50, color="#f0b232", linewidth=1.0, linestyle="--", label="EMA50", alpha=0.8)
+    # Price + BB + EMA
+    ax1.plot(x, close, color=color,    linewidth=1.6, label="Price", zorder=4)
+    ax1.plot(x, ema20, color="#a78bfa", linewidth=0.9, linestyle="--", label="EMA20", alpha=0.85)
+    ax1.plot(x, ema50, color="#f0b232", linewidth=0.9, linestyle="--", label="EMA50", alpha=0.85)
+    ax1.plot(x, bb_up,  color="#64748b", linewidth=0.7, linestyle=":",  label="BB Upper", alpha=0.7)
+    ax1.plot(x, bb_lo,  color="#64748b", linewidth=0.7, linestyle=":",  label="BB Lower", alpha=0.7)
+    ax1.plot(x, bb_mid, color="#475569", linewidth=0.6, linestyle="-",  alpha=0.5)
+    ax1.fill_between(x, bb_lo, bb_up, alpha=0.04, color="#64748b")
+
+    sig_label = "🟢 BUY" if signal == "BUY" else ("🔴 SELL" if signal == "SELL" else "⚪ Monitor")
     ax1.set_title(
-        f"{symbol}  |  {'🟢 BUY' if signal=='BUY' else ('🔴 SELL' if signal=='SELL' else '⚪ Monitor')}  |  {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}",
-        color="white", fontsize=12, pad=8
+        f"{symbol}  |  {sig_label}  |  BB + EMA20/50  |  {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}",
+        color="white", fontsize=11, pad=8
     )
     ax1.set_ylabel("Price (USDT)", color="#8b949e", fontsize=9)
-    ax1.legend(facecolor="#21262d", labelcolor="white", fontsize=8)
+    ax1.legend(facecolor="#21262d", labelcolor="white", fontsize=7, ncol=3)
 
-    ax2.plot(rsi_s, color="#f0b232", linewidth=1.2)
+    # RSI with zones
+    ax2.plot(x, rsi_s, color="#f0b232", linewidth=1.2)
     ax2.axhline(70, color="#ff4d4d", linestyle="--", linewidth=0.8, alpha=0.7)
+    ax2.axhline(50, color="#8b949e", linestyle=":",  linewidth=0.6, alpha=0.5)
     ax2.axhline(30, color="#00c896", linestyle="--", linewidth=0.8, alpha=0.7)
-    ax2.fill_between(range(len(rsi_s)), 70, 100, alpha=0.06, color="red")
-    ax2.fill_between(range(len(rsi_s)), 0,  30,  alpha=0.06, color="green")
+    ax2.fill_between(x, 70, 100, alpha=0.06, color="red")
+    ax2.fill_between(x, 0,  30,  alpha=0.06, color="green")
     ax2.set_ylabel("RSI", color="#8b949e", fontsize=9)
     ax2.set_ylim(0, 100)
+    # Mark overbought / oversold regions
+    rsi_arr = rsi_s.values
+    for i, rv in enumerate(rsi_arr):
+        if rv > 70:
+            ax2.axvline(i, color="#ff4d4d", alpha=0.04, linewidth=0.5)
+        elif rv < 30:
+            ax2.axvline(i, color="#00c896", alpha=0.04, linewidth=0.5)
 
+    # MACD histogram + lines
     hist_colors = ["#00c896" if v >= 0 else "#ff4d4d" for v in macd_h]
-    ax3.plot(macd_l,  color="#58a6ff", linewidth=1.0, label="MACD")
-    ax3.plot(macd_sg, color="#f0b232", linewidth=1.0, label="Signal")
-    ax3.bar(range(len(macd_h)), macd_h, color=hist_colors, alpha=0.5, width=0.8)
+    ax3.plot(x, macd_l,  color="#58a6ff", linewidth=1.0, label="MACD")
+    ax3.plot(x, macd_sg, color="#f0b232", linewidth=1.0, label="Signal")
+    ax3.bar(x, macd_h, color=hist_colors, alpha=0.45, width=0.8)
     ax3.axhline(0, color="#8b949e", linewidth=0.6)
     ax3.set_ylabel("MACD", color="#8b949e", fontsize=9)
     ax3.legend(facecolor="#21262d", labelcolor="white", fontsize=8)
 
     plt.tight_layout(pad=1.2)
     fname = f"{symbol}_chart.png"
-    plt.savefig(fname, facecolor=fig.get_facecolor(), dpi=110)
+    plt.savefig(fname, facecolor=fig.get_facecolor(), dpi=120)
     plt.close()
     return fname
 
@@ -974,7 +1012,25 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name="/removealert [coin]", value="🇬🇧 Delete a price alert\n🇷🇴 Șterge o alertă de preț",                inline=False)
     embed.add_field(name="/sentiment",       value="🇬🇧 Full market sentiment overview\n🇷🇴 Tablou complet de sentiment piață",   inline=False)
     embed.add_field(name="/history",         value="🇬🇧 Last 10 signals with details\n🇷🇴 Ultimele 10 semnale cu detalii",       inline=False)
-    embed.add_field(name="/analysis [coin]", value="🇬🇧 Full TA: RSI+MACD+BB+StochRSI+Messari+CoinGecko\n🇷🇴 Analiză completă cu 5 indicatori + date on-chain", inline=False)
+    embed.add_field(name="/analysis [coin]",  value="🇬🇧 Full TA: RSI+MACD+BB+StochRSI+Messari+CG\n🇷🇴 Analiză 5 indicatori + date on-chain",    inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="💼 TRADING TOOLS", value="\u200b", inline=False)
+    embed.add_field(name="/portfolio [add/view/pnl/clear]", value="🇬🇧 Personal portfolio tracker with live P&L\n🇷🇴 Tracker portofoliu personal cu P&L live",  inline=False)
+    embed.add_field(name="/risk [capital] [entry] [sl]",    value="🇬🇧 Position size calculator\n🇷🇴 Calculator dimensiune poziție",                             inline=False)
+    embed.add_field(name="/calculate [entry] [exit] [amt]", value="🇬🇧 Profit/loss calculator\n🇷🇴 Calculator profit/pierdere",                                  inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="📊 MARKET TOOLS", value="\u200b", inline=False)
+    embed.add_field(name="/multi [coin]",     value="🇬🇧 5m+15m+1h+4h confluence dashboard\n🇷🇴 Dashboard 4 timeframe-uri",                                    inline=False)
+    embed.add_field(name="/heatmap",          value="🇬🇧 All 8 coins status at a glance\n🇷🇴 Status toate 8 monede simultan",                                   inline=False)
+    embed.add_field(name="/compare [c1] [c2]",value="🇬🇧 Side-by-side coin comparison\n🇷🇴 Comparație două monede",                                             inline=False)
+    embed.add_field(name="/dominance",        value="🇬🇧 BTC dominance + market cap overview\n🇷🇴 Dominanță BTC + capitalizare totală",                        inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="🔔 WATCHLIST & PREDICTIONS", value="\u200b", inline=False)
+    embed.add_field(name="/watch [coin]",     value="🇬🇧 DM alert when signal fires for coin\n🇷🇴 DM când se generează semnal",                                  inline=False)
+    embed.add_field(name="/unwatch [coin]",   value="🇬🇧 Remove from watchlist\n🇷🇴 Scoate din watchlist",                                                     inline=False)
+    embed.add_field(name="/mywatchlist",      value="🇬🇧 View your active watchlist\n🇷🇴 Vezi watchlist-ul tău activ",                                          inline=False)
+    embed.add_field(name="/predict [coin] [UP/DOWN]", value="🇬🇧 Submit community prediction\n🇷🇴 Trimite predicție comunitară",                              inline=False)
+    embed.add_field(name="/leaderboard",      value="🇬🇧 Top predictors ranking\n🇷🇴 Clasament top predictori",                                                 inline=False)
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
@@ -1212,6 +1268,697 @@ async def slash_history(interaction: discord.Interaction):
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
+
+# ══════════════════════════════════════════════
+#   PORTFOLIO TRACKER
+# ══════════════════════════════════════════════
+
+@tree.command(name="portfolio", description="💼 Manage your crypto portfolio — add/view/pnl/clear")
+@app_commands.describe(
+    action="add / view / pnl / clear",
+    coin="Coin symbol (e.g. BTC, ETH)",
+    entry="Entry price in USD",
+    amount="Amount of coins you hold"
+)
+async def slash_portfolio(interaction: discord.Interaction,
+                          action: str,
+                          coin: str = "",
+                          entry: float = 0.0,
+                          amount: float = 0.0):
+    uid = interaction.user.id
+    action = action.lower().strip()
+
+    if action == "add":
+        if not coin or entry <= 0 or amount <= 0:
+            await interaction.response.send_message(
+                "❌ Usage: `/portfolio add BTC 50000 0.5`\n🇷🇴 Exemplu: `/portfolio add BTC 50000 0.5`",
+                ephemeral=True); return
+        sym = coin.upper() + "USDT"
+        if uid not in USER_PORTFOLIOS:
+            USER_PORTFOLIOS[uid] = []
+        USER_PORTFOLIOS[uid].append({
+            "symbol": sym, "entry": entry,
+            "amount": amount, "ts": datetime.utcnow()
+        })
+        logo = COIN_LOGOS.get(sym)
+        embed = discord.Embed(
+            title="✅ Trade Added / Trade Adăugat",
+            description=f"**{COIN_NAMES_EN.get(sym, sym)}** added to your portfolio!",
+            color=0x00c853, timestamp=datetime.utcnow()
+        )
+        if logo: embed.set_thumbnail(url=logo)
+        embed.add_field(name="📍 Entry Price", value=f"`${entry:,.4f}`", inline=True)
+        embed.add_field(name="💰 Amount",      value=f"`{amount}`",       inline=True)
+        embed.add_field(name="💵 Total Invested", value=f"`${entry * amount:,.2f}`", inline=True)
+        embed.set_footer(text="Use /portfolio pnl to see live P&L")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    elif action == "view":
+        trades = USER_PORTFOLIOS.get(uid, [])
+        if not trades:
+            await interaction.response.send_message(
+                "🇬🇧 Portfolio empty. Use `/portfolio add BTC 50000 0.5` to add a trade.\n"
+                "🇷🇴 Portofoliu gol. Folosește `/portfolio add BTC 50000 0.5` pentru a adăuga.",
+                ephemeral=True); return
+        embed = discord.Embed(
+            title="💼 Your Portfolio / Portofoliul Tău",
+            color=discord.Color.blurple(), timestamp=datetime.utcnow()
+        )
+        total_invested = sum(t["entry"] * t["amount"] for t in trades)
+        for t in trades:
+            coin_name = COIN_NAMES_EN.get(t["symbol"], t["symbol"])
+            ts = t["ts"].strftime("%d %b %H:%M")
+            embed.add_field(
+                name=f"{COIN_EMOJI.get(t['symbol'],'🪙')} {coin_name}",
+                value=f"Entry: `${t['entry']:,.4f}` | Amount: `{t['amount']}` | Invested: `${t['entry']*t['amount']:,.2f}` | {ts}",
+                inline=False
+            )
+        embed.add_field(name="💵 Total Invested", value=f"`${total_invested:,.2f}`", inline=False)
+        embed.set_footer(text="Use /portfolio pnl to see live P&L")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    elif action == "pnl":
+        trades = USER_PORTFOLIOS.get(uid, [])
+        if not trades:
+            await interaction.response.send_message(
+                "🇬🇧 No trades in portfolio.\n🇷🇴 Niciun trade în portofoliu.", ephemeral=True); return
+        await interaction.response.defer(ephemeral=True)
+        embed = discord.Embed(
+            title="📊 Live P&L / Profit & Pierdere Live",
+            color=discord.Color.gold(), timestamp=datetime.utcnow()
+        )
+        total_invested = 0; total_value = 0
+        for t in trades:
+            info = get_price_info(t["symbol"])
+            if not info:
+                continue
+            cur = info["price"]
+            invested = t["entry"] * t["amount"]
+            value    = cur * t["amount"]
+            pnl      = value - invested
+            pnl_pct  = (pnl / invested) * 100 if invested else 0
+            total_invested += invested; total_value += value
+            icon = "🟢" if pnl >= 0 else "🔴"
+            embed.add_field(
+                name=f"{icon} {COIN_NAMES_EN.get(t['symbol'], t['symbol'])}",
+                value=(f"Entry `${t['entry']:,.4f}` → Now `${cur:,.4f}`\n"
+                       f"P&L: `{'+' if pnl>=0 else ''}{pnl:,.2f}$` (`{pnl_pct:+.2f}%`) | Value: `${value:,.2f}`"),
+                inline=False
+            )
+        total_pnl = total_value - total_invested
+        total_pct = (total_pnl / total_invested * 100) if total_invested else 0
+        icon = "🟢" if total_pnl >= 0 else "🔴"
+        embed.add_field(name=SEP, value="\u200b", inline=False)
+        embed.add_field(name=f"{icon} TOTAL P&L",
+                        value=f"Invested: `${total_invested:,.2f}` | Value: `${total_value:,.2f}`\n**P&L: `{'+' if total_pnl>=0 else ''}{total_pnl:,.2f}$` (`{total_pct:+.2f}%`)**",
+                        inline=False)
+        embed.set_footer(text=f"Crypto Signals Bot  •  Live data from Binance")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+    elif action == "clear":
+        USER_PORTFOLIOS[uid] = []
+        await interaction.response.send_message(
+            "🗑️ 🇬🇧 Portfolio cleared!\n🇷🇴 Portofoliu șters!", ephemeral=True)
+
+    else:
+        await interaction.response.send_message(
+            "❓ Actions: `add` · `view` · `pnl` · `clear`\n"
+            "🇷🇴 Acțiuni: `add` · `view` · `pnl` · `clear`", ephemeral=True)
+
+
+# ══════════════════════════════════════════════
+#   RISK CALCULATOR
+# ══════════════════════════════════════════════
+
+@tree.command(name="risk", description="🧮 Position size calculator — how much to buy based on risk %")
+@app_commands.describe(
+    capital="Total capital in USD",
+    entry="Entry price",
+    stoploss="Stop Loss price",
+    risk_pct="Risk % of capital (default 1)"
+)
+async def slash_risk(interaction: discord.Interaction,
+                     capital: float, entry: float, stoploss: float,
+                     risk_pct: float = 1.0):
+    if entry <= 0 or stoploss <= 0 or capital <= 0:
+        await interaction.response.send_message("❌ Invalid values.", ephemeral=True); return
+
+    risk_usd    = capital * (risk_pct / 100)
+    sl_distance = abs(entry - stoploss)
+    if sl_distance == 0:
+        await interaction.response.send_message("❌ Entry and SL cannot be the same price.", ephemeral=True); return
+
+    position_size = risk_usd / sl_distance
+    position_usd  = position_size * entry
+    sl_pct        = (sl_distance / entry) * 100
+    is_long       = entry > stoploss
+    tp1           = round(entry * (1 + sl_pct/100 * 2), 4) if is_long else round(entry * (1 - sl_pct/100 * 2), 4)
+    tp2           = round(entry * (1 + sl_pct/100 * 3), 4) if is_long else round(entry * (1 - sl_pct/100 * 3), 4)
+
+    color = 0x00c853 if is_long else 0xff1744
+    embed = discord.Embed(
+        title="🧮 Risk Calculator / Calculator Risc",
+        description=f"{'🟢 LONG' if is_long else '🔴 SHORT'} position sizing for `${entry:,.4f}` entry",
+        color=color, timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="💼 Crypto Signals Bot — Risk Management", icon_url=BOT_ICON)
+    embed.add_field(name="💰 Capital",          value=f"`${capital:,.2f}`",           inline=True)
+    embed.add_field(name="⚠️ Risk %",            value=f"`{risk_pct}%` = `${risk_usd:,.2f}`", inline=True)
+    embed.add_field(name="🛑 SL Distance",       value=f"`{sl_pct:.2f}%`",             inline=True)
+    embed.add_field(name=SEP, value="\u200b", inline=False)
+    embed.add_field(name="📦 Position Size",     value=f"`{position_size:.6f}` coins",  inline=True)
+    embed.add_field(name="💵 Position Value",    value=f"`${position_usd:,.2f}`",        inline=True)
+    embed.add_field(name="📐 Leverage needed",   value=f"`{position_usd/capital:.1f}x`", inline=True)
+    embed.add_field(name=SEP, value="\u200b", inline=False)
+    embed.add_field(name="📍 Entry",   value=f"`${entry:,.4f}`",   inline=True)
+    embed.add_field(name="🛑 SL",      value=f"`${stoploss:,.4f}`", inline=True)
+    embed.add_field(name="\u200b",     value="\u200b",              inline=True)
+    embed.add_field(name="🎯 TP1 (R:R 2:1)", value=f"`${tp1:,.4f}`", inline=True)
+    embed.add_field(name="🎯 TP2 (R:R 3:1)", value=f"`${tp2:,.4f}`", inline=True)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   PROFIT CALCULATOR
+# ══════════════════════════════════════════════
+
+@tree.command(name="calculate", description="💵 Calculate profit/loss from a trade")
+@app_commands.describe(
+    entry="Entry price in USD",
+    exit_price="Exit / current price in USD",
+    amount="Amount of coins",
+    leverage="Leverage used (default 1 = spot)"
+)
+async def slash_calculate(interaction: discord.Interaction,
+                          entry: float, exit_price: float,
+                          amount: float, leverage: float = 1.0):
+    if entry <= 0 or exit_price <= 0 or amount <= 0:
+        await interaction.response.send_message("❌ Invalid values.", ephemeral=True); return
+
+    invested  = entry * amount
+    value_now = exit_price * amount
+    pnl       = (value_now - invested) * leverage
+    pnl_pct   = ((exit_price - entry) / entry) * 100 * leverage
+    is_profit = pnl >= 0
+    fees_est  = invested * 0.001  # 0.1% estimated taker fee
+
+    color = 0x00c853 if is_profit else 0xff1744
+    embed = discord.Embed(
+        title=f"{'🟢 PROFIT' if is_profit else '🔴 LOSS'} — Trade Calculator",
+        color=color, timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="💵 Crypto Signals Bot — P&L Calculator", icon_url=BOT_ICON)
+    embed.add_field(name="📍 Entry Price",  value=f"`${entry:,.4f}`",      inline=True)
+    embed.add_field(name="🏁 Exit Price",   value=f"`${exit_price:,.4f}`",  inline=True)
+    embed.add_field(name="📦 Amount",       value=f"`{amount}`",            inline=True)
+    embed.add_field(name=SEP, value="\u200b", inline=False)
+    embed.add_field(name="💰 Invested",    value=f"`${invested:,.2f}`",       inline=True)
+    embed.add_field(name="💵 Value Now",   value=f"`${value_now:,.2f}`",      inline=True)
+    embed.add_field(name="⚡ Leverage",    value=f"`{leverage}x`",            inline=True)
+    embed.add_field(name=SEP, value="\u200b", inline=False)
+    embed.add_field(
+        name=f"{'🟢 Profit' if is_profit else '🔴 Loss'} (gross)",
+        value=f"## `{'+' if is_profit else ''}{pnl:,.2f}$` (`{pnl_pct:+.2f}%`)",
+        inline=False
+    )
+    embed.add_field(name="💸 Est. Fees (0.1%)", value=f"`-${fees_est:,.2f}`", inline=True)
+    embed.add_field(
+        name="✅ Net P&L",
+        value=f"`{'+' if (pnl-fees_est)>=0 else ''}{(pnl-fees_est):,.2f}$`",
+        inline=True
+    )
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   MULTI-TIMEFRAME DASHBOARD
+# ══════════════════════════════════════════════
+
+@tree.command(name="multi", description="📐 Multi-timeframe analysis: 5m + 15m + 1h + 4h")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP (XRP)",      value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+    app_commands.Choice(name="Avalanche (AVAX)",value="AVAXUSDT"),
+    app_commands.Choice(name="Dogecoin (DOGE)",value="DOGEUSDT"),
+])
+async def slash_multi(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    logo = COIN_LOGOS.get(coin)
+    timeframes = [("5m","5 min"),("15m","15 min"),("1h","1 Hour"),("4h","4 Hour")]
+    rows = []
+    for tf, tf_label in timeframes:
+        df = get_data(coin, interval=tf)
+        ind = calc_indicators(df) if df is not None else None
+        if ind is None:
+            rows.append((tf_label, "❓", "N/A", "N/A", "N/A", "N/A"))
+            continue
+        rsi = ind["rsi"]; mh = ind["macd_hist"]; bp = ind["bb_pct"]; sk = ind["stoch_k"]
+        buy_s  = sum([rsi < 35, mh > 0, bp < 0.25, sk < 0.25])
+        sell_s = sum([rsi > 65, mh < 0, bp > 0.75, sk > 0.75])
+        if buy_s >= 2:
+            sig = "🟢 BUY"
+        elif sell_s >= 2:
+            sig = "🔴 SELL"
+        else:
+            sig = "🟡 NEUTRAL"
+        rsi_zone = "OB🔴" if rsi > 70 else ("OS🟢" if rsi < 30 else "OK⚪")
+        macd_dir = "▲" if mh > 0 else "▼"
+        rows.append((tf_label, sig, f"{round(rsi,1)} {rsi_zone}", f"{macd_dir}", f"{round(bp*100,0):.0f}%", f"{round(sk*100,1)}%"))
+
+    info = get_price_info(coin)
+    price_str = f"${info['price']:,.4f}" if info else "N/A"
+    change_str = f"{info['change']:+.2f}%" if info else ""
+
+    # overall confluence
+    buy_count  = sum(1 for r in rows if "BUY" in r[1])
+    sell_count = sum(1 for r in rows if "SELL" in r[1])
+    if buy_count >= 3:   overall = "🟢🟢 STRONG BUY"
+    elif buy_count == 2: overall = "🟢 BUY"
+    elif sell_count >= 3:overall = "🔴🔴 STRONG SELL"
+    elif sell_count == 2:overall = "🔴 SELL"
+    else:                overall = "🟡 MIXED / NEUTRAL"
+
+    embed = discord.Embed(
+        title=f"📐 Multi-Timeframe — {COIN_EMOJI.get(coin,'🪙')} {COIN_NAMES_EN.get(coin,coin)}",
+        description=(
+            f"💰 **{price_str}** `{change_str}`\n"
+            f"{SEP}\n"
+            f"**Overall Confluence: {overall}**  (`{buy_count}/4` TF bullish)"
+        ),
+        color=0x00c853 if "BUY" in overall else (0xff1744 if "SELL" in overall else 0xffa726),
+        timestamp=datetime.utcnow()
+    )
+    if logo: embed.set_thumbnail(url=logo)
+    embed.set_author(name="📐 Multi-Timeframe Dashboard", icon_url=BOT_ICON)
+
+    tf_table = "```\n{:<10} {:<14} {:<10} {:<6} {:<8} {:<8}\n{}\n".format(
+        "TF","Signal","RSI","MACD","BB%","StochK",
+        "─"*56
+    )
+    for r in rows:
+        tf_table += "{:<10} {:<14} {:<10} {:<6} {:<8} {:<8}\n".format(*r)
+    tf_table += "```"
+    embed.add_field(name="📊 Timeframe Breakdown", value=tf_table, inline=False)
+    embed.add_field(
+        name="💡 How to use / Cum să folosești",
+        value=(
+            "🇬🇧 3+ timeframes agree = higher confidence signal.\n"
+            "🇷🇴 3+ timeframe-uri de acord = semnal cu încredere mai mare."
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   MARKET HEATMAP
+# ══════════════════════════════════════════════
+
+@tree.command(name="heatmap", description="🌡️ Market heatmap — all 8 coins at a glance")
+async def slash_heatmap(interaction: discord.Interaction):
+    await interaction.response.defer()
+    embed = discord.Embed(
+        title="🌡️ Market Heatmap / Harta Pieței",
+        description=(
+            "🇬🇧 Live overview of all tracked coins\n"
+            f"🇷🇴 Vizualizare live toate monedele urmărite\n{SEP}"
+        ),
+        color=0x1e293b, timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="🌡️ Crypto Signals Bot — Market Heatmap", icon_url=BOT_ICON)
+
+    bull_count = 0; bear_count = 0
+    for sym in ALL_SYMBOLS:
+        info = get_price_info(sym)
+        df   = get_data(sym)
+        ind  = calc_indicators(df) if df is not None else None
+        if not info:
+            continue
+        ch   = info["change"]
+        p    = info["price"]
+        emoji = COIN_EMOJI.get(sym, "🪙")
+        name  = sym.replace("USDT","")
+        # heat color
+        if ch >= 5:     heat = "🔥🔥"
+        elif ch >= 2:   heat = "🟢🟢"
+        elif ch >= 0.5: heat = "🟢"
+        elif ch >= -0.5:heat = "⚪"
+        elif ch >= -2:  heat = "🔴"
+        elif ch >= -5:  heat = "🔴🔴"
+        else:            heat = "💀💀"
+
+        rsi_str = f"RSI `{round(ind['rsi'],1)}`" if ind else ""
+        sig_str = ""
+        if ind:
+            buy_s = sum([ind["rsi"]<35, ind["macd_hist"]>0, ind["bb_pct"]<0.25])
+            sel_s = sum([ind["rsi"]>65, ind["macd_hist"]<0, ind["bb_pct"]>0.75])
+            if buy_s >= 2:   sig_str = " | 🟢 BUY"; bull_count += 1
+            elif sel_s >= 2: sig_str = " | 🔴 SELL"; bear_count += 1
+            else:             sig_str = " | 🟡 Neutral"
+
+        embed.add_field(
+            name=f"{heat} {emoji} {name}",
+            value=f"`${p:,.4f}` `{'+' if ch>=0 else ''}{ch:.2f}%` {rsi_str}{sig_str}",
+            inline=True
+        )
+
+    # Market summary
+    total = bull_count + bear_count
+    embed.add_field(name=SEP, value="\u200b", inline=False)
+    embed.add_field(
+        name="📊 Market Summary / Rezumat Piață",
+        value=(f"🟢 Bullish: `{bull_count}` | 🔴 Bearish: `{bear_count}` | ⚪ Neutral: `{len(ALL_SYMBOLS)-total}`\n"
+               f"{'🟢 Overall market is **BULLISH**' if bull_count > bear_count else ('🔴 Overall market is **BEARISH**' if bear_count > bull_count else '🟡 Market is **MIXED**')}"),
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   COMPARE TWO COINS
+# ══════════════════════════════════════════════
+
+@tree.command(name="compare", description="⚖️ Compare two coins side by side")
+@app_commands.describe(coin1="First coin", coin2="Second coin")
+@app_commands.choices(
+    coin1=[
+        app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+        app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+        app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+        app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+        app_commands.Choice(name="XRP (XRP)",      value="XRPUSDT"),
+        app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+        app_commands.Choice(name="AVAX",           value="AVAXUSDT"),
+        app_commands.Choice(name="Dogecoin (DOGE)",value="DOGEUSDT"),
+    ],
+    coin2=[
+        app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+        app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+        app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+        app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+        app_commands.Choice(name="XRP (XRP)",      value="XRPUSDT"),
+        app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+        app_commands.Choice(name="AVAX",           value="AVAXUSDT"),
+        app_commands.Choice(name="Dogecoin (DOGE)",value="DOGEUSDT"),
+    ]
+)
+async def slash_compare(interaction: discord.Interaction,
+                        coin1: str = "BTCUSDT", coin2: str = "ETHUSDT"):
+    await interaction.response.defer()
+    results = []
+    for sym in [coin1, coin2]:
+        info = get_price_info(sym)
+        df   = get_data(sym)
+        ind  = calc_indicators(df) if df is not None else None
+        results.append((sym, info, ind))
+
+    embed = discord.Embed(
+        title=f"⚖️ Compare — {coin1.replace('USDT','')} vs {coin2.replace('USDT','')}",
+        color=0x6366f1, timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="⚖️ Crypto Signals Bot — Coin Comparison", icon_url=BOT_ICON)
+
+    labels = ["💰 Price","📈 24h Change","🔺 24h High","🔻 24h Low",
+              "📦 Volume","📊 RSI","📉 MACD","🎯 BB%","⚡ StochK"]
+
+    def fmt(sym, info, ind):
+        if not info: return ["N/A"]*9
+        ch = info["change"]
+        row = [
+            f"${info['price']:,.4f}",
+            f"{'+' if ch>=0 else ''}{ch:.2f}%",
+            f"${info['high']:,.4f}",
+            f"${info['low']:,.4f}",
+            f"${info['volume']:,.0f}",
+        ]
+        if ind:
+            rsi_z = "OB🔴" if ind["rsi"]>70 else ("OS🟢" if ind["rsi"]<30 else "OK⚪")
+            mdir  = "▲🟢" if ind["macd_hist"]>0 else "▼🔴"
+            row += [f"{round(ind['rsi'],1)} {rsi_z}", mdir,
+                    f"{round(ind['bb_pct']*100,1)}%", f"{round(ind['stoch_k']*100,1)}%"]
+        else:
+            row += ["N/A","N/A","N/A","N/A"]
+        return row
+
+    r1 = fmt(*results[0]); r2 = fmt(*results[1])
+    n1 = coin1.replace("USDT",""); n2 = coin2.replace("USDT","")
+    for i, label in enumerate(labels):
+        embed.add_field(name=label, value=f"**{n1}:** `{r1[i]}`\n**{n2}:** `{r2[i]}`", inline=True)
+
+    # Winner per metric
+    if results[0][1] and results[1][1]:
+        ch1 = results[0][1]["change"]; ch2 = results[1][1]["change"]
+        winner = n1 if ch1 > ch2 else n2
+        embed.add_field(
+            name=f"\n{SEP}\n🏆 Better 24h Performance",
+            value=f"**{winner}** wins on 24h change",
+            inline=False
+        )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   BTC DOMINANCE
+# ══════════════════════════════════════════════
+
+@tree.command(name="dominance", description="👑 BTC Dominance + market cap overview")
+async def slash_dominance(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        data = requests.get(
+            "https://api.coingecko.com/api/v3/global", timeout=10
+        ).json().get("data", {})
+        dom   = data.get("market_cap_percentage", {})
+        btc_d = round(dom.get("btc", 0), 2)
+        eth_d = round(dom.get("eth", 0), 2)
+        total_mc = data.get("total_market_cap", {}).get("usd", 0)
+        total_vol= data.get("total_volume", {}).get("usd", 0)
+        mc_chg   = round(data.get("market_cap_change_percentage_24h_usd", 0), 2)
+        others   = round(100 - btc_d - eth_d, 2)
+    except Exception:
+        await interaction.followup.send("❌ Could not fetch dominance data.", ephemeral=True); return
+
+    # BTC dominance interpretation
+    if btc_d > 55:
+        interp_en = "🔵 High BTC dominance → altcoins may underperform. Stay with BTC."
+        interp_ro = "🔵 Dominanță BTC ridicată → altcoin-urile pot performa mai slab. Rămâi pe BTC."
+    elif btc_d < 40:
+        interp_en = "🟡 Low BTC dominance → altcoin season possible. Check altcoins for signals."
+        interp_ro = "🟡 Dominanță BTC scăzută → posibil sezon altcoin. Verifică altcoin-urile."
+    else:
+        interp_en = "⚪ Neutral dominance → balanced market. Follow signals."
+        interp_ro = "⚪ Dominanță neutră → piață echilibrată. Urmează semnalele."
+
+    # dominance bar
+    btc_bar_len = int(btc_d / 5)
+    eth_bar_len = int(eth_d / 5)
+    oth_bar_len = 20 - btc_bar_len - eth_bar_len
+    dom_bar = f"{'🟠'*btc_bar_len}{'🔵'*eth_bar_len}{'⬜'*max(0,oth_bar_len)}"
+
+    embed = discord.Embed(
+        title="👑 Crypto Market Dominance",
+        description=(
+            f"🌍 **Total Market Cap:** `${total_mc/1e9:,.1f}B` (`{'+' if mc_chg>=0 else ''}{mc_chg}%` 24h)\n"
+            f"📦 **24h Volume:** `${total_vol/1e9:,.1f}B`\n{SEP}"
+        ),
+        color=0xF7931A, timestamp=datetime.utcnow()
+    )
+    embed.set_thumbnail(url=BOT_ICON)
+    embed.set_author(name="👑 Crypto Signals Bot — Market Dominance", icon_url=BOT_ICON)
+    embed.add_field(name="🟠 BTC Dominance",  value=f"`{btc_d}%`", inline=True)
+    embed.add_field(name="🔵 ETH Dominance",  value=f"`{eth_d}%`", inline=True)
+    embed.add_field(name="⬜ Others",          value=f"`{others}%`",inline=True)
+    embed.add_field(name="📊 Visual / Vizual", value=dom_bar, inline=False)
+    embed.add_field(name="🇬🇧 Interpretation",  value=interp_en, inline=False)
+    embed.add_field(name="🇷🇴 Interpretare",    value=interp_ro, inline=False)
+    embed.set_footer(text=f"Crypto Signals Bot  •  Data: CoinGecko")
+    await interaction.followup.send(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   WATCHLIST SYSTEM
+# ══════════════════════════════════════════════
+
+@tree.command(name="watch", description="👁️ Add a coin to your watchlist — get DM when signal fires")
+@app_commands.describe(coin="Coin to watch")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP (XRP)",      value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+    app_commands.Choice(name="AVAX",           value="AVAXUSDT"),
+    app_commands.Choice(name="Dogecoin (DOGE)",value="DOGEUSDT"),
+])
+async def slash_watch(interaction: discord.Interaction, coin: str):
+    uid = interaction.user.id
+    if uid not in USER_WATCHLISTS:
+        USER_WATCHLISTS[uid] = []
+    if coin not in USER_WATCHLISTS[uid]:
+        USER_WATCHLISTS[uid].append(coin)
+        logo = COIN_LOGOS.get(coin)
+        embed = discord.Embed(
+            title=f"👁️ Watching {coin.replace('USDT','')}",
+            description=(
+                f"🇬🇧 You'll receive a **DM** whenever our bot generates a BUY or SELL signal for **{COIN_NAMES_EN.get(coin,coin)}**.\n"
+                f"🇷🇴 Vei primi un **DM** ori de câte ori botul generează un semnal BUY sau SELL pentru **{COIN_NAMES_EN.get(coin,coin)}**."
+            ),
+            color=0x6366f1
+        )
+        if logo: embed.set_thumbnail(url=logo)
+        embed.add_field(name="📋 Your watchlist",
+                        value=", ".join(f"`{s.replace('USDT','')}`" for s in USER_WATCHLISTS[uid]),
+                        inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            f"👁️ `{coin.replace('USDT','')}` is already on your watchlist!\n"
+            f"🇷🇴 `{coin.replace('USDT','')}` este deja în lista ta de urmărire!",
+            ephemeral=True)
+
+
+@tree.command(name="unwatch", description="🚫 Remove a coin from your watchlist")
+@app_commands.describe(coin="Coin to remove")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP (XRP)",      value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+    app_commands.Choice(name="AVAX",           value="AVAXUSDT"),
+    app_commands.Choice(name="Dogecoin (DOGE)",value="DOGEUSDT"),
+])
+async def slash_unwatch(interaction: discord.Interaction, coin: str):
+    uid = interaction.user.id
+    wl  = USER_WATCHLISTS.get(uid, [])
+    if coin in wl:
+        wl.remove(coin)
+        await interaction.response.send_message(
+            f"✅ `{coin.replace('USDT','')}` removed from watchlist.\n"
+            f"🇷🇴 `{coin.replace('USDT','')}` eliminat din lista de urmărire.", ephemeral=True)
+    else:
+        await interaction.response.send_message(
+            f"❓ `{coin.replace('USDT','')}` not on your watchlist.\n"
+            f"🇷🇴 `{coin.replace('USDT','')}` nu este în lista ta.", ephemeral=True)
+
+
+@tree.command(name="mywatchlist", description="📋 View your active watchlist")
+async def slash_mywatchlist(interaction: discord.Interaction):
+    uid = interaction.user.id
+    wl  = USER_WATCHLISTS.get(uid, [])
+    if not wl:
+        await interaction.response.send_message(
+            "🇬🇧 Watchlist empty. Use `/watch BTC` to add coins.\n"
+            "🇷🇴 Lista goală. Folosește `/watch BTC` pentru a adăuga.", ephemeral=True); return
+    embed = discord.Embed(
+        title="👁️ Your Watchlist / Lista ta de urmărire",
+        description="🇬🇧 You'll get a DM when any of these fire a signal.\n🇷🇴 Vei primi DM când oricare dintre acestea generează semnal.",
+        color=0x6366f1
+    )
+    for sym in wl:
+        info = get_price_info(sym)
+        p_str = f"${info['price']:,.4f} (`{'+' if info['change']>=0 else ''}{info['change']:.2f}%`)" if info else "N/A"
+        embed.add_field(name=f"{COIN_EMOJI.get(sym,'🪙')} {COIN_NAMES_EN.get(sym,sym)}", value=p_str, inline=True)
+    embed.set_footer(text="Use /unwatch [coin] to remove")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+# ══════════════════════════════════════════════
+#   COMMUNITY PREDICT SYSTEM
+# ══════════════════════════════════════════════
+
+@tree.command(name="predict", description="🔮 Submit your prediction — will the coin go UP or DOWN?")
+@app_commands.describe(coin="Which coin", direction="UP or DOWN")
+@app_commands.choices(
+    coin=[
+        app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+        app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+        app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+        app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    ],
+    direction=[
+        app_commands.Choice(name="🟢 UP",   value="UP"),
+        app_commands.Choice(name="🔴 DOWN", value="DOWN"),
+    ]
+)
+async def slash_predict(interaction: discord.Interaction, coin: str, direction: str):
+    uid  = interaction.user.id
+    info = get_price_info(coin)
+    if not info:
+        await interaction.response.send_message("❌ Cannot fetch price. Try again.", ephemeral=True); return
+
+    PREDICTIONS[uid] = {
+        "symbol":    coin,
+        "direction": direction,
+        "entry_price": info["price"],
+        "ts":        datetime.utcnow(),
+        "username":  str(interaction.user)
+    }
+    if uid not in PRED_SCORES:
+        PRED_SCORES[uid] = {"correct": 0, "total": 0, "username": str(interaction.user)}
+
+    icon = "🟢" if direction == "UP" else "🔴"
+    embed = discord.Embed(
+        title=f"🔮 Prediction Submitted / Predicție Trimisă",
+        description=(
+            f"{icon} **{interaction.user.display_name}** predicts **{direction}** for "
+            f"**{COIN_NAMES_EN.get(coin,coin)}**\n"
+            f"Entry price: `${info['price']:,.4f}`\n"
+            f"🇷🇴 **{interaction.user.display_name}** prezice **{direction}** pentru **{COIN_NAMES_EN.get(coin,coin)}**"
+        ),
+        color=0x00c853 if direction == "UP" else 0xff1744,
+        timestamp=datetime.utcnow()
+    )
+    scores = PRED_SCORES[uid]
+    acc = round(scores["correct"] / scores["total"] * 100, 1) if scores["total"] > 0 else 0
+    embed.add_field(name="📊 Your accuracy", value=f"`{acc}%` ({scores['correct']}/{scores['total']} correct)", inline=True)
+    embed.set_footer(text="Result checked in 1 hour. /leaderboard to see standings.")
+    await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="leaderboard", description="🏆 Community prediction leaderboard")
+async def slash_leaderboard(interaction: discord.Interaction):
+    if not PRED_SCORES:
+        await interaction.response.send_message(
+            "🇬🇧 No predictions yet. Use `/predict` to start!\n"
+            "🇷🇴 Nicio predicție încă. Folosește `/predict` pentru a începe!", ephemeral=True); return
+
+    sorted_scores = sorted(
+        [(uid, s) for uid, s in PRED_SCORES.items() if s["total"] >= 3],
+        key=lambda x: x[1]["correct"] / x[1]["total"] if x[1]["total"] > 0 else 0,
+        reverse=True
+    )
+    embed = discord.Embed(
+        title="🏆 Prediction Leaderboard / Clasament Predicții",
+        description="🇬🇧 Top predictors this session\n🇷🇴 Top predictori din această sesiune",
+        color=0xffd700, timestamp=datetime.utcnow()
+    )
+    medals = ["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
+    for i, (uid, s) in enumerate(sorted_scores[:10]):
+        acc = round(s["correct"] / s["total"] * 100, 1) if s["total"] > 0 else 0
+        embed.add_field(
+            name=f"{medals[i]} {s.get('username','Unknown')}",
+            value=f"Accuracy: `{acc}%` | `{s['correct']}/{s['total']}` correct",
+            inline=False
+        )
+    if not sorted_scores:
+        embed.description += "\n\n_Not enough predictions yet (min 3 per user)_"
+    embed.set_footer(text="Minimum 3 predictions required to appear on leaderboard.")
+    await interaction.response.send_message(embed=embed)
+
+
 # =========================
 # WELCOME
 # =========================
@@ -1330,6 +2077,10 @@ async def on_ready():
     client.loop.create_task(education_loop())
     client.loop.create_task(weekly_recap_loop())
     client.loop.create_task(pump_alert_loop())
+    client.loop.create_task(daily_summary_loop())
+    client.loop.create_task(status_update_loop())
+    client.loop.create_task(watchlist_notifier_loop())
+    client.loop.create_task(prediction_checker_loop())
 
 # =========================
 # SIGNAL LOOP
@@ -1898,6 +2649,240 @@ async def weekly_recap_loop():
                 await asyncio.sleep(1800)
         except Exception:
             await asyncio.sleep(1800)
+
+# ══════════════════════════════════════════════
+#   DAILY MARKET SUMMARY (8 AM UTC)
+# ══════════════════════════════════════════════
+
+async def daily_summary_loop():
+    await client.wait_until_ready()
+    channel = client.get_channel(MARKET_NEWS_CHANNEL)
+    while True:
+        try:
+            now = datetime.utcnow()
+            if now.hour == 8 and now.minute < 5:
+                fg_score, fg_class = get_fear_greed()
+                rows = []
+                for sym in SYMBOLS:
+                    info = get_price_info(sym)
+                    df   = get_data(sym)
+                    ind  = calc_indicators(df) if df is not None else None
+                    if not info: continue
+                    ch = info["change"]
+                    ch_icon = "📈" if ch >= 0 else "📉"
+                    rsi_str = f"RSI `{round(ind['rsi'],1)}`" if ind else ""
+                    rows.append(
+                        f"{COIN_EMOJI.get(sym,'🪙')} **{sym.replace('USDT','')}** "
+                        f"`${info['price']:,.2f}` {ch_icon} `{ch:+.2f}%` {rsi_str}"
+                    )
+                top_gainer = max(SYMBOLS, key=lambda s: (get_price_info(s) or {}).get("change", -999))
+                top_info   = get_price_info(top_gainer)
+
+                embed = discord.Embed(
+                    title=f"☀️ Daily Market Summary — {now.strftime('%d %b %Y')}",
+                    description=(
+                        "🇬🇧 **Good morning traders!** Here's your daily crypto briefing.\n"
+                        f"🇷🇴 **Bună dimineața traderi!** Iată rezumatul zilnic crypto.\n{SEP}"
+                    ),
+                    color=0xfbbf24, timestamp=now
+                )
+                embed.set_author(name="☀️ Crypto Signals Bot — Daily Briefing", icon_url=BOT_ICON)
+                embed.add_field(
+                    name="📊 Market Overview / Prezentare Piață",
+                    value="\n".join(rows) if rows else "N/A",
+                    inline=False
+                )
+                embed.add_field(
+                    name="😱 Fear & Greed Index",
+                    value=f"`{fg_score}/100` — **{fg_class}**",
+                    inline=True
+                )
+                if top_info:
+                    embed.add_field(
+                        name="🏆 Top Performer",
+                        value=f"**{top_gainer.replace('USDT','')}** `{top_info['change']:+.2f}%`",
+                        inline=True
+                    )
+                embed.add_field(name="\u200b", value=SEP, inline=False)
+                embed.add_field(
+                    name="💡 Today's reminder / Reminder zilnic",
+                    value=(
+                        "🇬🇧 Always check multiple timeframes before entering. Use `/multi` for a full picture.\n"
+                        "🇷🇴 Verifică mereu mai multe timeframe-uri. Folosește `/multi` pentru imagine completă."
+                    ),
+                    inline=False
+                )
+                embed.add_field(
+                    name="💎 VIP Signals",
+                    value=f"🇬🇧 Get advanced signals with TP1+TP2+TP3 → <#{GET_VIP_CHANNEL}>\n🇷🇴 Semnale avansate cu TP1+TP2+TP3 → <#{GET_VIP_CHANNEL}>",
+                    inline=False
+                )
+                embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+                if channel:
+                    await channel.send(embed=embed)
+                await asyncio.sleep(3600)
+            else:
+                await asyncio.sleep(60)
+        except Exception as e:
+            print(f"Daily summary error: {e}")
+            await asyncio.sleep(300)
+
+
+# ══════════════════════════════════════════════
+#   STATUS CHANNEL AUTO-UPDATE (every 30 min)
+# ══════════════════════════════════════════════
+
+async def status_update_loop():
+    await client.wait_until_ready()
+    channel = client.get_channel(STATUS_CHANNEL)
+    while True:
+        try:
+            if channel:
+                btc_info = get_price_info("BTCUSDT")
+                eth_info = get_price_info("ETHUSDT")
+                fg_score, fg_class = get_fear_greed()
+                btc_str = f"`${btc_info['price']:,.2f}` (`{btc_info['change']:+.2f}%`)" if btc_info else "N/A"
+                eth_str = f"`${eth_info['price']:,.2f}` (`{eth_info['change']:+.2f}%`)" if eth_info else "N/A"
+                embed = discord.Embed(
+                    title="🤖 Bot Status — Online & Monitoring",
+                    description=f"🟢 **All systems operational** | Updated: `{datetime.utcnow().strftime('%H:%M UTC')}`",
+                    color=0x22c55e, timestamp=datetime.utcnow()
+                )
+                embed.set_author(name="🤖 Crypto Signals Bot — Status", icon_url=BOT_ICON)
+                embed.add_field(name="₿ BTC",  value=btc_str, inline=True)
+                embed.add_field(name="Ξ ETH",  value=eth_str, inline=True)
+                embed.add_field(name="😱 F&G",  value=f"`{fg_score}/100` {fg_class}", inline=True)
+                embed.add_field(
+                    name="📡 Signals Generated",
+                    value=f"🟢 BUY: `{SIGNAL_STATS['BUY']}` | 🔴 SELL: `{SIGNAL_STATS['SELL']}` | Total: `{SIGNAL_STATS['total']}`",
+                    inline=False
+                )
+                embed.add_field(
+                    name="👁️ Active Watchlists",
+                    value=f"`{sum(len(v) for v in USER_WATCHLISTS.values())}` coin watches across `{len(USER_WATCHLISTS)}` users",
+                    inline=True
+                )
+                embed.add_field(
+                    name="💼 Portfolios",
+                    value=f"`{len(USER_PORTFOLIOS)}` active portfolios",
+                    inline=True
+                )
+                embed.set_footer(text=f"Crypto Signals Bot  •  Next update in 30 min")
+                await channel.send(embed=embed)
+        except Exception as e:
+            print(f"Status update error: {e}")
+        await asyncio.sleep(1800)
+
+
+# ══════════════════════════════════════════════
+#   WATCHLIST SIGNAL NOTIFIER
+# ══════════════════════════════════════════════
+
+async def watchlist_notifier_loop():
+    await client.wait_until_ready()
+    while True:
+        try:
+            for uid, watchlist in list(USER_WATCHLISTS.items()):
+                for sym in watchlist:
+                    df  = get_data(sym)
+                    sig, price, rsi, conf = get_signal_v2(df)
+                    if not sig or not price:
+                        continue
+                    key = f"{uid}_{sym}_{sig}"
+                    now = datetime.utcnow()
+                    last = WATCHLIST_NOTIF.get(key)
+                    if last and (now - last).seconds < 3600:
+                        continue
+                    WATCHLIST_NOTIF[key] = now
+                    try:
+                        user = await client.fetch_user(uid)
+                        logo = COIN_LOGOS.get(sym)
+                        icon = "🟢" if sig == "BUY" else "🔴"
+                        dm_embed = discord.Embed(
+                            title=f"👁️ Watchlist Alert — {icon} {sig} on {sym.replace('USDT','')}",
+                            description=(
+                                f"🇬🇧 **{COIN_NAMES_EN.get(sym,sym)}** just generated a **{sig}** signal!\n"
+                                f"Entry: `${price:,.4f}` | RSI: `{round(rsi,1)}` | Confidence: `{conf}`\n\n"
+                                f"🇷🇴 **{COIN_NAMES_EN.get(sym,sym)}** tocmai a generat un semnal **{sig}**!\n"
+                                f"Intrare: `${price:,.4f}` | RSI: `{round(rsi,1)}` | Calitate: `{conf}`"
+                            ),
+                            color=0x00c853 if sig == "BUY" else 0xff1744,
+                            timestamp=now
+                        )
+                        if logo: dm_embed.set_thumbnail(url=logo)
+                        tp1 = round(price * (1.02 if sig == "BUY" else 0.98), 4)
+                        sl  = round(price * (0.97 if sig == "BUY" else 1.03), 4)
+                        dm_embed.add_field(name="🎯 TP1", value=f"`${tp1:,.4f}`", inline=True)
+                        dm_embed.add_field(name="🛑 SL",  value=f"`${sl:,.4f}`",  inline=True)
+                        dm_embed.add_field(name="📊 RSI", value=rsi_bar(rsi),     inline=False)
+                        dm_embed.set_footer(text=f"You're watching {sym.replace('USDT','')} | Use /unwatch to stop  •  {DISCLAIMER_RO}")
+                        await user.send(embed=dm_embed)
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Watchlist notifier error: {e}")
+        await asyncio.sleep(300)
+
+
+# ══════════════════════════════════════════════
+#   PREDICTION RESULT CHECKER (every 1h)
+# ══════════════════════════════════════════════
+
+async def prediction_checker_loop():
+    await client.wait_until_ready()
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            now = datetime.utcnow()
+            resolved = []
+            for uid, pred in list(PREDICTIONS.items()):
+                age = (now - pred["ts"]).total_seconds()
+                if age < 3600:
+                    continue
+                info = get_price_info(pred["symbol"])
+                if not info:
+                    continue
+                entry  = pred["entry_price"]
+                current= info["price"]
+                went_up = current > entry
+                predicted_up = pred["direction"] == "UP"
+                correct = (went_up == predicted_up)
+                if uid not in PRED_SCORES:
+                    PRED_SCORES[uid] = {"correct": 0, "total": 0, "username": pred.get("username","?")}
+                PRED_SCORES[uid]["total"] += 1
+                if correct:
+                    PRED_SCORES[uid]["correct"] += 1
+                resolved.append(uid)
+                try:
+                    user = await client.fetch_user(uid)
+                    pnl_pct = round((current - entry) / entry * 100, 2)
+                    result_icon = "✅" if correct else "❌"
+                    scores = PRED_SCORES[uid]
+                    acc = round(scores["correct"] / scores["total"] * 100, 1) if scores["total"] > 0 else 0
+                    embed = discord.Embed(
+                        title=f"🔮 Prediction Result — {result_icon} {'Correct!' if correct else 'Wrong'}",
+                        description=(
+                            f"🇬🇧 Your **{pred['direction']}** prediction on **{COIN_NAMES_EN.get(pred['symbol'],pred['symbol'])}**:\n"
+                            f"Entry `${entry:,.4f}` → Now `${current:,.4f}` ({'+' if pnl_pct>=0 else ''}{pnl_pct}%)\n\n"
+                            f"🇷🇴 Predicția ta **{pred['direction']}** pe **{COIN_NAMES_EN.get(pred['symbol'],pred['symbol'])}**:\n"
+                            f"Intrare `${entry:,.4f}` → Acum `${current:,.4f}` ({'+' if pnl_pct>=0 else ''}{pnl_pct}%)"
+                        ),
+                        color=0x00c853 if correct else 0xff1744,
+                        timestamp=now
+                    )
+                    embed.add_field(
+                        name="📊 Your accuracy / Acuratețea ta",
+                        value=f"`{acc}%` ({scores['correct']}/{scores['total']} correct)",
+                        inline=False
+                    )
+                    embed.set_footer(text="Use /predict to submit a new prediction | /leaderboard for rankings")
+                    await user.send(embed=embed)
+                except Exception:
+                    pass
+            for uid in resolved:
+                PREDICTIONS.pop(uid, None)
+        except Exception as e:
+            print(f"Prediction checker error: {e}")
 
 # =========================
 
