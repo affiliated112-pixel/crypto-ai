@@ -6,8 +6,9 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from ta.momentum import RSIIndicator
+from ta.momentum import RSIIndicator, StochRSIIndicator
 from ta.trend import MACD, EMAIndicator
+from ta.volatility import BollingerBands
 import os
 import random
 from datetime import datetime
@@ -159,6 +160,60 @@ def get_price_info(symbol):
     except Exception:
         return None
 
+def get_fear_greed():
+    """Standalone Fear & Greed fetch — returns (score_int, label_str)."""
+    try:
+        data  = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8).json()
+        val   = int(data["data"][0]["value"])
+        label = data["data"][0]["value_classification"]
+        return val, label
+    except Exception:
+        return "N/A", "Unknown"
+
+def get_messari_metrics(symbol):
+    """
+    Messari free API — returns basic on-chain metrics.
+    No API key needed for basic data.
+    """
+    coin_map = {"BTCUSDT": "bitcoin", "ETHUSDT": "ethereum",
+                "SOLUSDT": "solana",  "BNBUSDT": "binance-coin"}
+    slug = coin_map.get(symbol, symbol.replace("USDT","").lower())
+    try:
+        url  = f"https://data.messari.io/api/v1/assets/{slug}/metrics"
+        data = requests.get(url, timeout=10).json().get("data", {})
+        mkt  = data.get("market_data", {})
+        roi  = data.get("roi_data", {})
+        sup  = data.get("supply", {})
+        return {
+            "price_usd":        mkt.get("price_usd"),
+            "volume_last_24h":  mkt.get("volume_last_24_hours"),
+            "percent_change_24h": mkt.get("percent_change_usd_last_24_hours"),
+            "market_cap":       mkt.get("real_volume_last_24_hours"),
+            "roi_1y":           roi.get("percent_change_last_1_year"),
+            "circulating_supply": sup.get("circulating"),
+        }
+    except Exception:
+        return None
+
+def get_coingecko_extra(symbol):
+    """CoinGecko extra metrics: market cap rank, ATH, community score."""
+    coin_map = {"BTCUSDT": "bitcoin", "ETHUSDT": "ethereum",
+                "SOLUSDT": "solana",  "BNBUSDT": "binancecoin"}
+    coin = coin_map.get(symbol, symbol.replace("USDT","").lower())
+    try:
+        url  = f"https://api.coingecko.com/api/v3/coins/{coin}?localization=false&tickers=false&community_data=true&developer_data=false"
+        data = requests.get(url, timeout=10).json()
+        mkt  = data.get("market_data", {})
+        return {
+            "market_cap_rank":  data.get("market_cap_rank"),
+            "ath":              mkt.get("ath", {}).get("usd"),
+            "ath_change_pct":   mkt.get("ath_change_percentage", {}).get("usd"),
+            "community_score":  data.get("community_score"),
+            "coingecko_score":  data.get("coingecko_score"),
+        }
+    except Exception:
+        return None
+
 # =========================
 # TECHNICAL ANALYSIS
 # =========================
@@ -167,27 +222,81 @@ def calc_indicators(df):
     if df is None or len(df) < 35:
         return None
     close = df["close"]
+
     rsi       = RSIIndicator(close=close, window=14).rsi().iloc[-1]
+
     macd_obj  = MACD(close=close)
     macd_hist = macd_obj.macd_diff().iloc[-1]
+    macd_line = macd_obj.macd().iloc[-1]
+    macd_sig  = macd_obj.macd_signal().iloc[-1]
+
+    ema20     = EMAIndicator(close=close, window=20).ema_indicator().iloc[-1]
     ema50     = EMAIndicator(close=close, window=50).ema_indicator().iloc[-1]
+
+    bb        = BollingerBands(close=close, window=20, window_dev=2)
+    bb_upper  = bb.bollinger_hband().iloc[-1]
+    bb_lower  = bb.bollinger_lband().iloc[-1]
+    bb_mid    = bb.bollinger_mavg().iloc[-1]
+    bb_pct    = bb.bollinger_pband().iloc[-1]   # 0=lower band, 1=upper band
+
+    try:
+        stoch    = StochRSIIndicator(close=close, window=14, smooth1=3, smooth2=3)
+        stoch_k  = stoch.stochrsi_k().iloc[-1]
+        stoch_d  = stoch.stochrsi_d().iloc[-1]
+    except Exception:
+        stoch_k = stoch_d = 0.5
+
     price     = close.iloc[-1]
     vol_avg   = df["volume"].iloc[-20:].mean() if "volume" in df.columns else 0
     vol_now   = df["volume"].iloc[-1]          if "volume" in df.columns else 0
-    return {"rsi": rsi, "macd_hist": macd_hist, "ema50": ema50,
-            "price": price, "vol_avg": vol_avg, "vol_now": vol_now}
+
+    return {
+        "rsi": rsi, "macd_hist": macd_hist, "macd_line": macd_line, "macd_sig": macd_sig,
+        "ema20": ema20, "ema50": ema50,
+        "bb_upper": bb_upper, "bb_lower": bb_lower, "bb_mid": bb_mid, "bb_pct": bb_pct,
+        "stoch_k": stoch_k, "stoch_d": stoch_d,
+        "price": price, "vol_avg": vol_avg, "vol_now": vol_now
+    }
 
 def get_signal_v2(df):
     ind = calc_indicators(df)
     if ind is None:
         return None, None, None, None
-    rsi, macd_hist, price, ema50 = ind["rsi"], ind["macd_hist"], ind["price"], ind["ema50"]
-    buy_score  = sum([rsi < 35, macd_hist > 0, price > ema50 * 0.98])
-    sell_score = sum([rsi > 65, macd_hist < 0, price < ema50 * 1.02])
-    if buy_score >= 2:
-        return "BUY",  price, rsi, ("🔥 HIGH" if buy_score == 3 else "⚡ MEDIUM")
-    if sell_score >= 2:
-        return "SELL", price, rsi, ("🔥 HIGH" if sell_score == 3 else "⚡ MEDIUM")
+
+    rsi      = ind["rsi"]
+    macd_h   = ind["macd_hist"]
+    price    = ind["price"]
+    ema50    = ind["ema50"]
+    ema20    = ind["ema20"]
+    bb_pct   = ind["bb_pct"]
+    stoch_k  = ind["stoch_k"]
+    stoch_d  = ind["stoch_d"]
+
+    # 5-indicator scoring system
+    buy_signals = [
+        rsi < 35,                        # RSI oversold
+        macd_h > 0,                      # MACD bullish
+        price > ema50 * 0.98,            # price near/above EMA50
+        bb_pct < 0.25,                   # price near lower Bollinger Band
+        stoch_k < 0.25 and stoch_k > stoch_d,  # Stoch RSI oversold crossover
+    ]
+    sell_signals = [
+        rsi > 65,                        # RSI overbought
+        macd_h < 0,                      # MACD bearish
+        price < ema50 * 1.02,            # price near/below EMA50
+        bb_pct > 0.75,                   # price near upper Bollinger Band
+        stoch_k > 0.75 and stoch_k < stoch_d,  # Stoch RSI overbought crossover
+    ]
+
+    buy_score  = sum(buy_signals)
+    sell_score = sum(sell_signals)
+
+    if buy_score >= 3:
+        conf = "🔥 HIGH" if buy_score >= 4 else "⚡ MEDIUM"
+        return "BUY",  price, rsi, conf
+    if sell_score >= 3:
+        conf = "🔥 HIGH" if sell_score >= 4 else "⚡ MEDIUM"
+        return "SELL", price, rsi, conf
     return None, price, rsi, None
 
 def get_signal_15m(symbol):
@@ -865,6 +974,7 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name="/removealert [coin]", value="🇬🇧 Delete a price alert\n🇷🇴 Șterge o alertă de preț",                inline=False)
     embed.add_field(name="/sentiment",       value="🇬🇧 Full market sentiment overview\n🇷🇴 Tablou complet de sentiment piață",   inline=False)
     embed.add_field(name="/history",         value="🇬🇧 Last 10 signals with details\n🇷🇴 Ultimele 10 semnale cu detalii",       inline=False)
+    embed.add_field(name="/analysis [coin]", value="🇬🇧 Full TA: RSI+MACD+BB+StochRSI+Messari+CoinGecko\n🇷🇴 Analiză completă cu 5 indicatori + date on-chain", inline=False)
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
@@ -947,6 +1057,125 @@ async def slash_sentiment(interaction: discord.Interaction):
         inline=True
     )
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="analysis", description="🔬 Full technical analysis: RSI + MACD + BB + StochRSI + Messari + CoinGecko")
+@app_commands.describe(coin="Choose a coin (default: BTC)")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+])
+async def slash_analysis(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    coin_name = COIN_NAMES_EN.get(coin, coin)
+    emoji     = COIN_EMOJI.get(coin, "🪙")
+    logo      = COIN_LOGOS.get(coin)
+
+    df  = get_data(coin)
+    ind = calc_indicators(df)
+    pri = get_price_info(coin)
+
+    if ind is None or pri is None:
+        await interaction.followup.send("❌ Could not fetch data. Try again in a moment.", ephemeral=True)
+        return
+
+    rsi     = ind["rsi"]
+    mh      = ind["macd_hist"]
+    ema20   = ind["ema20"]
+    ema50   = ind["ema50"]
+    bb_up   = ind["bb_upper"]
+    bb_low  = ind["bb_lower"]
+    bb_mid  = ind["bb_mid"]
+    bb_pct  = ind["bb_pct"]
+    sk      = ind["stoch_k"]
+    sd      = ind["stoch_d"]
+    price   = pri["price"]
+    change  = pri["change"]
+
+    # build signal score
+    buy_score  = sum([rsi < 35, mh > 0, price > ema50 * 0.98, bb_pct < 0.25, sk < 0.25 and sk > sd])
+    sell_score = sum([rsi > 65, mh < 0, price < ema50 * 1.02, bb_pct > 0.75, sk > 0.75 and sk < sd])
+    score_max  = 5
+    bias       = "🟢 Bullish" if buy_score > sell_score and buy_score >= 3 else \
+                 ("🔴 Bearish" if sell_score > buy_score and sell_score >= 3 else "🟡 Neutral / Mixed")
+    score_str  = f"BUY `{buy_score}/{score_max}` | SELL `{sell_score}/{score_max}`"
+
+    bb_pos = "Near Upper Band 🔴" if bb_pct > 0.75 else ("Near Lower Band 🟢" if bb_pct < 0.25 else "Middle Zone ⚪")
+
+    stoch_str  = f"K `{round(sk*100,1)}%` / D `{round(sd*100,1)}%`"
+    stoch_zone = "🔴 Overbought" if sk > 0.8 else ("🟢 Oversold" if sk < 0.2 else "🟡 Neutral")
+
+    trend_ema = "🟢 Bullish (EMA20 > EMA50)" if ema20 > ema50 else "🔴 Bearish (EMA20 < EMA50)"
+
+    color = 0x00c853 if buy_score > sell_score else (0xff1744 if sell_score > buy_score else 0xffa726)
+
+    embed = discord.Embed(
+        title=f"🔬 Technical Analysis — {emoji} {coin_name}",
+        description=(
+            f"💰 **Price:** `${price:,.4f}`  |  24h: `{'+' if change >= 0 else ''}{change:.2f}%`\n"
+            f"{SEP}\n"
+            f"**Overall Bias:** {bias}  |  Score: {score_str}"
+        ),
+        color=color,
+        timestamp=datetime.utcnow()
+    )
+    if logo:
+        embed.set_thumbnail(url=logo)
+    embed.set_author(name="🔬 Crypto Signals Bot — Full Analysis", icon_url=BOT_ICON)
+
+    embed.add_field(name="📊 RSI (14)", value=rsi_bar(rsi), inline=False)
+    embed.add_field(
+        name="📉 MACD",
+        value=f"Histogram: `{'▲ ' if mh > 0 else '▼ '}{abs(mh):.4f}` — {'🟢 Bullish momentum' if mh > 0 else '🔴 Bearish momentum'}",
+        inline=False
+    )
+    embed.add_field(
+        name="📐 EMA Trend",
+        value=f"{trend_ema}\nEMA20: `${ema20:,.2f}` | EMA50: `${ema50:,.2f}`",
+        inline=False
+    )
+    embed.add_field(
+        name="🎯 Bollinger Bands",
+        value=(
+            f"Upper: `${bb_up:,.2f}` | Mid: `${bb_mid:,.2f}` | Lower: `${bb_low:,.2f}`\n"
+            f"Position: **{bb_pos}**  |  %B: `{round(bb_pct*100,1)}%`"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="⚡ Stochastic RSI",
+        value=f"{stoch_str} — {stoch_zone}",
+        inline=False
+    )
+
+    # Messari data
+    m = get_messari_metrics(coin)
+    if m and m.get("roi_1y") is not None:
+        roi_str = f"`{round(m['roi_1y'], 1)}%`"
+        vol_str = f"`${m['volume_last_24h']:,.0f}`" if m.get("volume_last_24h") else "N/A"
+        embed.add_field(name="\u200b", value=SEP, inline=False)
+        embed.add_field(name="📡 Messari — 1Y ROI", value=roi_str, inline=True)
+        embed.add_field(name="📦 Messari — 24h Volume", value=vol_str, inline=True)
+
+    # CoinGecko extra
+    cg = get_coingecko_extra(coin)
+    if cg:
+        ath_str  = f"`${cg['ath']:,.2f}`" if cg.get("ath") else "N/A"
+        rank_str = f"`#{cg['market_cap_rank']}`" if cg.get("market_cap_rank") else "N/A"
+        ath_down = f"`{round(cg['ath_change_pct'], 1)}%`" if cg.get("ath_change_pct") else "N/A"
+        embed.add_field(name="🏆 CoinGecko Rank", value=rank_str, inline=True)
+        embed.add_field(name="📈 ATH", value=f"{ath_str}  ({ath_down} from ATH)", inline=True)
+
+    embed.add_field(name="\u200b", value=SEP, inline=False)
+    embed.add_field(
+        name="⚠️ Disclaimer",
+        value="🇬🇧 Not financial advice. DYOR.\n🇷🇴 Nu e sfat financiar. Fă propriile cercetări.",
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  5 indicators  •  Binance + Messari + CoinGecko")
     await interaction.followup.send(embed=embed)
 
 
@@ -1100,6 +1329,7 @@ async def on_ready():
     client.loop.create_task(neutral_market_loop())
     client.loop.create_task(education_loop())
     client.loop.create_task(weekly_recap_loop())
+    client.loop.create_task(pump_alert_loop())
 
 # =========================
 # SIGNAL LOOP
@@ -1422,6 +1652,82 @@ async def crash_alert():
         except Exception as e:
             print(f"Crash alert error: {e}")
         await asyncio.sleep(600)
+
+# =========================
+# PUMP ALERT LOOP
+# =========================
+
+LAST_PUMP = {}
+
+async def pump_alert_loop():
+    await client.wait_until_ready()
+    channel = client.get_channel(ALERTS_CHANNEL)
+    while True:
+        try:
+            for symbol in SYMBOLS:
+                df = get_data(symbol)
+                if df is None or len(df) < 10:
+                    continue
+                pump_pct = (df["close"].iloc[-1] - df["close"].iloc[-10]) / df["close"].iloc[-10] * 100
+                coin = symbol.replace("USDT", "")
+                now  = datetime.utcnow()
+
+                # PUMP: +3% in ~50 min
+                if pump_pct > 3:
+                    last = LAST_PUMP.get(f"pump_{symbol}")
+                    if not last or (now - last).seconds > 3600:
+                        LAST_PUMP[f"pump_{symbol}"] = now
+                        ind  = calc_indicators(df)
+                        logo = COIN_LOGOS.get(symbol)
+                        embed = discord.Embed(
+                            title=f"🚀 PUMP Detected — {coin} +{round(pump_pct,1)}%",
+                            description=(
+                                f"🇬🇧 **{COIN_NAMES_EN.get(symbol, symbol)}** pumped **+{round(pump_pct,1)}%** in ~50 min!\n"
+                                f"Current price: `${round(df['close'].iloc[-1], 2):,}`\n"
+                                f"⚠️ Do NOT chase — wait for consolidation and a new signal.\n\n"
+                                f"🇷🇴 **{COIN_NAMES_EN.get(symbol, symbol)}** a crescut cu **+{round(pump_pct,1)}%** în ~50 min!\n"
+                                f"Preț curent: `${round(df['close'].iloc[-1], 2):,}`\n"
+                                f"⚠️ Nu urmări pump-ul — așteaptă consolidare și un semnal nou."
+                            ),
+                            color=0x00e676,
+                            timestamp=now
+                        )
+                        if logo:
+                            embed.set_thumbnail(url=logo)
+                        if ind:
+                            embed.add_field(name="📊 RSI", value=rsi_bar(ind["rsi"]), inline=False)
+                        embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+                        if channel:
+                            await channel.send(embed=embed)
+
+                # DUMP: -3% in ~50 min (more granular than crash_alert)
+                elif pump_pct < -3:
+                    last = LAST_PUMP.get(f"dump_{symbol}")
+                    if not last or (now - last).seconds > 3600:
+                        LAST_PUMP[f"dump_{symbol}"] = now
+                        logo = COIN_LOGOS.get(symbol)
+                        embed = discord.Embed(
+                            title=f"📉 DUMP Detected — {coin} {round(pump_pct,1)}%",
+                            description=(
+                                f"🇬🇧 **{COIN_NAMES_EN.get(symbol, symbol)}** dropped **{round(pump_pct,1)}%** in ~50 min!\n"
+                                f"Current price: `${round(df['close'].iloc[-1], 2):,}`\n"
+                                f"⚠️ Check your open positions and SL levels!\n\n"
+                                f"🇷🇴 **{COIN_NAMES_EN.get(symbol, symbol)}** a scăzut cu **{round(pump_pct,1)}%** în ~50 min!\n"
+                                f"Preț curent: `${round(df['close'].iloc[-1], 2):,}`\n"
+                                f"⚠️ Verifică pozițiile deschise și nivelurile SL!"
+                            ),
+                            color=0xff1744,
+                            timestamp=now
+                        )
+                        if logo:
+                            embed.set_thumbnail(url=logo)
+                        embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+                        if channel:
+                            await channel.send(embed=embed)
+
+        except Exception as e:
+            print(f"Pump alert error: {e}")
+        await asyncio.sleep(300)
 
 # =========================
 # EDUCATION LOOP
