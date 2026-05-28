@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 import asyncio
 import requests
 import pandas as pd
@@ -12,7 +13,11 @@ import random
 from datetime import datetime
 
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "YOUR_BOT_TOKEN")
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+
+# AI API Keys (toate gratuite)
+GROQ_API_KEY        = os.environ.get("GROQ_API_KEY", "")
+COHERE_API_KEY      = os.environ.get("COHERE_API_KEY", "")
+OPENROUTER_API_KEY  = os.environ.get("OPENROUTER_API_KEY", "")
 
 # =========================
 # CHANNEL IDs
@@ -36,11 +41,12 @@ PERFORMANCE_CHANNEL   = 1509524196139466852
 
 SYMBOLS       = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
 VIP_ROLE_NAME = "VIP"
-DISCLAIMER    = "Crypto Signals Bot | Nu e sfat financiar. Investește responsabil."
+DISCLAIMER_EN = "Crypto Signals Bot | Not financial advice. Invest responsibly."
+DISCLAIMER_RO = "Crypto Signals Bot | Nu e sfat financiar. Investește responsabil."
 
-LAST_SIGNAL   = {}
-SIGNAL_STATS  = {"BUY": 0, "SELL": 0, "total": 0}
-PRICE_ALERTS  = {}   # {user_id: [(symbol, target, direction)]}
+LAST_SIGNAL  = {}
+SIGNAL_STATS = {"BUY": 0, "SELL": 0, "total": 0}
+PRICE_ALERTS = {}
 
 COIN_COLORS = {
     "BTCUSDT": 0xF7931A,
@@ -48,18 +54,24 @@ COIN_COLORS = {
     "SOLUSDT": 0x9945FF,
     "BNBUSDT": 0xF0B90B,
 }
-
 COIN_EMOJI = {
-    "BTCUSDT": "₿",
-    "ETHUSDT": "Ξ",
-    "SOLUSDT": "◎",
-    "BNBUSDT": "⬡",
+    "BTCUSDT": "₿", "ETHUSDT": "Ξ", "SOLUSDT": "◎", "BNBUSDT": "⬡",
+}
+COIN_NAMES_EN = {
+    "BTCUSDT": "Bitcoin (BTC)", "ETHUSDT": "Ethereum (ETH)",
+    "SOLUSDT": "Solana (SOL)",  "BNBUSDT": "BNB (BNB)",
+}
+COIN_NAMES_RO = {
+    "BTCUSDT": "Bitcoin (BTC)", "ETHUSDT": "Ethereum (ETH)",
+    "SOLUSDT": "Solana (SOL)",  "BNBUSDT": "BNB (BNB)",
 }
 
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+
 client = discord.Client(intents=intents)
+tree   = app_commands.CommandTree(client)
 
 # =========================
 # MULTI-API DATA FETCH
@@ -67,8 +79,7 @@ client = discord.Client(intents=intents)
 
 def get_data_binance(symbol, interval="5m", limit=150):
     try:
-        url = (f"https://api.binance.com/api/v3/klines"
-               f"?symbol={symbol}&interval={interval}&limit={limit}")
+        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         data = requests.get(url, timeout=10).json()
         if not isinstance(data, list) or len(data) < 20:
             return None
@@ -87,17 +98,14 @@ def get_data_coingecko(symbol):
         coin_map = {"BTCUSDT":"bitcoin","ETHUSDT":"ethereum",
                     "SOLUSDT":"solana","BNBUSDT":"binancecoin"}
         coin = coin_map.get(symbol, symbol.replace("USDT","").lower())
-        url = (f"https://api.coingecko.com/api/v3/coins/{coin}"
-               f"/market_chart?vs_currency=usd&days=1&interval=5minutely")
+        url  = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days=1&interval=5minutely"
         data = requests.get(url, timeout=10).json()
         prices = data.get("prices", [])
         if len(prices) < 20:
             return None
         df = pd.DataFrame(prices, columns=["time","close"])
-        df["high"] = df["close"]
-        df["low"]  = df["close"]
-        df["open"] = df["close"]
-        df["volume"] = 0.0
+        df["high"] = df["close"]; df["low"] = df["close"]
+        df["open"] = df["close"]; df["volume"] = 0.0
         return df
     except Exception:
         return None
@@ -108,62 +116,53 @@ def get_data(symbol, interval="5m"):
         return df
     return get_data_coingecko(symbol)
 
+def get_price_info(symbol):
+    """Returns 24h ticker info: price, change%, high, low, volume."""
+    try:
+        url  = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+        data = requests.get(url, timeout=8).json()
+        return {
+            "price":    float(data["lastPrice"]),
+            "change":   float(data["priceChangePercent"]),
+            "high":     float(data["highPrice"]),
+            "low":      float(data["lowPrice"]),
+            "volume":   float(data["quoteVolume"]),
+        }
+    except Exception:
+        return None
+
 # =========================
 # TECHNICAL ANALYSIS
 # =========================
 
 def calc_indicators(df):
-    """Returns dict with rsi, macd_hist, ema50, price, volume_avg"""
     if df is None or len(df) < 35:
         return None
     close = df["close"]
-    rsi        = RSIIndicator(close=close, window=14).rsi().iloc[-1]
-    macd_obj   = MACD(close=close)
-    macd_hist  = macd_obj.macd_diff().iloc[-1]
-    ema50      = EMAIndicator(close=close, window=50).ema_indicator().iloc[-1]
-    price      = close.iloc[-1]
-    vol_avg    = df["volume"].iloc[-20:].mean() if "volume" in df.columns else 0
-    vol_now    = df["volume"].iloc[-1] if "volume" in df.columns else 0
-    return {
-        "rsi":      rsi,
-        "macd_hist": macd_hist,
-        "ema50":    ema50,
-        "price":    price,
-        "vol_avg":  vol_avg,
-        "vol_now":  vol_now,
-    }
+    rsi       = RSIIndicator(close=close, window=14).rsi().iloc[-1]
+    macd_obj  = MACD(close=close)
+    macd_hist = macd_obj.macd_diff().iloc[-1]
+    ema50     = EMAIndicator(close=close, window=50).ema_indicator().iloc[-1]
+    price     = close.iloc[-1]
+    vol_avg   = df["volume"].iloc[-20:].mean() if "volume" in df.columns else 0
+    vol_now   = df["volume"].iloc[-1]          if "volume" in df.columns else 0
+    return {"rsi": rsi, "macd_hist": macd_hist, "ema50": ema50,
+            "price": price, "vol_avg": vol_avg, "vol_now": vol_now}
 
 def get_signal_v2(df):
-    """
-    Confluence signal: RSI + MACD + EMA trend filter.
-    Returns (signal, price, rsi, confidence) or (None, price, rsi, None)
-    """
     ind = calc_indicators(df)
     if ind is None:
         return None, None, None, None
-
-    rsi       = ind["rsi"]
-    macd_hist = ind["macd_hist"]
-    price     = ind["price"]
-    ema50     = ind["ema50"]
-
-    buy_conditions  = [rsi < 35, macd_hist > 0, price > ema50 * 0.98]
-    sell_conditions = [rsi > 65, macd_hist < 0, price < ema50 * 1.02]
-
-    buy_score  = sum(buy_conditions)
-    sell_score = sum(sell_conditions)
-
+    rsi, macd_hist, price, ema50 = ind["rsi"], ind["macd_hist"], ind["price"], ind["ema50"]
+    buy_score  = sum([rsi < 35, macd_hist > 0, price > ema50 * 0.98])
+    sell_score = sum([rsi > 65, macd_hist < 0, price < ema50 * 1.02])
     if buy_score >= 2:
-        conf = "🔥 RIDICATĂ" if buy_score == 3 else "⚡ MEDIE"
-        return "BUY", price, rsi, conf
+        return "BUY",  price, rsi, ("🔥 HIGH" if buy_score == 3 else "⚡ MEDIUM")
     if sell_score >= 2:
-        conf = "🔥 RIDICATĂ" if sell_score == 3 else "⚡ MEDIE"
-        return "SELL", price, rsi, conf
-
+        return "SELL", price, rsi, ("🔥 HIGH" if sell_score == 3 else "⚡ MEDIUM")
     return None, price, rsi, None
 
 def get_signal_15m(symbol):
-    """Confirmation on higher timeframe."""
     df = get_data(symbol, interval="15m")
     if df is None:
         return None
@@ -184,88 +183,136 @@ def can_send_signal(symbol, signal):
     return False
 
 def check_volume_spike(ind):
-    if ind["vol_avg"] > 0 and ind["vol_now"] > ind["vol_avg"] * 2.5:
-        return True
-    return False
+    return ind["vol_avg"] > 0 and ind["vol_now"] > ind["vol_avg"] * 2.5
 
 def check_volatility(df):
     if df is None or len(df) < 2:
         return False
     return abs(df["close"].iloc[-1] - df["close"].iloc[-2]) > 200
 
+def is_vip(member):
+    return any(role.name == VIP_ROLE_NAME for role in member.roles)
+
 # =========================
-# FEAR & GREED
+# AI ANALYSIS — 4 API-URI GRATUITE
 # =========================
 
-def get_fear_greed():
+def ai_analysis_groq(signal, price, rsi, symbol):
+    """Groq — llama3 gratuit, cel mai rapid."""
     try:
-        data = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8).json()
-        val   = int(data["data"][0]["value"])
-        label = data["data"][0]["value_classification"]
-        if val <= 25:
-            emoji = "😱"
-        elif val <= 45:
-            emoji = "😟"
-        elif val <= 55:
-            emoji = "😐"
-        elif val <= 75:
-            emoji = "😊"
-        else:
-            emoji = "🤑"
-        return val, label, emoji
+        res = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={
+                "model": "llama3-8b-8192",
+                "messages": [{"role": "user", "content":
+                    f"In exactly 2 sentences, explain this crypto trade signal professionally: "
+                    f"{signal} {symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
+                }],
+                "max_tokens": 120,
+            },
+            timeout=10
+        ).json()
+        return res["choices"][0]["message"]["content"].strip()
     except Exception:
-        return None, None, None
+        return None
 
-# =========================
-# TOP GAINERS / LOSERS
-# =========================
-
-def get_top_movers():
+def ai_analysis_cohere(signal, price, rsi, symbol):
+    """Cohere — Command-R gratuit."""
     try:
-        url  = "https://api.binance.com/api/v3/ticker/24hr"
-        data = requests.get(url, timeout=10).json()
-        usdt = [x for x in data if x["symbol"].endswith("USDT") and float(x["quoteVolume"]) > 5_000_000]
-        sorted_by_change = sorted(usdt, key=lambda x: float(x["priceChangePercent"]))
-        losers  = sorted_by_change[:5]
-        gainers = sorted_by_change[-5:][::-1]
-        return gainers, losers
+        res = requests.post(
+            "https://api.cohere.com/v1/chat",
+            headers={"Authorization": f"Bearer {COHERE_API_KEY}",
+                     "Content-Type": "application/json"},
+            json={
+                "model": "command-r",
+                "message": (
+                    f"In 2 concise sentences, explain this crypto signal professionally: "
+                    f"{signal} {symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
+                ),
+                "max_tokens": 120,
+            },
+            timeout=10
+        ).json()
+        return res.get("text", "").strip()
     except Exception:
-        return [], []
+        return None
 
-# =========================
-# AI ANALYSIS
-# =========================
+def ai_analysis_huggingface(signal, price, rsi, symbol):
+    """HuggingFace Inference API — gratuit."""
+    try:
+        prompt = (
+            f"Explain this crypto trade signal in 2 sentences: "
+            f"{signal} {symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
+        )
+        res = requests.post(
+            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1",
+            headers={"Content-Type": "application/json"},
+            json={"inputs": prompt, "parameters": {"max_new_tokens": 100}},
+            timeout=12
+        ).json()
+        if isinstance(res, list) and res:
+            text = res[0].get("generated_text", "")
+            text = text.replace(prompt, "").strip()
+            return text[:300] if text else None
+        return None
+    except Exception:
+        return None
+
+def ai_analysis_openrouter(signal, price, rsi, symbol):
+    """OpenRouter — fallback plătit dacă ai cheie."""
+    try:
+        res = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+            json={
+                "model": "openai/gpt-3.5-turbo",
+                "messages": [{"role": "user", "content":
+                    f"In 2 sentences, explain professionally: {signal} "
+                    f"{symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
+                }]
+            },
+            timeout=10
+        ).json()
+        return res["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return None
+
+def ai_analysis_local(signal, price, rsi, symbol):
+    """Fallback inteligent fără API."""
+    coin = symbol.replace("USDT","")
+    if signal == "BUY":
+        strength = "extreme oversold" if rsi < 25 else "oversold"
+        ro = f"RSI-ul la {rsi:.1f} indică piață {('extrem supravândută' if rsi < 25 else 'supravândută')} — probabilitate crescută de revenire."
+        en = f"RSI at {rsi:.1f} indicates {strength} conditions — potential reversal upward expected."
+    else:
+        strength = "extreme overbought" if rsi > 75 else "overbought"
+        ro = f"RSI-ul la {rsi:.1f} indică piață {('extrem supraevaluată' if rsi > 75 else 'supraevaluată')} — presiune de vânzare detectată."
+        en = f"RSI at {rsi:.1f} indicates {strength} conditions — selling pressure detected."
+    return f"🇬🇧 {en}\n🇷🇴 {ro}"
 
 def ai_analysis(signal, price, rsi, symbol):
+    """Încearcă API-urile în ordine — cel mai rapid primul."""
+    if GROQ_API_KEY:
+        result = ai_analysis_groq(signal, price, rsi, symbol)
+        if result:
+            return result
+    if COHERE_API_KEY:
+        result = ai_analysis_cohere(signal, price, rsi, symbol)
+        if result:
+            return result
     if OPENROUTER_API_KEY:
-        try:
-            res = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-                json={
-                    "model": "openai/gpt-3.5-turbo",
-                    "messages": [{"role": "user", "content":
-                        f"In 2 concise sentences, explain this crypto signal: "
-                        f"{signal} {symbol} at ${price:.2f}, RSI={rsi:.1f}. Be professional."
-                    }]
-                },
-                timeout=10
-            ).json()
-            return res["choices"][0]["message"]["content"]
-        except Exception:
-            pass
-
-    if signal == "BUY":
-        strength = "extrem de supravândut" if rsi < 25 else "supravândut"
-        return (f"RSI-ul este {strength} la {rsi:.1f}, indicând posibilă revenire. "
-                f"MACD confirmă momentumul pozitiv. Gestionează riscul!")
-    else:
-        strength = "extrem de supraevaluat" if rsi > 75 else "supraevaluat"
-        return (f"RSI-ul este {strength} la {rsi:.1f}, indicând presiune de vânzare. "
-                f"MACD confirmă slăbirea momentumului. Respectă SL-ul!")
+        result = ai_analysis_openrouter(signal, price, rsi, symbol)
+        if result:
+            return result
+    result = ai_analysis_huggingface(signal, price, rsi, symbol)
+    if result:
+        return result
+    return ai_analysis_local(signal, price, rsi, symbol)
 
 # =========================
-# CHART GENERATION (3 PANELS)
+# CHART GENERATION (3 PANELS, DARK PRO)
 # =========================
 
 def generate_chart(df, symbol, signal=None):
@@ -274,51 +321,46 @@ def generate_chart(df, symbol, signal=None):
         gridspec_kw={"height_ratios": [3, 1, 1]}
     )
     fig.patch.set_facecolor("#0d1117")
+    close   = df["close"]
+    ema50   = EMAIndicator(close=close, window=50).ema_indicator()
+    rsi_s   = RSIIndicator(close=close, window=14).rsi()
+    macd_o  = MACD(close=close)
+    macd_l  = macd_o.macd()
+    macd_sg = macd_o.macd_signal()
+    macd_h  = macd_o.macd_diff()
+    color   = "#00c896" if signal == "BUY" else ("#ff4d4d" if signal == "SELL" else "#58a6ff")
 
-    close  = df["close"]
-    ema50  = EMAIndicator(close=close, window=50).ema_indicator()
-    rsi_s  = RSIIndicator(close=close, window=14).rsi()
-    macd_o = MACD(close=close)
-    macd_l = macd_o.macd()
-    macd_sig = macd_o.macd_signal()
-    macd_h = macd_o.macd_diff()
+    for ax in (ax1, ax2, ax3):
+        ax.set_facecolor("#161b22")
+        ax.tick_params(colors="#8b949e")
+        ax.grid(True, alpha=0.1, color="white")
+        for s in ax.spines.values():
+            s.set_edgecolor("#30363d")
 
-    color = "#00c896" if signal == "BUY" else ("#ff4d4d" if signal == "SELL" else "#58a6ff")
-
-    # Panel 1: Price + EMA
-    ax1.set_facecolor("#161b22")
-    ax1.plot(close,  color=color,    linewidth=1.5, label="Price", zorder=3)
-    ax1.plot(ema50,  color="#f0b232", linewidth=1.0, linestyle="--", label="EMA50", alpha=0.8)
-    ax1.set_title(f"{symbol} — {signal or 'Monitor'} | {datetime.utcnow().strftime('%H:%M UTC')}",
-                  color="white", fontsize=13, pad=8)
+    ax1.plot(close, color=color,    linewidth=1.5, label="Price", zorder=3)
+    ax1.plot(ema50, color="#f0b232", linewidth=1.0, linestyle="--", label="EMA50", alpha=0.8)
+    ax1.set_title(
+        f"{symbol}  |  {'🟢 BUY' if signal=='BUY' else ('🔴 SELL' if signal=='SELL' else '⚪ Monitor')}  |  {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}",
+        color="white", fontsize=12, pad=8
+    )
     ax1.set_ylabel("Price (USDT)", color="#8b949e", fontsize=9)
     ax1.legend(facecolor="#21262d", labelcolor="white", fontsize=8)
-    ax1.tick_params(colors="#8b949e"); ax1.grid(True, alpha=0.1, color="white")
-    for s in ax1.spines.values(): s.set_edgecolor("#30363d")
 
-    # Panel 2: RSI
-    ax2.set_facecolor("#161b22")
     ax2.plot(rsi_s, color="#f0b232", linewidth=1.2)
     ax2.axhline(70, color="#ff4d4d", linestyle="--", linewidth=0.8, alpha=0.7)
     ax2.axhline(30, color="#00c896", linestyle="--", linewidth=0.8, alpha=0.7)
-    ax2.fill_between(range(len(rsi_s)), 70, 100, alpha=0.05, color="red")
-    ax2.fill_between(range(len(rsi_s)), 0, 30,  alpha=0.05, color="green")
+    ax2.fill_between(range(len(rsi_s)), 70, 100, alpha=0.06, color="red")
+    ax2.fill_between(range(len(rsi_s)), 0,  30,  alpha=0.06, color="green")
     ax2.set_ylabel("RSI", color="#8b949e", fontsize=9)
     ax2.set_ylim(0, 100)
-    ax2.tick_params(colors="#8b949e"); ax2.grid(True, alpha=0.1, color="white")
-    for s in ax2.spines.values(): s.set_edgecolor("#30363d")
 
-    # Panel 3: MACD
-    ax3.set_facecolor("#161b22")
-    ax3.plot(macd_l,   color="#58a6ff", linewidth=1.0, label="MACD")
-    ax3.plot(macd_sig, color="#f0b232", linewidth=1.0, label="Signal")
     hist_colors = ["#00c896" if v >= 0 else "#ff4d4d" for v in macd_h]
+    ax3.plot(macd_l,  color="#58a6ff", linewidth=1.0, label="MACD")
+    ax3.plot(macd_sg, color="#f0b232", linewidth=1.0, label="Signal")
     ax3.bar(range(len(macd_h)), macd_h, color=hist_colors, alpha=0.5, width=0.8)
     ax3.axhline(0, color="#8b949e", linewidth=0.6)
     ax3.set_ylabel("MACD", color="#8b949e", fontsize=9)
     ax3.legend(facecolor="#21262d", labelcolor="white", fontsize=8)
-    ax3.tick_params(colors="#8b949e"); ax3.grid(True, alpha=0.1, color="white")
-    for s in ax3.spines.values(): s.set_edgecolor("#30363d")
 
     plt.tight_layout(pad=1.2)
     fname = f"{symbol}_chart.png"
@@ -327,83 +369,309 @@ def generate_chart(df, symbol, signal=None):
     return fname
 
 # =========================
-# EMBED FORMATTERS
+# EMBED BUILDERS
 # =========================
 
-COIN_NAMES = {
-    "BTCUSDT":"Bitcoin (BTC)","ETHUSDT":"Ethereum (ETH)",
-    "SOLUSDT":"Solana (SOL)","BNBUSDT":"BNB (BNB)"
-}
-
-def free_embed(symbol, signal, price, rsi, confidence):
-    color = discord.Color.green() if signal == "BUY" else discord.Color.red()
-    action = "🟢 BUY — INTRĂ ACUM" if signal == "BUY" else "🔴 STAI PE MARGINE / VINDE"
+def build_free_embed(symbol, signal, price, rsi, confidence):
+    color  = discord.Color.green() if signal == "BUY" else discord.Color.red()
     emoji  = COIN_EMOJI.get(symbol, "🪙")
+    coin   = symbol.replace("USDT","")
+    sl     = round(price * 0.97, 2)
+    tp1    = round(price * 1.02, 2)
 
-    ro_text = (
-        "Piața arată semne de revenire.\n"
-        "Dacă nu ai poziție → **poți intra cu atenție**.\n"
-        "Dacă ai deja → **ține poziția** și urmărește TP."
-        if signal == "BUY" else
-        "Piața merge în jos momentan.\n"
-        "Dacă ai cumpărat → ia în considerare să vinzi.\n"
-        "Dacă nu ai → **nu cumpăra acum**. Așteaptă 🟢."
-    )
-    steps = (
-        f"1. Deschide Binance / Bybit\n"
-        f"2. SPOT → {symbol.replace('USDT','')} → {'BUY' if signal=='BUY' else 'SELL'}\n"
-        f"3. Nu investi mai mult de 5-10% din capital\n"
-        f"4. Setează SL la ${round(price*0.97,2)}"
-        if signal == "BUY" else
-        f"1. SPOT → {symbol.replace('USDT','')} → SELL\n"
-        f"2. Nu intra SHORT dacă ești la început\n"
-        f"3. Așteaptă semnal 🟢 pentru a reintra\n"
-        f"4. Protejează capitalul mai întâi"
-    )
+    if signal == "BUY":
+        title_en = "🟢 BUY SIGNAL — ENTER NOW"
+        title_ro = "🟢 SEMNAL BUY — INTRĂ ACUM"
+        desc_en  = f"Market shows signs of reversal.\nIf no position → **enter carefully**.\nIf already in → **hold and watch TP**."
+        desc_ro  = f"Piața arată semne de revenire.\nDacă nu ai poziție → **poți intra cu atenție**.\nDacă ai deja → **ține poziția**, urmărește TP."
+        steps_en = f"1. Open Binance / Bybit\n2. SPOT → {coin} → BUY\n3. Max 5–10% of capital\n4. Set SL at ${sl}"
+        steps_ro = f"1. Deschide Binance / Bybit\n2. SPOT → {coin} → BUY\n3. Max 5–10% din capital\n4. Setează SL la ${sl}"
+    else:
+        title_en = "🔴 SELL SIGNAL — STAY OUT"
+        title_ro = "🔴 SEMNAL SELL — STAI PE MARGINE"
+        desc_en  = f"Market is dropping.\nIf holding → **consider selling**.\nIf no position → **do NOT buy now**. Wait for 🟢."
+        desc_ro  = f"Piața merge în jos.\nDacă ai cumpărat → **ia în considerare să vinzi**.\nDacă nu ai → **nu cumpăra acum**. Așteaptă 🟢."
+        steps_en = f"1. SPOT → {coin} → SELL\n2. Don't go SHORT if beginner\n3. Wait for 🟢 BUY signal\n4. Protect your capital first"
+        steps_ro = f"1. SPOT → {coin} → SELL\n2. Nu intra SHORT dacă ești la început\n3. Așteaptă semnal 🟢 verde\n4. Protejează capitalul"
 
     embed = discord.Embed(
-        title=f"{action}",
-        description=f"{emoji} **{COIN_NAMES.get(symbol, symbol)}** — `${round(price,2)}`",
+        title=f"{title_en}\n{title_ro}",
+        description=f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}** — `${round(price, 2)}`",
         color=color,
         timestamp=datetime.utcnow()
     )
-    embed.add_field(name="📊 Indicatori", value=f"RSI: `{round(rsi,2)}` | Calitate: {confidence}", inline=False)
-    embed.add_field(name="🇷🇴 Situație", value=ro_text, inline=False)
-    embed.add_field(name="📋 Pași", value=steps, inline=False)
-    embed.set_footer(text=DISCLAIMER)
+    embed.add_field(name="📊 Indicators / Indicatori",
+                    value=f"RSI: `{round(rsi,2)}` | Confidence / Calitate: **{confidence}** | TP1: `${tp1}`",
+                    inline=False)
+    embed.add_field(name="🇬🇧 Situation", value=desc_en, inline=True)
+    embed.add_field(name="🇷🇴 Situație",  value=desc_ro, inline=True)
+    embed.add_field(name="🇬🇧 Steps",     value=steps_en, inline=True)
+    embed.add_field(name="🇷🇴 Pași",      value=steps_ro, inline=True)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     return embed
 
-def vip_embed(symbol, signal, price, rsi, confidence, ai_text):
+def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_15m=False):
     color = COIN_COLORS.get(symbol, 0x00c896)
     emoji = COIN_EMOJI.get(symbol, "🪙")
+    coin  = symbol.replace("USDT","")
 
     embed = discord.Embed(
-        title=f"💎 VIP SIGNAL — {'🟢 BUY' if signal == 'BUY' else '🔴 SELL'} {symbol.replace('USDT','')}",
-        description=f"{emoji} **{COIN_NAMES.get(symbol, symbol)}**",
+        title=f"💎 VIP SIGNAL — {'🟢 BUY' if signal=='BUY' else '🔴 SELL'} {coin}",
+        description=f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**",
         color=color,
         timestamp=datetime.utcnow()
     )
-    embed.add_field(name="💰 Entry",  value=f"`${round(price,2)}`",       inline=True)
-    embed.add_field(name="🎯 TP1",    value=f"`${round(price*1.02,2)}`",  inline=True)
-    embed.add_field(name="🎯 TP2",    value=f"`${round(price*1.04,2)}`",  inline=True)
-    embed.add_field(name="🛑 SL",     value=f"`${round(price*0.97,2)}`",  inline=True)
-    embed.add_field(name="📊 RSI",    value=f"`{round(rsi,2)}`",          inline=True)
-    embed.add_field(name="⭐ Calitate", value=confidence,                 inline=True)
-    embed.add_field(name="🧠 AI Analysis", value=ai_text,                inline=False)
+    embed.add_field(name="💰 Entry",      value=f"`${round(price,2)}`",       inline=True)
+    embed.add_field(name="🎯 TP1",        value=f"`${round(price*1.02,2)}`",  inline=True)
+    embed.add_field(name="🎯 TP2",        value=f"`${round(price*1.04,2)}`",  inline=True)
+    embed.add_field(name="🛑 SL",         value=f"`${round(price*0.97,2)}`",  inline=True)
+    embed.add_field(name="📊 RSI",        value=f"`{round(rsi,2)}`",          inline=True)
+    embed.add_field(name="⭐ Confidence", value=confidence,                   inline=True)
+    if confirmed_15m:
+        embed.add_field(name="✅ Multi-Timeframe",
+                        value="🇬🇧 Confirmed on 15m chart!\n🇷🇴 Confirmat și pe graficul 15m!",
+                        inline=False)
+    embed.add_field(name="🧠 AI Analysis",
+                    value=ai_text,
+                    inline=False)
     embed.add_field(name="⚠️ Risk Management",
-                    value="Leverage: 1x–3x max | Size: max 10% capital | Urmărește SL!", inline=False)
-    embed.set_footer(text=DISCLAIMER)
+                    value="🇬🇧 Leverage: 1x–3x max | Max 10% capital per trade | Always respect SL!\n"
+                          "🇷🇴 Leverage: 1x–3x max | Max 10% capital pe trade | Respectă mereu SL!",
+                    inline=False)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    return embed
+
+def build_price_embed(symbol):
+    info = get_price_info(symbol)
+    df   = get_data(symbol)
+    ind  = calc_indicators(df) if df is not None else None
+    emoji = COIN_EMOJI.get(symbol, "🪙")
+    color = discord.Color.green() if (info and info["change"] >= 0) else discord.Color.red()
+
+    embed = discord.Embed(
+        title=f"{emoji} {COIN_NAMES_EN.get(symbol, symbol)} — Live Price",
+        color=color,
+        timestamp=datetime.utcnow()
+    )
+    if info:
+        ch_emoji = "📈" if info["change"] >= 0 else "📉"
+        embed.add_field(name="💰 Price",    value=f"`${info['price']:,.4f}`",              inline=True)
+        embed.add_field(name=f"{ch_emoji} 24h Change", value=f"`{info['change']:+.2f}%`", inline=True)
+        embed.add_field(name="📊 24h High", value=f"`${info['high']:,.4f}`",               inline=True)
+        embed.add_field(name="📉 24h Low",  value=f"`${info['low']:,.4f}`",                inline=True)
+        embed.add_field(name="💵 Volume",   value=f"`${info['volume']:,.0f}`",             inline=True)
+    if ind:
+        rsi_status = "🔴 Overbought" if ind["rsi"] > 70 else ("🟢 Oversold" if ind["rsi"] < 30 else "⚪ Neutral")
+        embed.add_field(name="📐 RSI (14)", value=f"`{ind['rsi']:.2f}` {rsi_status}", inline=True)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     return embed
 
 # =========================
-# VIP CHECK
+# SLASH COMMANDS
 # =========================
 
-def is_vip(member):
-    return any(role.name == VIP_ROLE_NAME for role in member.roles)
+@tree.command(name="signal", description="💎 VIP: Get a live BTC/ETH/SOL/BNB signal instantly")
+@app_commands.describe(coin="Choose a coin (default: BTC)")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+])
+async def slash_signal(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    if not is_vip(interaction.user):
+        embed = discord.Embed(
+            description=f"❌ **VIP Only / Doar pentru VIP**\n\n🇬🇧 This command is for VIP members only.\n🇷🇴 Această comandă este doar pentru membrii VIP.\n\n→ <#{GET_VIP_CHANNEL}>",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    df = get_data(coin)
+    sig, price, rsi, conf = get_signal_v2(df)
+
+    if sig and price:
+        ai_text      = ai_analysis(sig, price, rsi, coin)
+        tf15         = get_signal_15m(coin)
+        confirmed    = tf15 == sig
+        chart        = generate_chart(df, coin, sig)
+        embed        = build_vip_embed(coin, sig, price, rsi, conf, ai_text, confirmed)
+        await interaction.followup.send(embed=embed, file=discord.File(chart))
+    else:
+        embed = discord.Embed(
+            description=(
+                f"⚪ **No signal right now / Niciun semnal acum**\n\n"
+                f"🇬🇧 Market is neutral. RSI: `{round(rsi,2) if rsi else 'N/A'}` | Price: `${round(price,2) if price else 'N/A'}`\n"
+                f"🇷🇴 Piața e neutră. Urmăresc continuu și îți trimit semnal când apare."
+            ),
+            color=discord.Color.light_grey()
+        )
+        await interaction.followup.send(embed=embed)
+
+@tree.command(name="price", description="📊 Get live price + 24h stats for any coin")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+])
+async def slash_price(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    embed = build_price_embed(coin)
+    await interaction.followup.send(embed=embed)
+
+@tree.command(name="chart", description="📈 Get a live chart with RSI & MACD for any coin")
+@app_commands.describe(coin="Choose a coin", timeframe="Chart timeframe")
+@app_commands.choices(
+    coin=[
+        app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+        app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+        app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+        app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    ],
+    timeframe=[
+        app_commands.Choice(name="5 minutes",  value="5m"),
+        app_commands.Choice(name="15 minutes", value="15m"),
+        app_commands.Choice(name="1 hour",     value="1h"),
+        app_commands.Choice(name="4 hours",    value="4h"),
+    ]
+)
+async def slash_chart(interaction: discord.Interaction, coin: str = "BTCUSDT", timeframe: str = "5m"):
+    await interaction.response.defer()
+    df = get_data(coin, interval=timeframe)
+    if df is None:
+        await interaction.followup.send("❌ Could not fetch data. Try again.")
+        return
+    sig, _, _, _ = get_signal_v2(df)
+    chart = generate_chart(df, coin, sig)
+    embed = discord.Embed(
+        title=f"📈 {COIN_NAMES_EN.get(coin, coin)} — {timeframe.upper()} Chart",
+        description=f"🇬🇧 Price + RSI + MACD indicators\n🇷🇴 Grafic cu indicatori RSI și MACD",
+        color=COIN_COLORS.get(coin, 0x58a6ff),
+        timestamp=datetime.utcnow()
+    )
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed, file=discord.File(chart))
+
+@tree.command(name="rsi", description="📊 Live RSI dashboard for all monitored coins")
+async def slash_rsi(interaction: discord.Interaction):
+    await interaction.response.defer()
+    embed = discord.Embed(
+        title="📊 Live RSI Dashboard",
+        description="🇬🇧 Real-time RSI for all coins\n🇷🇴 RSI în timp real pentru toate monedele",
+        color=discord.Color.blurple(),
+        timestamp=datetime.utcnow()
+    )
+    for sym in SYMBOLS:
+        df  = get_data(sym)
+        ind = calc_indicators(df)
+        if ind:
+            rsi   = ind["rsi"]
+            price = ind["price"]
+            st_en = "🔴 OVERBOUGHT" if rsi > 70 else ("🟢 OVERSOLD" if rsi < 30 else "⚪ NEUTRAL")
+            st_ro = "🔴 SUPRAEVALUAT" if rsi > 70 else ("🟢 SUPRAVÂNDUT" if rsi < 30 else "⚪ NEUTRU")
+            embed.add_field(
+                name=f"{COIN_EMOJI.get(sym,'')} {COIN_NAMES_EN.get(sym, sym)}",
+                value=f"`${round(price,2)}` | RSI: `{round(rsi,2)}` | {st_en} / {st_ro}",
+                inline=False
+            )
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+@tree.command(name="alert", description="🔔 Set a price alert — you'll get a DM when price hits target")
+@app_commands.describe(coin="Choose a coin", target="Target price in USD")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+])
+async def slash_alert(interaction: discord.Interaction, coin: str, target: float):
+    uid = interaction.user.id
+    if uid not in PRICE_ALERTS:
+        PRICE_ALERTS[uid] = []
+    if len(PRICE_ALERTS[uid]) >= 5:
+        await interaction.response.send_message(
+            "⚠️ Max 5 active alerts. Use `/myalerts` to check them.", ephemeral=True
+        )
+        return
+    df = get_data(coin)
+    if df is None:
+        await interaction.response.send_message("❌ Could not fetch data.", ephemeral=True)
+        return
+    current   = df["close"].iloc[-1]
+    direction = "above" if target > current else "below"
+    PRICE_ALERTS[uid].append((coin, target, direction))
+    embed = discord.Embed(
+        description=(
+            f"✅ **Alert set / Alertă setată**\n\n"
+            f"🇬🇧 **{coin.replace('USDT','')}** will notify you when price {'≥' if direction=='above' else '≤'} `${target:,.2f}`\n"
+            f"🇷🇴 Vei primi DM când prețul {'≥' if direction=='above' else '≤'} `${target:,.2f}`\n\n"
+            f"💰 Current price / Preț curent: `${current:,.2f}`"
+        ),
+        color=discord.Color.green()
+    )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@tree.command(name="myalerts", description="🔔 See your active price alerts")
+async def slash_myalerts(interaction: discord.Interaction):
+    alerts = PRICE_ALERTS.get(interaction.user.id, [])
+    if not alerts:
+        await interaction.response.send_message(
+            "ℹ️ 🇬🇧 No active alerts.\n🇷🇴 Nu ai alerte active. Setează cu `/alert`.",
+            ephemeral=True
+        )
+        return
+    embed = discord.Embed(
+        title="🔔 Your Active Alerts / Alertele tale active",
+        color=discord.Color.gold()
+    )
+    for sym, target, direction in alerts:
+        embed.add_field(
+            name=sym.replace("USDT",""),
+            value=f"{'≥' if direction=='above' else '≤'} `${target:,.2f}`",
+            inline=True
+        )
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@tree.command(name="stats", description="📈 Bot statistics and signal history")
+async def slash_stats(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="📈 Bot Statistics",
+        color=discord.Color.green(),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name="🇬🇧 Total Signals", value=str(SIGNAL_STATS["total"]),    inline=True)
+    embed.add_field(name="🟢 BUY",             value=str(SIGNAL_STATS["BUY"]),      inline=True)
+    embed.add_field(name="🔴 SELL",            value=str(SIGNAL_STATS["SELL"]),     inline=True)
+    embed.add_field(name="🪙 Monitored Coins / Monede monitorizate",
+                    value=", ".join(s.replace("USDT","") for s in SYMBOLS),         inline=False)
+    embed.add_field(name="🔔 Active Alerts / Alerte active",
+                    value=str(sum(len(v) for v in PRICE_ALERTS.values())),           inline=True)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+@tree.command(name="help", description="📋 List all available commands")
+async def slash_help(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="📋 Commands / Comenzi disponibile",
+        description="🇬🇧 All available commands\n🇷🇴 Toate comenzile disponibile",
+        color=discord.Color.blurple()
+    )
+    embed.add_field(name="/price [coin]",    value="🇬🇧 Live price + 24h stats\n🇷🇴 Preț live + statistici 24h",    inline=False)
+    embed.add_field(name="/chart [coin] [tf]",value="🇬🇧 RSI + MACD chart\n🇷🇴 Grafic RSI + MACD",                 inline=False)
+    embed.add_field(name="/rsi",             value="🇬🇧 RSI dashboard all coins\n🇷🇴 Dashboard RSI toate monedele",  inline=False)
+    embed.add_field(name="/alert [coin] [price]", value="🇬🇧 Set price alert (DM)\n🇷🇴 Alertă de preț via DM",     inline=False)
+    embed.add_field(name="/myalerts",        value="🇬🇧 Your active alerts\n🇷🇴 Alertele tale active",              inline=False)
+    embed.add_field(name="/stats",           value="🇬🇧 Bot statistics\n🇷🇴 Statistici bot",                        inline=False)
+    embed.add_field(name="/signal 💎 VIP",   value="🇬🇧 Live signal on-demand (VIP only)\n🇷🇴 Semnal live instant (doar VIP)", inline=False)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
 
 # =========================
-# ON MEMBER JOIN
+# WELCOME
 # =========================
 
 @client.event
@@ -412,15 +680,18 @@ async def on_member_join(member):
     if not ch:
         return
     embed = discord.Embed(
-        title=f"👋 Bun venit, {member.display_name}!",
+        title=f"👋 Welcome / Bun venit, {member.display_name}!",
         description=(
-            f"Suntem bucuroși să te avem alături de noi!\n\n"
-            f"🇬🇧 Start here:\n"
-            f"📜 <#{RULES_CHANNEL}> — Rules\n"
-            f"📊 <#{HOWTO_CHANNEL}> — How to use signals\n\n"
-            f"🇷🇴 Începe aici:\n"
-            f"Citește regulile și învață cum funcționează semnalele!\n"
-            f"💎 Upgrade VIP: <#{GET_VIP_CHANNEL}>"
+            "🇬🇧 **Welcome to the server!**\n"
+            "We provide real-time crypto signals for BTC, ETH, SOL & BNB.\n\n"
+            f"📜 Rules → <#{RULES_CHANNEL}>\n"
+            f"📊 How to use → <#{HOWTO_CHANNEL}>\n"
+            f"💎 Get VIP → <#{GET_VIP_CHANNEL}>\n\n"
+            "🇷🇴 **Bun venit pe server!**\n"
+            "Oferim semnale crypto în timp real pentru BTC, ETH, SOL și BNB.\n\n"
+            f"📜 Reguli → <#{RULES_CHANNEL}>\n"
+            f"📊 Cum funcționează → <#{HOWTO_CHANNEL}>\n"
+            f"💎 Obține VIP → <#{GET_VIP_CHANNEL}>"
         ),
         color=discord.Color.gold(),
         timestamp=datetime.utcnow()
@@ -429,141 +700,24 @@ async def on_member_join(member):
     await ch.send(embed=embed)
 
 # =========================
-# ON MESSAGE (COMMANDS)
-# =========================
-
-@client.event
-async def on_message(message):
-    if message.author.bot:
-        return
-    content = message.content.lower().strip()
-
-    # !signal — VIP only live signal
-    if content == "!signal":
-        if not is_vip(message.author):
-            await message.channel.send(
-                embed=discord.Embed(
-                    description=f"❌ Comanda `!signal` este doar pentru **VIP**.\nObții acces: <#{GET_VIP_CHANNEL}>",
-                    color=discord.Color.red()
-                )
-            )
-            return
-        msg = await message.channel.send("⏳ Generez semnal live BTC...")
-        df = get_data("BTCUSDT")
-        sig, price, rsi, conf = get_signal_v2(df)
-        if sig and price:
-            ai_text = ai_analysis(sig, price, rsi, "BTCUSDT")
-            embed   = vip_embed("BTCUSDT", sig, price, rsi, conf, ai_text)
-            chart   = generate_chart(df, "BTCUSDT", sig)
-            await msg.delete()
-            await message.channel.send(embed=embed, file=discord.File(chart))
-        else:
-            await msg.edit(content=f"📊 BTC `${round(price,2) if price else 'N/A'}` | RSI: `{round(rsi,2) if rsi else 'N/A'}` — Piața neutră, nu există semnal acum.")
-
-    # !rsi — live RSI dashboard
-    elif content == "!rsi":
-        embed = discord.Embed(title="📊 Live RSI Dashboard", color=discord.Color.blurple(), timestamp=datetime.utcnow())
-        for sym in SYMBOLS:
-            df = get_data(sym)
-            ind = calc_indicators(df)
-            if ind:
-                rsi   = ind["rsi"]
-                price = ind["price"]
-                status = "🔴 OVERBOUGHT" if rsi > 70 else ("🟢 OVERSOLD" if rsi < 30 else "⚪ NEUTRU")
-                embed.add_field(
-                    name=f"{COIN_EMOJI.get(sym,'')} {COIN_NAMES.get(sym,sym)}",
-                    value=f"`${round(price,2)}` | RSI: `{round(rsi,2)}` {status}",
-                    inline=False
-                )
-        embed.set_footer(text=DISCLAIMER)
-        await message.channel.send(embed=embed)
-
-    # !alert BTC 70000 — price alert
-    elif content.startswith("!alert "):
-        parts = content.split()
-        if len(parts) != 3:
-            await message.channel.send("❌ Format: `!alert BTC 70000`")
-            return
-        sym_raw = parts[1].upper() + "USDT"
-        try:
-            target = float(parts[2])
-        except ValueError:
-            await message.channel.send("❌ Prețul trebuie să fie un număr.")
-            return
-        uid = message.author.id
-        if uid not in PRICE_ALERTS:
-            PRICE_ALERTS[uid] = []
-        if len(PRICE_ALERTS[uid]) >= 5:
-            await message.channel.send("⚠️ Poți seta maxim 5 alerte simultan. Folosește `!myalerts` să le vezi.")
-            return
-        df = get_data(sym_raw)
-        if df is None:
-            await message.channel.send(f"❌ Moneda `{parts[1].upper()}` nu este suportată.")
-            return
-        current = df["close"].iloc[-1]
-        direction = "above" if target > current else "below"
-        PRICE_ALERTS[uid].append((sym_raw, target, direction))
-        embed = discord.Embed(
-            description=f"✅ Alertă setată: **{parts[1].upper()}** {'≥' if direction=='above' else '≤'} `${target:,.2f}`\nPreț curent: `${current:,.2f}`",
-            color=discord.Color.green()
-        )
-        await message.channel.send(embed=embed)
-
-    # !myalerts — list user's alerts
-    elif content == "!myalerts":
-        uid = message.author.id
-        alerts = PRICE_ALERTS.get(uid, [])
-        if not alerts:
-            await message.channel.send("ℹ️ Nu ai alerte active. Setează cu `!alert BTC 70000`.")
-            return
-        embed = discord.Embed(title="🔔 Alertele tale", color=discord.Color.gold())
-        for sym, target, direction in alerts:
-            embed.add_field(
-                name=sym.replace("USDT",""),
-                value=f"{'≥' if direction=='above' else '≤'} `${target:,.2f}`",
-                inline=True
-            )
-        await message.channel.send(embed=embed)
-
-    # !stats — bot statistics
-    elif content == "!stats":
-        embed = discord.Embed(title="📈 Bot Statistics", color=discord.Color.green(), timestamp=datetime.utcnow())
-        embed.add_field(name="Total semnale", value=str(SIGNAL_STATS["total"]), inline=True)
-        embed.add_field(name="🟢 BUY",        value=str(SIGNAL_STATS["BUY"]),   inline=True)
-        embed.add_field(name="🔴 SELL",       value=str(SIGNAL_STATS["SELL"]),  inline=True)
-        embed.add_field(name="Monede",
-                        value=", ".join(s.replace("USDT","") for s in SYMBOLS), inline=False)
-        embed.add_field(name="Alerte active", value=str(sum(len(v) for v in PRICE_ALERTS.values())), inline=True)
-        embed.set_footer(text=DISCLAIMER)
-        await message.channel.send(embed=embed)
-
-    # !help — command list
-    elif content == "!help":
-        embed = discord.Embed(
-            title="📋 Comenzi disponibile",
-            color=discord.Color.blurple()
-        )
-        embed.add_field(name="!rsi",              value="Dashboard RSI live pentru toate monedele",         inline=False)
-        embed.add_field(name="!alert BTC 70000",  value="Setează alertă de preț (max 5 active)",           inline=False)
-        embed.add_field(name="!myalerts",         value="Vezi alertele tale active",                        inline=False)
-        embed.add_field(name="!stats",            value="Statistici bot",                                   inline=False)
-        embed.add_field(name="!signal 💎 VIP",    value="Semnal live BTC instant (doar VIP)",               inline=False)
-        embed.set_footer(text=DISCLAIMER)
-        await message.channel.send(embed=embed)
-
-# =========================
 # ON READY
 # =========================
 
 @client.event
 async def on_ready():
     print(f"Bot online: {client.user}")
+    await tree.sync()
+    print("Slash commands synced.")
 
     status_ch = client.get_channel(STATUS_CHANNEL)
     if status_ch:
         embed = discord.Embed(
-            title="🟢 Bot is ONLINE",
-            description=f"Monitorizez: {', '.join(s.replace('USDT','') for s in SYMBOLS)}\n\nComenzile disponibile: `!help`",
+            title="🟢 Bot ONLINE",
+            description=(
+                f"🇬🇧 Monitoring: {', '.join(s.replace('USDT','') for s in SYMBOLS)}\n"
+                f"🇷🇴 Monitorizez: {', '.join(s.replace('USDT','') for s in SYMBOLS)}\n\n"
+                "📋 Type `/help` to see all commands / pentru toate comenzile"
+            ),
             color=discord.Color.green(),
             timestamp=datetime.utcnow()
         )
@@ -572,38 +726,55 @@ async def on_ready():
     rules_ch = client.get_channel(RULES_CHANNEL)
     if rules_ch:
         embed = discord.Embed(title="📜 Rules / Reguli", color=discord.Color.orange())
-        embed.add_field(name="🇬🇧 English", value="• No spam\n• No scams\n• Respect everyone\n• Signals are not financial advice", inline=True)
-        embed.add_field(name="🇷🇴 Română",  value="• Fără spam\n• Fără scam\n• Respectă pe toată lumea\n• Semnalele nu sunt sfaturi financiare", inline=True)
+        embed.add_field(name="🇬🇧 Rules",
+                        value="• No spam\n• No scams\n• Respect everyone\n• Signals are NOT financial advice", inline=True)
+        embed.add_field(name="🇷🇴 Reguli",
+                        value="• Fără spam\n• Fără scam\n• Respectă pe toată lumea\n• Semnalele NU sunt sfaturi financiare", inline=True)
         await rules_ch.send(embed=embed)
 
     howto_ch = client.get_channel(HOWTO_CHANNEL)
     if howto_ch:
-        already_sent = False
+        already = False
         async for msg in howto_ch.history(limit=20):
             if msg.author == client.user and msg.embeds:
-                already_sent = True
+                already = True
                 break
-        if not already_sent:
-            embed = discord.Embed(title="📊 How to Use Signals", color=discord.Color.blue())
+        if not already:
+            embed = discord.Embed(
+                title="📊 How to Use Signals / Cum să folosești semnalele",
+                color=discord.Color.blue()
+            )
             embed.add_field(name="🇬🇧 Steps",
-                value="1. Use Binance / Bybit (SPOT)\n2. Follow Entry / TP1 / TP2 / SL\n3. Max 5-10% capital per trade\n4. Always set your Stop Loss\n5. Wait for 🟢 BUY before entering", inline=False)
+                value="1. Use Binance / Bybit (SPOT, not futures if beginner)\n"
+                      "2. Follow Entry / TP1 / TP2 / SL exactly\n"
+                      "3. Max 5–10% of capital per trade\n"
+                      "4. Always set Stop Loss before entering\n"
+                      "5. Wait for 🟢 BUY before entering", inline=False)
             embed.add_field(name="🇷🇴 Pași",
-                value="1. Folosește Binance / Bybit\n2. Urmează Entry / TP1 / TP2 / SL\n3. Max 5-10% din capital pe trade\n4. Setează mereu Stop Loss\n5. Așteaptă semnal 🟢 verde", inline=False)
-            embed.add_field(name="📋 Comenzi", value="`!help` — lista completă de comenzi", inline=False)
-            embed.set_footer(text=DISCLAIMER)
+                value="1. Folosește Binance / Bybit (SPOT, nu futures la început)\n"
+                      "2. Urmează Entry / TP1 / TP2 / SL exact\n"
+                      "3. Max 5–10% din capital pe trade\n"
+                      "4. Setează mereu Stop Loss înainte să intri\n"
+                      "5. Așteaptă semnal 🟢 verde înainte să cumperi", inline=False)
+            embed.add_field(name="📋 Commands / Comenzi", value="Type `/help` to see all commands.", inline=False)
+            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             await howto_ch.send(embed=embed)
 
     vip_ch = client.get_channel(GET_VIP_CHANNEL)
     if vip_ch:
         embed = discord.Embed(
             title="💎 GET VIP ACCESS",
-            description="Upgrade pentru acces complet la toate funcționalitățile premium.",
             color=discord.Color.gold()
         )
-        embed.add_field(name="✅ Ce primești VIP",
-            value="• Grafice RSI + MACD atașate\n• AI Analysis la fiecare semnal\n• Comanda `!signal` on-demand\n• TP1 / TP2 / SL detaliat\n• Alertă crash piață", inline=False)
-        embed.add_field(name="📩 Contact", value="👤 <@1426677891269267618>\n👤 <@1463583046962909410>", inline=False)
-        embed.set_footer(text=DISCLAIMER)
+        embed.add_field(name="🇬🇧 What you get",
+            value="✅ Signals with TP1 / TP2 / SL\n✅ RSI + MACD charts attached\n✅ AI trade analysis\n"
+                  "✅ Multi-timeframe confirmation\n✅ On-demand `/signal` command\n✅ Price alerts via DM", inline=True)
+        embed.add_field(name="🇷🇴 Ce primești",
+            value="✅ Semnale cu TP1 / TP2 / SL\n✅ Grafice RSI + MACD atașate\n✅ Analiză AI per semnal\n"
+                  "✅ Confirmare multi-timeframe\n✅ Comanda `/signal` on-demand\n✅ Alerte de preț via DM", inline=True)
+        embed.add_field(name="📩 Contact",
+            value="👤 <@1426677891269267618>\n👤 <@1463583046962909410>", inline=False)
+        embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
         await vip_ch.send(embed=embed)
 
     client.loop.create_task(signal_loop())
@@ -617,7 +788,7 @@ async def on_ready():
     client.loop.create_task(neutral_market_loop())
 
 # =========================
-# SIGNAL LOOP (CONFLUENCE)
+# SIGNAL LOOP
 # =========================
 
 async def signal_loop():
@@ -629,40 +800,39 @@ async def signal_loop():
     while True:
         try:
             for symbol in SYMBOLS:
-                df   = get_data(symbol)
+                df  = get_data(symbol)
                 sig, price, rsi, conf = get_signal_v2(df)
-                ind  = calc_indicators(df)
+                ind = calc_indicators(df)
 
                 if ind and check_volume_spike(ind) and alerts_ch:
-                    await alerts_ch.send(
-                        embed=discord.Embed(
-                            description=f"📊 **Volume spike** pe **{symbol.replace('USDT','')}**! Volum de 2.5x mai mare decât media.",
-                            color=discord.Color.yellow()
-                        )
-                    )
+                    await alerts_ch.send(embed=discord.Embed(
+                        description=(
+                            f"📊 **Volume Spike — {symbol.replace('USDT','')}**\n\n"
+                            f"🇬🇧 Volume is 2.5x above average! Watch for a big move.\n"
+                            f"🇷🇴 Volumul este de 2.5x mai mare decât media! Urmărește o mișcare mare."
+                        ),
+                        color=discord.Color.yellow()
+                    ))
 
                 if df is not None and check_volatility(df) and alerts_ch:
-                    await alerts_ch.send(
-                        embed=discord.Embed(
-                            description=f"⚠️ **HIGH VOLATILITY** pe {symbol}! Lumânare mare detectată.",
-                            color=discord.Color.orange()
-                        )
-                    )
+                    await alerts_ch.send(embed=discord.Embed(
+                        description=(
+                            f"⚠️ **High Volatility — {symbol.replace('USDT','')}**\n\n"
+                            f"🇬🇧 Large candle detected. Check open positions.\n"
+                            f"🇷🇴 Lumânare mare detectată. Verifică pozițiile deschise."
+                        ),
+                        color=discord.Color.orange()
+                    ))
 
                 if sig and price and can_send_signal(symbol, sig):
-                    tf15 = get_signal_15m(symbol)
-
-                    SIGNAL_STATS[sig]   += 1
+                    SIGNAL_STATS[sig]     += 1
                     SIGNAL_STATS["total"] += 1
-
-                    ai_text  = ai_analysis(sig, price, rsi, symbol)
-                    chart    = generate_chart(df, symbol, sig)
-                    f_embed  = free_embed(symbol, sig, price, rsi, conf)
-                    v_embed  = vip_embed(symbol, sig, price, rsi, conf, ai_text)
-
-                    if tf15 and tf15 == sig:
-                        v_embed.add_field(name="✅ Multi-timeframe", value="Semnal confirmat și pe graficul 15m!", inline=False)
-
+                    ai_text    = ai_analysis(sig, price, rsi, symbol)
+                    tf15       = get_signal_15m(symbol)
+                    confirmed  = tf15 == sig
+                    chart      = generate_chart(df, symbol, sig)
+                    f_embed    = build_free_embed(symbol, sig, price, rsi, conf)
+                    v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed)
                     if free_ch:
                         await free_ch.send(embed=f_embed)
                     if vip_ch:
@@ -676,67 +846,65 @@ async def signal_loop():
             await asyncio.sleep(60)
 
 # =========================
-# FEAR & GREED LOOP
+# FEAR & GREED
 # =========================
 
 async def fear_greed_loop():
     await client.wait_until_ready()
     channel = client.get_channel(MARKET_NEWS_CHANNEL)
-
     while True:
         try:
-            val, label, emoji = get_fear_greed()
-            if val is not None and channel:
-                color = discord.Color.red() if val < 30 else (discord.Color.green() if val > 70 else discord.Color.orange())
-                embed = discord.Embed(
-                    title=f"{emoji} Fear & Greed Index — {val}/100",
-                    description=f"**{label}**\n\nAcest indicator arată sentimentul general al pieței crypto.",
-                    color=color,
-                    timestamp=datetime.utcnow()
-                )
-                if val < 25:
-                    embed.add_field(name="📌 Interpretare", value="Frică extremă — de obicei un semn de potențial BUY.", inline=False)
-                elif val > 75:
-                    embed.add_field(name="📌 Interpretare", value="Lăcomie extremă — piața poate fi supraîncălzită. Fii atent.", inline=False)
-                else:
-                    embed.add_field(name="📌 Interpretare", value="Piața este în echilibru. Urmărește semnalele tehnice.", inline=False)
-                embed.set_footer(text=DISCLAIMER)
+            data  = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8).json()
+            val   = int(data["data"][0]["value"])
+            label = data["data"][0]["value_classification"]
+            emoji = "😱" if val<=25 else ("😟" if val<=45 else ("😐" if val<=55 else ("😊" if val<=75 else "🤑")))
+            color = discord.Color.red() if val < 30 else (discord.Color.green() if val > 70 else discord.Color.orange())
+            interp_en = ("Extreme fear — historically a BUY opportunity." if val < 25
+                         else "Extreme greed — market may be overheated. Be careful." if val > 75
+                         else "Balanced market. Follow technical signals.")
+            interp_ro = ("Frică extremă — istoric un moment de cumpărare." if val < 25
+                         else "Lăcomie extremă — piața poate fi supraîncălzită. Fii atent." if val > 75
+                         else "Piața în echilibru. Urmărește semnalele tehnice.")
+            embed = discord.Embed(
+                title=f"{emoji} Fear & Greed Index — {val}/100 ({label})",
+                color=color, timestamp=datetime.utcnow()
+            )
+            embed.add_field(name="🇬🇧 Interpretation", value=interp_en, inline=False)
+            embed.add_field(name="🇷🇴 Interpretare",   value=interp_ro, inline=False)
+            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+            if channel:
                 await channel.send(embed=embed)
         except Exception:
             pass
         await asyncio.sleep(3600)
 
 # =========================
-# TOP MOVERS LOOP
+# TOP MOVERS
 # =========================
 
 async def top_movers_loop():
     await client.wait_until_ready()
     channel = client.get_channel(MARKET_NEWS_CHANNEL)
-
     while True:
         await asyncio.sleep(86400)
         try:
-            gainers, losers = get_top_movers()
-            if not gainers or not channel:
-                continue
+            data  = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=10).json()
+            usdt  = [x for x in data if x["symbol"].endswith("USDT") and float(x["quoteVolume"]) > 5_000_000]
+            srt   = sorted(usdt, key=lambda x: float(x["priceChangePercent"]))
+            losers, gainers = srt[:5], srt[-5:][::-1]
             embed = discord.Embed(
-                title="🏆 Top 5 Gainers & Losers 24h",
-                color=discord.Color.gold(),
-                timestamp=datetime.utcnow()
+                title="🏆 Top 5 Gainers & Losers — 24h",
+                color=discord.Color.gold(), timestamp=datetime.utcnow()
             )
-            g_text = "\n".join(
-                f"🟢 **{x['symbol'].replace('USDT','')}** +{float(x['priceChangePercent']):.2f}% — `${float(x['lastPrice']):,.4f}`"
-                for x in gainers
-            )
-            l_text = "\n".join(
-                f"🔴 **{x['symbol'].replace('USDT','')}** {float(x['priceChangePercent']):.2f}% — `${float(x['lastPrice']):,.4f}`"
-                for x in losers
-            )
-            embed.add_field(name="📈 Gainers", value=g_text or "—", inline=False)
-            embed.add_field(name="📉 Losers",  value=l_text or "—", inline=False)
-            embed.set_footer(text=DISCLAIMER)
-            await channel.send(embed=embed)
+            embed.add_field(name="📈 Gainers",
+                value="\n".join(f"🟢 **{x['symbol'].replace('USDT','')}** `+{float(x['priceChangePercent']):.2f}%` — `${float(x['lastPrice']):,.4f}`" for x in gainers) or "—",
+                inline=False)
+            embed.add_field(name="📉 Losers",
+                value="\n".join(f"🔴 **{x['symbol'].replace('USDT','')}** `{float(x['priceChangePercent']):.2f}%` — `${float(x['lastPrice']):,.4f}`" for x in losers) or "—",
+                inline=False)
+            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+            if channel:
+                await channel.send(embed=embed)
         except Exception:
             pass
 
@@ -746,52 +914,44 @@ async def top_movers_loop():
 
 async def price_alert_checker():
     await client.wait_until_ready()
-
     while True:
         await asyncio.sleep(60)
         if not PRICE_ALERTS:
             continue
         try:
             prices = {}
-            for sym in set(sym for alerts in PRICE_ALERTS.values() for sym, _, _ in alerts):
-                df = get_data(sym)
-                if df is not None:
-                    prices[sym] = df["close"].iloc[-1]
-
-            triggered = {}
+            for alerts in PRICE_ALERTS.values():
+                for sym, _, _ in alerts:
+                    if sym not in prices:
+                        df = get_data(sym)
+                        if df is not None:
+                            prices[sym] = df["close"].iloc[-1]
             for uid, alerts in list(PRICE_ALERTS.items()):
                 remaining = []
                 for sym, target, direction in alerts:
                     price = prices.get(sym)
-                    if price is None:
-                        remaining.append((sym, target, direction))
-                        continue
-                    hit = (direction == "above" and price >= target) or (direction == "below" and price <= target)
+                    hit   = price and ((direction == "above" and price >= target) or
+                                       (direction == "below" and price <= target))
                     if hit:
-                        if uid not in triggered:
-                            triggered[uid] = []
-                        triggered[uid].append((sym, target, direction, price))
+                        try:
+                            user  = await client.fetch_user(uid)
+                            embed = discord.Embed(
+                                title="🔔 Price Alert Hit! / Alertă atinsă!",
+                                description=(
+                                    f"🇬🇧 **{sym.replace('USDT','')}** reached `${price:,.2f}`\n"
+                                    f"Your target: {'≥' if direction=='above' else '≤'} `${target:,.2f}`\n\n"
+                                    f"🇷🇴 **{sym.replace('USDT','')}** a atins `${price:,.2f}`\n"
+                                    f"Ținta ta: {'≥' if direction=='above' else '≤'} `${target:,.2f}`"
+                                ),
+                                color=discord.Color.green(), timestamp=datetime.utcnow()
+                            )
+                            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+                            await user.send(embed=embed)
+                        except Exception:
+                            pass
                     else:
                         remaining.append((sym, target, direction))
                 PRICE_ALERTS[uid] = remaining
-
-            for uid, hits in triggered.items():
-                for sym, target, direction, price in hits:
-                    try:
-                        user = await client.fetch_user(uid)
-                        embed = discord.Embed(
-                            title="🔔 Alertă de preț atinsă!",
-                            description=(
-                                f"**{sym.replace('USDT','')}** a atins `${price:,.2f}`\n"
-                                f"Ținta ta: {'≥' if direction=='above' else '≤'} `${target:,.2f}`"
-                            ),
-                            color=discord.Color.green(),
-                            timestamp=datetime.utcnow()
-                        )
-                        embed.set_footer(text=DISCLAIMER)
-                        await user.send(embed=embed)
-                    except Exception:
-                        pass
         except Exception:
             pass
 
@@ -802,31 +962,31 @@ async def price_alert_checker():
 async def neutral_market_loop():
     await client.wait_until_ready()
     free_ch = client.get_channel(FREE_SIGNALS_CHANNEL)
-
     while True:
         await asyncio.sleep(1800)
         try:
-            results = []
-            all_neutral = True
+            rows, all_neutral = [], True
             for sym in SYMBOLS:
-                df = get_data(sym)
+                df  = get_data(sym)
                 ind = calc_indicators(df)
                 if ind:
-                    rsi = ind["rsi"]
-                    p   = ind["price"]
-                    st  = "🔴 SELL" if rsi > 70 else ("🟢 BUY" if rsi < 30 else "⚪ Neutru")
-                    results.append(f"{COIN_EMOJI.get(sym,'')} **{sym.replace('USDT','')}** `${round(p,2)}` RSI `{round(rsi,1)}` {st}")
+                    rsi, p = ind["rsi"], ind["price"]
+                    st_en  = "🔴 SELL" if rsi>70 else ("🟢 BUY" if rsi<30 else "⚪ Neutral")
+                    st_ro  = "🔴 VINDE" if rsi>70 else ("🟢 CUMPĂRĂ" if rsi<30 else "⚪ Neutru")
+                    rows.append(f"{COIN_EMOJI.get(sym,'')} **{sym.replace('USDT','')}** `${round(p,2)}` RSI`{round(rsi,1)}` {st_en}/{st_ro}")
                     if rsi < 30 or rsi > 70:
                         all_neutral = False
-
-            if all_neutral and results and free_ch:
+            if all_neutral and rows and free_ch:
                 embed = discord.Embed(
-                    title="⚪ Piața este neutră",
-                    description="Nu există semnal activ acum. Urmăresc continuu.\n\n" + "\n".join(results),
-                    color=discord.Color.light_grey(),
-                    timestamp=datetime.utcnow()
+                    title="⚪ Neutral Market / Piața este neutră",
+                    description=(
+                        "🇬🇧 No active signal right now. Monitoring continuously.\n"
+                        "🇷🇴 Niciun semnal activ momentan. Monitorizez continuu.\n\n"
+                        + "\n".join(rows)
+                    ),
+                    color=discord.Color.light_grey(), timestamp=datetime.utcnow()
                 )
-                embed.set_footer(text=DISCLAIMER)
+                embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
                 await free_ch.send(embed=embed)
         except Exception:
             pass
@@ -838,44 +998,51 @@ async def neutral_market_loop():
 async def market_news_loop():
     await client.wait_until_ready()
     channel = client.get_channel(MARKET_NEWS_CHANNEL)
-
-    news_list = [
-        ("🚨 BTC volatility increasing!", "Monitorizează pozițiile deschise.", discord.Color.orange()),
-        ("📉 Corecție posibilă", "Piața arată semne de slăbiciune pe termen scurt.", discord.Color.red()),
-        ("📈 Momentum bullish detectat", "BTC arată forță — urmărește semnalele verde.", discord.Color.green()),
-        ("🔥 ETH câștigă forță", "Ethereum în creștere față de BTC dominance.", discord.Color.purple()),
-        ("🌐 Lichiditate ridicată", "Volum mare detectat pe burse majore.", discord.Color.blue()),
-        ("⚡ Mișcare de balenă detectată", "Tranzacție mare on-chain detectată.", discord.Color.yellow()),
+    news = [
+        ("🚨 High Volatility Alert / Alertă Volatilitate Ridicată",
+         "🇬🇧 BTC volatility increasing! Monitor open positions.\n🇷🇴 Volatilitate BTC în creștere! Monitorizează pozițiile.", discord.Color.orange()),
+        ("📉 Possible Correction / Corecție Posibilă",
+         "🇬🇧 Market showing signs of weakness short-term.\n🇷🇴 Piața arată semne de slăbiciune pe termen scurt.", discord.Color.red()),
+        ("📈 Bullish Momentum / Momentum Bullish",
+         "🇬🇧 BTC showing strength — watch for BUY signals.\n🇷🇴 BTC arată forță — urmărește semnalele 🟢.", discord.Color.green()),
+        ("🔥 ETH Gaining Strength / ETH Câștigă Forță",
+         "🇬🇧 Ethereum rising vs BTC dominance.\n🇷🇴 Ethereum în creștere față de dominanța BTC.", discord.Color.purple()),
+        ("⚡ Whale Movement Detected / Mișcare de Balenă",
+         "🇬🇧 Large on-chain transaction detected.\n🇷🇴 Tranzacție mare on-chain detectată.", discord.Color.yellow()),
+        ("🛡️ Key Support Held / Suport Cheie Menținut",
+         "🇬🇧 BTC held key support level — bullish sign.\n🇷🇴 BTC a menținut suportul cheie — semn bullish.", discord.Color.blue()),
     ]
-
     while True:
         if channel:
-            title, desc, color = random.choice(news_list)
+            title, desc, color = random.choice(news)
             embed = discord.Embed(title=title, description=desc, color=color, timestamp=datetime.utcnow())
-            embed.set_footer(text=DISCLAIMER)
+            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             await channel.send(embed=embed)
         await asyncio.sleep(1800)
 
 # =========================
-# ANNOUNCEMENTS LOOP
+# ANNOUNCEMENTS
 # =========================
 
 async def announcement_loop():
     await client.wait_until_ready()
     channel = client.get_channel(ANNOUNCEMENTS_CHANNEL)
-
-    announcements = [
-        ("📢 Semnale VIP disponibile!", "Upgrade acum pentru acces complet 💎"),
-        ("🔥 Win rate VIP luna aceasta: 87%!", "Alătură-te echipei câștigătoare 💎"),
-        ("💡 Știai?", "Membrii VIP primesc grafice RSI + MACD + AI analysis la fiecare semnal!"),
-        ("⚡ Feature nou!", "Poți seta alerte de preț cu comanda `!alert BTC 70000`"),
+    items = [
+        ("📢 VIP Signals Available! / Semnale VIP Disponibile!",
+         "🇬🇧 Upgrade now for full premium access 💎\n🇷🇴 Upgrade acum pentru acces complet premium 💎"),
+        ("🔥 87% Win Rate This Month! / Win Rate 87% Luna Aceasta!",
+         "🇬🇧 Join the winning team 💎\n🇷🇴 Alătură-te echipei câștigătoare 💎"),
+        ("💡 Did you know? / Știai?",
+         "🇬🇧 VIP members get RSI + MACD charts + AI analysis with every signal!\n🇷🇴 Membrii VIP primesc grafice RSI + MACD + analiză AI la fiecare semnal!"),
+        ("⚡ New Feature! / Feature Nou!",
+         "🇬🇧 Set price alerts with `/alert BTC 70000` — get notified via DM!\n🇷🇴 Setează alerte de preț cu `/alert BTC 70000` — primești DM automat!"),
     ]
     i = 0
     while True:
         if channel:
-            title, desc = announcements[i % len(announcements)]
+            title, desc = items[i % len(items)]
             embed = discord.Embed(title=title, description=desc, color=discord.Color.gold(), timestamp=datetime.utcnow())
-            embed.set_footer(text=DISCLAIMER)
+            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             await channel.send(embed=embed)
         i += 1
         await asyncio.sleep(86400)
@@ -887,20 +1054,19 @@ async def announcement_loop():
 async def performance_loop():
     await client.wait_until_ready()
     channel = client.get_channel(PERFORMANCE_CHANNEL)
-
     while True:
         if channel:
             embed = discord.Embed(
-                title="📊 Daily Performance",
-                color=discord.Color.green(),
-                timestamp=datetime.utcnow()
+                title="📊 Daily Performance / Performanță Zilnică",
+                color=discord.Color.green(), timestamp=datetime.utcnow()
             )
-            embed.add_field(name="✅ BTC trade",  value="+12%", inline=True)
-            embed.add_field(name="✅ ETH trade",  value="+8%",  inline=True)
-            embed.add_field(name="✅ SOL trade",  value="+15%", inline=True)
+            embed.add_field(name="✅ BTC", value="+12%", inline=True)
+            embed.add_field(name="✅ ETH", value="+8%",  inline=True)
+            embed.add_field(name="✅ SOL", value="+15%", inline=True)
             embed.add_field(name="🔥 VIP Win Rate", value="87%", inline=False)
-            embed.add_field(name="💎 Vrei rezultate ca acestea?", value=f"<#{GET_VIP_CHANNEL}>", inline=False)
-            embed.set_footer(text=DISCLAIMER)
+            embed.add_field(name="💎 Want results like these? / Vrei rezultate ca acestea?",
+                            value=f"→ <#{GET_VIP_CHANNEL}>", inline=False)
+            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             await channel.send(embed=embed)
         await asyncio.sleep(86400)
 
@@ -911,7 +1077,6 @@ async def performance_loop():
 async def crash_alert():
     await client.wait_until_ready()
     channel = client.get_channel(ALERTS_CHANNEL)
-
     while True:
         try:
             df = get_data("BTCUSDT")
@@ -919,16 +1084,18 @@ async def crash_alert():
                 drop_pct = (df["close"].iloc[-1] - df["close"].iloc[-10]) / df["close"].iloc[-10] * 100
                 if drop_pct < -2 and channel:
                     embed = discord.Embed(
-                        title="🚨 MARKET DROP DETECTED!",
+                        title="🚨 Market Drop Detected! / Scădere Detectată!",
                         description=(
-                            f"BTC a scăzut cu **{round(drop_pct,2)}%** în ultimele ~50 minute.\n"
-                            f"Preț curent: `${round(df['close'].iloc[-1],2)}`\n\n"
-                            f"⚠️ Verifică SL-urile și pozițiile deschise!"
+                            f"🇬🇧 BTC dropped **{round(drop_pct,2)}%** in ~50 minutes.\n"
+                            f"Current price: `${round(df['close'].iloc[-1],2)}`\n"
+                            f"⚠️ Check open positions and SL levels!\n\n"
+                            f"🇷🇴 BTC a scăzut cu **{round(drop_pct,2)}%** în ~50 minute.\n"
+                            f"Preț curent: `${round(df['close'].iloc[-1],2)}`\n"
+                            f"⚠️ Verifică pozițiile deschise și SL-urile!"
                         ),
-                        color=discord.Color.red(),
-                        timestamp=datetime.utcnow()
+                        color=discord.Color.red(), timestamp=datetime.utcnow()
                     )
-                    embed.set_footer(text=DISCLAIMER)
+                    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
                     await channel.send(embed=embed)
         except Exception as e:
             print(f"Crash alert error: {e}")
