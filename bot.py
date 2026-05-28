@@ -923,44 +923,468 @@ async def slash_stats(interaction: discord.Interaction):
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
+# ══════════════════════════════════════════════
+#   SHARED TIPS LIST (used by /tip + education_loop)
+# ══════════════════════════════════════════════
+
+TRADING_TIPS = [
+    ("🛑 Stop Loss — Regula #1",
+     "🇷🇴 **Mereu** setează Stop Loss înainte să intri. Fără SL, un singur trade rău îți poate șterge contul.\n"
+     "🇬🇧 **Always** set a Stop Loss before entering. Without SL, one bad trade can wipe your account.\n"
+     "💡 Pe Binance: folosește **OCO Order** sau **Stop-Limit**."),
+
+    ("💰 Cât investești per trade / Position Sizing",
+     "🇷🇴 Regula de aur: **max 5–10%** din capitalul total per trade. Dacă ai 500$, max 50$ per trade.\n"
+     "🇬🇧 Golden rule: **max 5–10%** of total capital per trade. With $500, max $50 per trade.\n"
+     "💡 Astfel, chiar dacă greșești de 5 ori, nu ești terminat."),
+
+    ("📊 Ce e RSI? / What is RSI?",
+     "🇷🇴 RSI măsoară dacă o monedă e **prea ieftină** sau **prea scumpă** acum.\n"
+     "• `sub 30` = 🟢 zona de cumpărare (oversold)\n"
+     "• `peste 70` = 🔴 zona de vânzare (overbought)\n"
+     "• `30–70` = ⚪ normal\n"
+     "🇬🇧 RSI measures if a coin is **too cheap** or **too expensive** right now."),
+
+    ("📉 Ce e MACD? / What is MACD?",
+     "🇷🇴 MACD arată **direcția forței** pieței.\n"
+     "• Bare **verzi ▲** = cumpărătorii domină → momentum BUY\n"
+     "• Bare **roșii ▼** = vânzătorii domină → momentum SELL\n"
+     "🇬🇧 MACD shows the **direction of market force**.\n"
+     "Green bars ▲ = buyers dominate. Red bars ▼ = sellers dominate."),
+
+    ("📐 Ce sunt Bollinger Bands? / What are Bollinger Bands?",
+     "🇷🇴 Sunt ca niște **limite** în jurul prețului. Când prețul atinge **banda de jos** → posibil BUY. **Banda de sus** → posibil SELL.\n"
+     "🇬🇧 They're like **price limits**. Price at **lower band** → possible BUY. **Upper band** → possible SELL.\n"
+     "💡 Vizualizezi asta pe `/chart` — liniile gri punctate."),
+
+    ("🎯 Cum iei profitul / How to Take Profit",
+     "🇷🇴 **Strategia ideală:**\n"
+     "1️⃣ La **TP1**: vinde 50% din poziție\n"
+     "2️⃣ Mută **SL la Entry** → nu mai poți pierde!\n"
+     "3️⃣ La **TP2**: vinde restul\n"
+     "🇬🇧 At **TP1**: sell 50%. Move SL to entry. At **TP2**: sell the rest."),
+
+    ("😱 FOMO = Cel mai mare dușman / Biggest Enemy",
+     "🇷🇴 **FOMO** = cumperi dintr-o frică de a pierde oportunitatea. BTC a crescut 20%? Nu cumpăra acum!\n"
+     "Așteaptă o **corecție** (scădere mică) și un **semnal nou**.\n"
+     "🇬🇧 **FOMO** = buying out of fear of missing out. BTC up 20%? Don't buy now! Wait for a pullback + new signal."),
+
+    ("📈 SPOT vs FUTURES — Diferența / The Difference",
+     "🇷🇴 **SPOT**: cumperi moneda reală. Nu poți pierde mai mult decât ai investit. ✅ **Recomandat pentru începători.**\n"
+     "**FUTURES**: tranzacționezi cu leverage. 10x leverage → o mișcare de 10% = 100% câștig SAU pierdere totală. ⚠️\n"
+     "🇬🇧 **SPOT**: you own the real coin. Can't lose more than invested. ✅ **Best for beginners.**\n"
+     "**FUTURES**: uses leverage. 10x = 10% move = 100% gain OR total loss. ⚠️"),
+
+    ("🔄 Trendul e prietenul tău / Trend is Your Friend",
+     "🇷🇴 Dacă BTC e în **downtrend** (scade), evită să cumperi altcoins. Tranzacționează CU trendul.\n"
+     "💡 Verifică `/multi BTC` pentru a vedea trendul pe toate timeframe-urile.\n"
+     "🇬🇧 If BTC is in a **downtrend**, avoid buying altcoins. Trade WITH the trend, not against it."),
+
+    ("📦 Volumul confirmă mișcarea / Volume Confirms Moves",
+     "🇷🇴 O creștere de preț **cu volum mare** = mișcare reală. Cu volum mic = posibil falsă.\n"
+     "💡 Volumul = câți oameni cumpără/vând. Mai mult volum = mai multă convingere.\n"
+     "🇬🇧 Price rise **with high volume** = real move. Low volume = possibly fake breakout."),
+
+    ("🧠 Emoțiile în trading / Emotions in Trading",
+     "🇷🇴 **Frica** te face să vinzi prea devreme. **Lăcomia** te face să ții prea mult.\n"
+     "Soluția: **setează TP și SL** înainte să intri și **respectă-le** indiferent ce simți.\n"
+     "🇬🇧 **Fear** makes you sell too early. **Greed** makes you hold too long.\n"
+     "Solution: set TP and SL before entering, then **stick to the plan**."),
+
+    ("👑 BTC Dominance — Ce e? / What is it?",
+     "🇷🇴 Arată cât % din toată piața crypto e în Bitcoin.\n"
+     "• Dom **în creștere** → banii merg în BTC → altcoin-urile scad\n"
+     "• Dom **în scădere** → banii ies din BTC → altcoin-urile cresc\n"
+     "💡 Verifică cu `/dominance`.\n"
+     "🇬🇧 Shows what % of total crypto market cap is in Bitcoin. Rising = altcoins fall. Falling = altcoins rally."),
+
+    ("⚡ Leverage = Cuțit cu două tăișuri / Double-Edged Sword",
+     "🇷🇴 **3x leverage**: ai 100$, controlezi 300$. Câștig 10% = +30$ ✅. Pierdere 10% = -30$ ⚠️\n"
+     "**10x leverage**: câștig 10% = +100$ ✅. Pierdere 10% = **LICHIDARE** (pierzi tot) ❌\n"
+     "🇬🇧 Leverage amplifies both gains AND losses. Max 3x if you must use it."),
+
+    ("🔍 Confirmarea multi-timeframe / Multi-TF Confirmation",
+     "🇷🇴 Un semnal BUY pe **5m** + confirmat pe **1h** + **4h** = semnal mult mai puternic.\n"
+     "💡 Folosește `/multi BTC` pentru a vedea toate timeframe-urile simultan.\n"
+     "🇬🇧 A BUY signal on **5m** confirmed on **1h** + **4h** = much stronger signal.\n"
+     "Use `/multi BTC` to see all timeframes at once."),
+
+    ("🌙 Nu tranzacționa din plictiseală / Don't Trade Out of Boredom",
+     "🇷🇴 **Nu** trebuie să fii mereu în piață. Uneori cel mai bun trade e **să nu intri**.\n"
+     "Așteaptă semnale clare (confidence HIGH) și condiții bune.\n"
+     "🇬🇧 You don't have to always be in a trade. Sometimes the best trade is **no trade**.\n"
+     "Wait for clear signals (HIGH confidence) and good conditions."),
+
+    ("📱 Unde pun ordinele / Where to Place Orders",
+     "🇷🇴 Pe **Binance Spot**:\n"
+     "• **Market Order** = cumperi instant la prețul actual\n"
+     "• **Limit Order** = aștepți ca prețul să ajungă la un nivel ales\n"
+     "• **OCO Order** = setezi simultan TP și SL ✅ Recomandat!\n"
+     "🇬🇧 **Market** = buy instantly. **Limit** = wait for your price. **OCO** = set TP+SL together ✅"),
+
+    ("🔒 Securitatea contului / Account Security",
+     "🇷🇴 **Mereu** activează **2FA** (Google Authenticator) pe Binance. Nu da niciodată parola sau seed phrase nimănui!\n"
+     "Nici un bot, nici un admin nu îți va cere niciodată fonduri sau parole.\n"
+     "🇬🇧 **Always** enable **2FA** on Binance. Never share your password or seed phrase with anyone!"),
+
+    ("📊 Support și Resistance / Support & Resistance",
+     "🇷🇴 **Support** = nivel de preț unde cumpărătorii intră de obicei → prețul se stabilizează și crește.\n"
+     "**Resistance** = nivel unde vânzătorii intră → prețul se stabilizează și scade.\n"
+     "💡 Cumpără lângă support, vinde lângă resistance.\n"
+     "🇬🇧 **Support** = price level buyers defend. **Resistance** = price level sellers defend."),
+
+    ("💤 Răbdarea = Superputere / Patience = Superpower",
+     "🇷🇴 Traderii profitabili **așteaptă** semnale de calitate (confidence HIGH/VERY HIGH).\n"
+     "Nu forța tranzacții când piața e incertă. Calitate > Cantitate.\n"
+     "🇬🇧 Profitable traders **wait** for quality signals (HIGH/VERY HIGH confidence).\n"
+     "Don't force trades in uncertain markets. Quality > Quantity."),
+
+    ("📉 Ce e un Pullback? / What is a Pullback?",
+     "🇷🇴 O **corecție temporară** a prețului înainte să continue în direcția principală.\n"
+     "Ex: BTC era la 100k, scade la 95k (pullback), apoi crește la 110k.\n"
+     "💡 Pullback-urile sunt oportunități de cumpărare în trend ascendent.\n"
+     "🇬🇧 A **temporary dip** before the price continues the main trend. Great buying opportunities!"),
+
+    ("🎓 Continuă să înveți / Keep Learning",
+     "🇷🇴 Folosește comenzile botului pentru a înțelege piața:\n"
+     "• `/analysis BTC` — analiză completă\n"
+     "• `/sentiment` — sentiment general piață\n"
+     "• `/tutorial` — ghid complet pas cu pas\n"
+     "• `/glossary` — dicționar termeni crypto\n"
+     "🇬🇧 Use the bot's commands to understand the market better!"),
+]
+
+
 @tree.command(name="tip", description="🎓 Get a random trading tip — bilingual RO/EN")
 async def slash_tip(interaction: discord.Interaction):
-    tips = [
-        ("📌 Risk Management / Gestiunea Riscului",
-         "🇬🇧 Never risk more than 1–2% of your total capital on a single trade. Protect your account first.\n"
-         "🇷🇴 Nu risca niciodată mai mult de 1–2% din capitalul total pe un singur trade. Protejează-ți contul."),
-        ("📌 Stop Loss / Stop Loss",
-         "🇬🇧 Always set a Stop Loss before entering a trade. A trade without SL is gambling, not trading.\n"
-         "🇷🇴 Setează mereu Stop Loss înainte să intri. Un trade fără SL e noroc, nu trading."),
-        ("📌 RSI Explained / RSI Explicat",
-         "🇬🇧 RSI below 30 = oversold (potential BUY). RSI above 70 = overbought (potential SELL). Best used with MACD confirmation.\n"
-         "🇷🇴 RSI sub 30 = supravândut (potențial BUY). RSI peste 70 = supraevaluat (potențial SELL). Folosește cu confirmare MACD."),
-        ("📌 Don't Chase Pumps / Nu Urmări Pump-urile",
-         "🇬🇧 If a coin pumped 20%+ already, don't buy FOMO. Wait for a pullback and a new signal.\n"
-         "🇷🇴 Dacă o monedă a crescut deja 20%+, nu cumpăra din FOMO. Așteaptă o corecție și un semnal nou."),
-        ("📌 Take Profit / Ia Profit",
-         "🇬🇧 Always take partial profit at TP1. Move SL to entry after TP1 is hit — you can't lose after that.\n"
-         "🇷🇴 Ia mereu profit parțial la TP1. Mută SL la entry după TP1 — nu mai poți pierde după aia."),
-        ("📌 Market Trends / Trenduri de Piață",
-         "🇬🇧 Trade WITH the trend, not against it. If BTC is in a downtrend, avoid longing altcoins.\n"
-         "🇷🇴 Tranzacționează CU trendul, nu împotriva lui. Dacă BTC e în downtrend, evită long-urile pe altcoins."),
-        ("📌 Volume = Confirmation / Volumul = Confirmare",
-         "🇬🇧 A price move with high volume is more reliable than one with low volume. Always check volume.\n"
-         "🇷🇴 O mișcare de preț cu volum mare e mai sigură decât una cu volum mic. Verifică mereu volumul."),
-        ("📌 Emotions / Emoțiile",
-         "🇬🇧 Fear and greed are your biggest enemies. Stick to your plan — don't close early out of fear or hold too long out of greed.\n"
-         "🇷🇴 Frica și lăcomia sunt cei mai mari dușmani. Urmează planul — nu închide din frică și nu ține prea mult din lăcomie."),
-        ("📌 MACD Explained / MACD Explicat",
-         "🇬🇧 MACD histogram above 0 = bullish momentum. Below 0 = bearish. A crossover of MACD line over signal line is a BUY sign.\n"
-         "🇷🇴 Histograma MACD peste 0 = momentum bullish. Sub 0 = bearish. Crossover MACD peste linia signal = semn BUY."),
-        ("📌 Position Sizing / Dimensiunea Poziției",
-         "🇬🇧 Use 3–5% of your portfolio per trade for low risk, 5–10% for medium. Never go all-in.\n"
-         "🇷🇴 Folosește 3–5% din portofoliu pe trade pentru risc mic, 5–10% pentru mediu. Nu intra niciodată totul."),
-    ]
-    title, value = random.choice(tips)
-    embed = discord.Embed(title=f"🎓 Trading Tip", description=title, color=discord.Color.teal(), timestamp=datetime.utcnow())
+    title, value = random.choice(TRADING_TIPS)
+    embed = discord.Embed(
+        title=f"🎓 Trading Tip / Sfat de Trading",
+        description=f"**{title}**",
+        color=discord.Color.teal(),
+        timestamp=datetime.utcnow()
+    )
     embed.add_field(name="\u200b", value=value, inline=False)
-    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    embed.add_field(
+        name="💡 Mai vrei un sfat?",
+        value="🇷🇴 Scrie `/tip` din nou pentru un alt sfat aleatoriu!\n🇬🇧 Type `/tip` again for another random tip!",
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   /TUTORIAL COMMAND — Ghid complet pas cu pas
+# ══════════════════════════════════════════════
+
+@tree.command(name="tutorial", description="📖 Full beginner guide — step by step, bilingual RO/EN")
+@app_commands.describe(page="Which page: 1=Signal, 2=Indicators, 3=HowToTrade, 4=Mistakes, 5=Glossary Quick")
+async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
+    pages = {
+        1: discord.Embed(
+            title="📖 Tutorial 1/5 — Ce este un semnal? / What is a Signal?",
+            description=(
+                "🇷🇴 Un **semnal** este o recomandare generată automat de bot pe baza a 5 indicatori tehnici.\n"
+                "🇬🇧 A **signal** is an automated recommendation generated by the bot using 5 technical indicators.\n"
+                f"{SEP}"
+            ),
+            color=0x3b82f6, timestamp=datetime.utcnow()
+        ),
+        2: discord.Embed(
+            title="📊 Tutorial 2/5 — Ce înseamnă indicatorii / What do Indicators Mean?",
+            description=(
+                "🇷🇴 Botul combină **5 indicatori** pentru a genera semnale mai precise.\n"
+                "🇬🇧 The bot combines **5 indicators** for more accurate signals.\n"
+                f"{SEP}"
+            ),
+            color=0x8b5cf6, timestamp=datetime.utcnow()
+        ),
+        3: discord.Embed(
+            title="🚀 Tutorial 3/5 — Cum faci un trade / How to Make a Trade",
+            description=(
+                "🇷🇴 **Pași concreți** pe Binance după ce primești un semnal BUY:\n"
+                "🇬🇧 **Concrete steps** on Binance after receiving a BUY signal:\n"
+                f"{SEP}"
+            ),
+            color=0x10b981, timestamp=datetime.utcnow()
+        ),
+        4: discord.Embed(
+            title="⚠️ Tutorial 4/5 — Greșeli frecvente / Common Mistakes",
+            description=(
+                "🇷🇴 **Evită aceste greșeli** care costă bani!\n"
+                "🇬🇧 **Avoid these mistakes** that cost money!\n"
+                f"{SEP}"
+            ),
+            color=0xef4444, timestamp=datetime.utcnow()
+        ),
+        5: discord.Embed(
+            title="📚 Tutorial 5/5 — Termeni importanți / Key Terms",
+            description=(
+                "🇷🇴 Cei mai importanți termeni pe care trebuie să îi cunoști:\n"
+                "🇬🇧 The most important terms you need to know:\n"
+                f"{SEP}"
+            ),
+            color=0xf59e0b, timestamp=datetime.utcnow()
+        ),
+    }
+
+    if page not in pages:
+        await interaction.response.send_message(
+            "❓ Pagini disponibile: `1` `2` `3` `4` `5`\n"
+            "🇬🇧 Available pages: `1` `2` `3` `4` `5`", ephemeral=True); return
+
+    embed = pages[page]
+
+    if page == 1:
+        embed.add_field(name="🟢 BUY — Cumpără",
+            value="🇷🇴 Botul crede că prețul va **crește**. Intri la prețul **Entry** arătat în semnal.\n"
+                  "🇬🇧 Bot believes price will **rise**. Enter at the **Entry** price shown.", inline=False)
+        embed.add_field(name="🔴 SELL — Vinde",
+            value="🇷🇴 Botul crede că prețul va **scădea**. Ieși sau evită să cumperi.\n"
+                  "🇬🇧 Bot believes price will **fall**. Exit or avoid buying.", inline=False)
+        embed.add_field(name="📍 Entry",
+            value="🇷🇴 Prețul la care intri.\n🇬🇧 The price where you enter.", inline=True)
+        embed.add_field(name="🎯 TP1 / TP2",
+            value="🇷🇴 Prețuri de **vânzare** pentru profit.\n🇬🇧 **Sell** prices to take profit.", inline=True)
+        embed.add_field(name="🛑 SL (Stop Loss)",
+            value="🇷🇴 Prețul la care **ieși dacă greșești**. Limitează pierderea!\n"
+                  "🇬🇧 Price where you **exit if wrong**. Limits your loss!\n⚠️ MEREU pune SL!", inline=False)
+        embed.add_field(name="⭐ Confidence",
+            value="🇷🇴 `LOW` `MEDIUM` `HIGH` `VERY HIGH` — cu cât e mai mare, cu atât mai mulți indicatori confirmă.\n"
+                  "🇬🇧 The more indicators agree, the higher the confidence. Trade HIGH+ signals only.", inline=False)
+
+    elif page == 2:
+        embed.add_field(name="📊 RSI",
+            value="🇷🇴 **sub 30** = ieftin/oversold 🟢 | **peste 70** = scump/overbought 🔴 | **30–70** = normal ⚪\n"
+                  "🇬🇧 **below 30** = cheap/oversold 🟢 | **above 70** = expensive/overbought 🔴 | **30–70** = normal ⚪", inline=False)
+        embed.add_field(name="📉 MACD",
+            value="🇷🇴 Bare **verzi ▲** = cumpărătorii domină (momentum BUY). Bare **roșii ▼** = vânzătorii domină.\n"
+                  "🇬🇧 **Green bars ▲** = buyers dominate (BUY momentum). **Red bars ▼** = sellers dominate.", inline=False)
+        embed.add_field(name="📐 Bollinger Bands (BB)",
+            value="🇷🇴 **Prețul la banda de jos** = posibil BUY. **La banda de sus** = posibil SELL.\n"
+                  "🇬🇧 Price at **lower band** = possible BUY. At **upper band** = possible SELL.", inline=False)
+        embed.add_field(name="🌀 Stochastic RSI",
+            value="🇷🇴 **sub 0.2** = zonă BUY 🟢 | **peste 0.8** = zonă SELL 🔴\n"
+                  "🇬🇧 **below 0.2** = BUY zone 🟢 | **above 0.8** = SELL zone 🔴", inline=False)
+        embed.add_field(name="📈 EMA 20/50",
+            value="🇷🇴 Linie medie a prețului. Prețul **peste** EMA = trend ascendent 🟢. **Sub** EMA = trend descendent 🔴.\n"
+                  "🇬🇧 Price **above** EMA = uptrend 🟢. Price **below** EMA = downtrend 🔴.", inline=False)
+        embed.add_field(name="💡 Cum le vezi",
+            value="🇷🇴 Folosește `/chart BTC` pentru a vedea graficul cu toți indicatorii.\n"
+                  "🇬🇧 Use `/chart BTC` to see the chart with all indicators.", inline=False)
+
+    elif page == 3:
+        embed.add_field(name="1️⃣ Deschide Binance Spot",
+            value="🇷🇴 Mergi la **Trade → Spot**. NU Futures dacă ești începător!\n"
+                  "🇬🇧 Go to **Trade → Spot**. NOT Futures if you're a beginner!", inline=False)
+        embed.add_field(name="2️⃣ Caută perechea",
+            value="🇷🇴 Semnal BTC → caută `BTC/USDT`. Semnal ETH → `ETH/USDT`.\n"
+                  "🇬🇧 BTC signal → search `BTC/USDT`. ETH signal → `ETH/USDT`.", inline=False)
+        embed.add_field(name="3️⃣ Decide cât investești",
+            value="🇷🇴 **MAX 10%** din capitalul total! Cu 500$, max 50$ per trade.\n"
+                  "🇬🇧 **MAX 10%** of total capital! With $500, max $50 per trade.", inline=False)
+        embed.add_field(name="4️⃣ Setează un OCO Order",
+            value="🇷🇴 OCO = setezi simultan **TP** (target profit) și **SL** (stop loss) → Binance execută automat.\n"
+                  "🇬🇧 OCO = sets **TP** and **SL** at the same time → Binance executes automatically.", inline=False)
+        embed.add_field(name="5️⃣ Ia profit la TP1",
+            value="🇷🇴 La TP1 vinde **50%**. Mută SL la Entry → profit asigurat, risc zero!\n"
+                  "🇬🇧 At TP1 sell **50%**. Move SL to Entry → profit secured, zero risk!", inline=False)
+
+    elif page == 4:
+        embed.add_field(name="❌ Nu pune SL",
+            value="🇷🇴 Fără Stop Loss, o singură pierdere mare te poate elimina din piață complet.\n"
+                  "🇬🇧 Without Stop Loss, one big loss can eliminate you from the market entirely.", inline=False)
+        embed.add_field(name="❌ Intri cu tot capitalul",
+            value="🇷🇴 All-in = dacă greșești o singură dată, pierzi tot. Diversifică și limitează per trade!\n"
+                  "🇬🇧 All-in = one mistake wipes everything. Diversify and limit per trade!", inline=False)
+        embed.add_field(name="❌ Cumperi după pump mare (FOMO)",
+            value="🇷🇴 BTC +20% azi? **Nu cumpăra acum!** Vei cumpăra la vârf. Așteaptă corecție + semnal.\n"
+                  "🇬🇧 BTC +20% today? **Don't buy now!** You'd be buying the top. Wait for pullback + signal.", inline=False)
+        embed.add_field(name="❌ Futures/Leverage ca începător",
+            value="🇷🇴 10x leverage + 10% scădere = pierzi **tot**. Începe cu SPOT mereu!\n"
+                  "🇬🇧 10x leverage + 10% drop = lose **everything**. Always start with SPOT!", inline=False)
+        embed.add_field(name="❌ Ignori Confidence-ul",
+            value="🇷🇴 Semnale cu `LOW` confidence = nesigure. Tranzacționează **doar** `HIGH` sau `VERY HIGH`!\n"
+                  "🇬🇧 `LOW` confidence signals = unreliable. Only trade `HIGH` or `VERY HIGH`!", inline=False)
+
+    elif page == 5:
+        embed.add_field(name="₿ BTC / Bitcoin",
+            value="🇷🇴 Prima și cea mai mare criptomonedă din lume. Standardul pieței.\n"
+                  "🇬🇧 The first and largest cryptocurrency. The market standard.", inline=False)
+        embed.add_field(name="💵 USDT / Tether",
+            value="🇷🇴 O monedă stabila (stablecoin) legată de dolarul american. 1 USDT = ~1$.\n"
+                  "🇬🇧 A stablecoin pegged to the US dollar. 1 USDT ≈ $1.", inline=False)
+        embed.add_field(name="📦 Spot Trading",
+            value="🇷🇴 Cumperi moneda **reală**. Nu poți pierde mai mult decât ai investit. ✅ Recomandat!\n"
+                  "🇬🇧 You buy the **real** coin. Can't lose more than invested. ✅ Recommended!", inline=False)
+        embed.add_field(name="⚡ Futures / Leverage",
+            value="🇷🇴 Tranzacționezi cu **bani împrumutați**. Poți câștiga mult, dar poți pierde tot rapid. ⚠️\n"
+                  "🇬🇧 Trading with **borrowed money**. Big gains possible, but total loss possible too. ⚠️", inline=False)
+        embed.add_field(name="🌊 Liquidation",
+            value="🇷🇴 Când folosești leverage și pierderea ajunge la limita contului → Binance **închide automat** poziția (pierzi tot).\n"
+                  "🇬🇧 When using leverage and loss hits account limit → Binance auto-closes position (total loss).", inline=False)
+
+    embed.add_field(
+        name=f"\n{'─'*28}\n📄 Pagini disponibile / Pages",
+        value="`/tutorial 1` — Ce e un semnal?\n`/tutorial 2` — Indicatori\n"
+              "`/tutorial 3` — Cum faci un trade\n`/tutorial 4` — Greșeli comune\n"
+              "`/tutorial 5` — Termeni cheie\n`/glossary` — Dicționar complet",
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  Pagina {page}/5  •  {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   /GLOSSARY COMMAND — Dicționar termeni crypto
+# ══════════════════════════════════════════════
+
+@tree.command(name="glossary", description="📚 Crypto dictionary — simple explanations RO/EN")
+@app_commands.describe(category="Choose a category")
+@app_commands.choices(category=[
+    app_commands.Choice(name="📊 Indicators (RSI/MACD/BB)", value="indicators"),
+    app_commands.Choice(name="💼 Trading Basics",            value="basics"),
+    app_commands.Choice(name="⚡ Risk & Orders",             value="risk"),
+    app_commands.Choice(name="🌍 Market Terms",              value="market"),
+])
+async def slash_glossary(interaction: discord.Interaction, category: str = "basics"):
+    embeds_data = {
+        "basics": {
+            "title": "📚 Glossary — Trading Basics / Termeni de Bază",
+            "color": 0x3b82f6,
+            "fields": [
+                ("₿ BTC / ETH / SOL / BNB",
+                 "🇷🇴 Monede crypto. BTC = Bitcoin, ETH = Ethereum, SOL = Solana, BNB = BNB Chain.\n"
+                 "🇬🇧 Crypto coins. BTC = Bitcoin, ETH = Ethereum, SOL = Solana, BNB = BNB Chain."),
+                ("💵 USDT",
+                 "🇷🇴 Monedă stabilă = mereu ~1 dolar. Folosești USDT pentru a cumpăra crypto.\n"
+                 "🇬🇧 Stablecoin = always ~$1. You use USDT to buy crypto."),
+                ("📦 SPOT",
+                 "🇷🇴 Cumperi moneda **reală**. Dacă cumperi 0.01 BTC, chiar îl deții. ✅ Sigur.\n"
+                 "🇬🇧 You buy the **real** coin. You actually own it. ✅ Safe for beginners."),
+                ("⚡ FUTURES",
+                 "🇷🇴 Tranzacționezi cu leverage (bani împrumutați). Risc mare de lichidare! ⚠️\n"
+                 "🇬🇧 Trading with leverage (borrowed money). High liquidation risk! ⚠️"),
+                ("📍 Entry",
+                 "🇷🇴 Prețul la care **intri** în trade.\n🇬🇧 The price at which you **enter** a trade."),
+                ("🎯 Take Profit (TP)",
+                 "🇷🇴 Prețul la care **vinzi** automat pentru profit.\n"
+                 "🇬🇧 The price at which you **automatically sell** for profit."),
+                ("🛑 Stop Loss (SL)",
+                 "🇷🇴 Prețul la care **ieși automat** dacă pierderea e prea mare.\n"
+                 "🇬🇧 The price at which you **automatically exit** to limit loss."),
+                ("💎 Long / Short",
+                 "🇷🇴 **Long** = pariezi că prețul crește. **Short** = pariezi că scade.\n"
+                 "🇬🇧 **Long** = bet price goes up. **Short** = bet price goes down."),
+            ]
+        },
+        "indicators": {
+            "title": "📊 Glossary — Indicators / Indicatori Tehnici",
+            "color": 0x8b5cf6,
+            "fields": [
+                ("📊 RSI (Relative Strength Index)",
+                 "🇷🇴 Scală 0–100. **sub 30** = oversold (ieftin) 🟢 | **peste 70** = overbought (scump) 🔴\n"
+                 "🇬🇧 Scale 0–100. **below 30** = oversold (cheap) 🟢 | **above 70** = overbought (expensive) 🔴"),
+                ("📉 MACD",
+                 "🇷🇴 Arată **forța** și **direcția** trendului. Bare verzi = bullish ▲. Roșii = bearish ▼.\n"
+                 "🇬🇧 Shows trend **strength** and **direction**. Green bars = bullish ▲. Red = bearish ▼."),
+                ("📐 Bollinger Bands (BB)",
+                 "🇷🇴 3 linii în jurul prețului. Prețul la **banda de jos** = BUY. La **banda de sus** = SELL.\n"
+                 "🇬🇧 3 lines around price. Price at **lower band** = BUY. At **upper band** = SELL."),
+                ("🌀 Stochastic RSI (StochRSI)",
+                 "🇷🇴 Versiune mai rapidă a RSI. **sub 0.2** = BUY 🟢 | **peste 0.8** = SELL 🔴\n"
+                 "🇬🇧 Faster version of RSI. **below 0.2** = BUY 🟢 | **above 0.8** = SELL 🔴"),
+                ("📈 EMA (Exponential Moving Average)",
+                 "🇷🇴 Media prețului pe ultimele N lumânări. Arată trendul.\n"
+                 "• Preț **peste** EMA50 = trend BUY 🟢 | **sub** EMA50 = trend SELL 🔴\n"
+                 "🇬🇧 Average price over N candles. Shows the trend direction."),
+                ("⭐ Confluence / Confluență",
+                 "🇷🇴 Când **mai mulți indicatori** arată același semnal = semnal mai puternic.\n"
+                 "🇬🇧 When **multiple indicators** agree = stronger, more reliable signal."),
+            ]
+        },
+        "risk": {
+            "title": "⚡ Glossary — Risk & Orders / Risc și Ordine",
+            "color": 0xef4444,
+            "fields": [
+                ("💀 Liquidation / Lichidare",
+                 "🇷🇴 Când folosești futures și pierderea depășește capitalul → Binance **închide forțat** și pierzi tot.\n"
+                 "🇬🇧 When using futures and loss exceeds capital → Binance **force-closes** and you lose everything."),
+                ("⚡ Leverage",
+                 "🇷🇴 Multiplu de tranzacționare. **3x** = controlezi de 3x mai mult decât ai. 10x = periculos!\n"
+                 "🇬🇧 Trading multiplier. **3x** = control 3x more than you have. 10x = dangerous!"),
+                ("📋 OCO Order",
+                 "🇷🇴 **One Cancels the Other** = setezi TP și SL simultan. Când unul se execută, celălalt se anulează.\n"
+                 "🇬🇧 **One Cancels the Other** = set TP and SL together. When one fills, the other cancels."),
+                ("📏 Position Size",
+                 "🇷🇴 Cât de mare e tranzacția ta. Calculează cu `/risk`.\n"
+                 "🇬🇧 How large your trade is. Calculate with `/risk`."),
+                ("📊 Risk/Reward (R:R)",
+                 "🇷🇴 Raportul risc/câștig. Un R:R de **1:2** = riști 50$, poți câștiga 100$. ✅ Minim 1:2!\n"
+                 "🇬🇧 Risk/reward ratio. **1:2** = risk $50, potential gain $100. ✅ Minimum 1:2!"),
+                ("🧮 P&L",
+                 "🇷🇴 **Profit and Loss** = câștigul sau pierderea ta. Calculează cu `/calculate`.\n"
+                 "🇬🇧 **Profit and Loss** = your gain or loss. Calculate with `/calculate`."),
+            ]
+        },
+        "market": {
+            "title": "🌍 Glossary — Market Terms / Termeni de Piață",
+            "color": 0x10b981,
+            "fields": [
+                ("🐂 Bull Market / Piață Bull",
+                 "🇷🇴 Piața este **în creștere**. Prețurile cresc. Sentiment pozitiv.\n"
+                 "🇬🇧 Market is **rising**. Prices going up. Positive sentiment."),
+                ("🐻 Bear Market / Piață Bear",
+                 "🇷🇴 Piața este **în scădere**. Prețurile scad. Sentiment negativ.\n"
+                 "🇬🇧 Market is **falling**. Prices going down. Negative sentiment."),
+                ("📊 Market Cap",
+                 "🇷🇴 Valoarea totală a unei monede = **Preț × Cantitate totală** în circulație.\n"
+                 "🇬🇧 Total value of a coin = **Price × Total supply** in circulation."),
+                ("😱 FOMO",
+                 "🇷🇴 **Fear Of Missing Out** = cumperi din frică să nu ratezi profitul. De obicei la vârf. ❌\n"
+                 "🇬🇧 **Fear Of Missing Out** = buying because you're afraid to miss gains. Usually at the top. ❌"),
+                ("📉 FUD",
+                 "🇷🇴 **Fear, Uncertainty, Doubt** = știri negative care scad prețul artificial.\n"
+                 "🇬🇧 **Fear, Uncertainty, Doubt** = negative news that artificially drops the price."),
+                ("👑 BTC Dominance",
+                 "🇷🇴 % din piața totală crypto aflat în Bitcoin. Dom ↑ = altcoin-urile scad. Dom ↓ = altcoins cresc.\n"
+                 "🇬🇧 % of total crypto market in Bitcoin. Dom ↑ = altcoins fall. Dom ↓ = altcoins rise."),
+                ("🔄 Altcoin Season",
+                 "🇷🇴 Perioadă când **altcoin-urile** (ETH, SOL, etc.) cresc mai repede ca BTC.\n"
+                 "🇬🇧 Period when **altcoins** (ETH, SOL, etc.) outperform Bitcoin."),
+                ("🌊 Correction / Corecție",
+                 "🇷🇴 O scădere **temporară** de preț înainte să reia creșterea. Normal în bull market.\n"
+                 "🇬🇧 A **temporary** price drop before resuming the uptrend. Normal in bull market."),
+            ]
+        }
+    }
+
+    data = embeds_data.get(category, embeds_data["basics"])
+    embed = discord.Embed(
+        title=data["title"],
+        description=(
+            "🇷🇴 Dicționar crypto simplu pentru traderi\n"
+            f"🇬🇧 Simple crypto dictionary for traders\n{SEP}"
+        ),
+        color=data["color"],
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="📚 Crypto Signals Bot — Glossary", icon_url=BOT_ICON)
+    for name, value in data["fields"]:
+        embed.add_field(name=name, value=value, inline=False)
+    embed.add_field(
+        name=f"{SEP}\n📂 Alte categorii / Other categories",
+        value=(
+            "`/glossary basics` — Termeni de bază\n"
+            "`/glossary indicators` — RSI, MACD, BB, EMA\n"
+            "`/glossary risk` — Stop Loss, Leverage, OCO\n"
+            "`/glossary market` — Bull/Bear, FOMO, FUD\n"
+            "`/tutorial` — Ghid complet pas cu pas"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
 @tree.command(name="removealert", description="🗑️ Remove one of your active price alerts")
@@ -1031,6 +1455,11 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name="/mywatchlist",      value="🇬🇧 View your active watchlist\n🇷🇴 Vezi watchlist-ul tău activ",                                          inline=False)
     embed.add_field(name="/predict [coin] [UP/DOWN]", value="🇬🇧 Submit community prediction\n🇷🇴 Trimite predicție comunitară",                              inline=False)
     embed.add_field(name="/leaderboard",      value="🇬🇧 Top predictors ranking\n🇷🇴 Clasament top predictori",                                                 inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="🎓 EDUCATION / EDUCAȚIE", value="\u200b", inline=False)
+    embed.add_field(name="/tutorial [1–5]",   value="🇬🇧 Full beginner guide (5 pages)\n🇷🇴 Ghid complet pentru începători (5 pagini)",                           inline=False)
+    embed.add_field(name="/glossary [cat]",   value="🇬🇧 Crypto dictionary: basics/indicators/risk/market\n🇷🇴 Dicționar crypto: termeni simpli explicați",       inline=False)
+    embed.add_field(name="/tip",              value="🇬🇧 Random trading tip (20+ tips)\n🇷🇴 Sfat aleatoriu de trading (20+ sfaturi)",                             inline=False)
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
@@ -2031,26 +2460,239 @@ async def on_ready():
     rules_ch = client.get_channel(RULES_CHANNEL)
     await send_once(rules_ch, rules_embed, "Rules")
 
-    howto_embed = discord.Embed(
-        title="📊 How to Use Signals / Cum să folosești semnalele",
-        color=discord.Color.blue()
-    )
-    howto_embed.add_field(name="🇬🇧 Steps",
-        value="1. Use Binance / Bybit (SPOT, not futures if beginner)\n"
-              "2. Follow Entry / TP1 / TP2 / SL exactly\n"
-              "3. Max 5–10% of capital per trade\n"
-              "4. Always set Stop Loss before entering\n"
-              "5. Wait for 🟢 BUY before entering", inline=False)
-    howto_embed.add_field(name="🇷🇴 Pași",
-        value="1. Folosește Binance / Bybit (SPOT, nu futures la început)\n"
-              "2. Urmează Entry / TP1 / TP2 / SL exact\n"
-              "3. Max 5–10% din capital pe trade\n"
-              "4. Setează mereu Stop Loss înainte să intri\n"
-              "5. Așteaptă semnal 🟢 verde înainte să cumperi", inline=False)
-    howto_embed.add_field(name="📋 Commands / Comenzi", value="Type `/help` to see all commands.", inline=False)
-    howto_embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     howto_ch = client.get_channel(HOWTO_CHANNEL)
-    await send_once(howto_ch, howto_embed, "How to Use")
+
+    # ── HOWTO GUIDE 1: Cum citești un semnal ──
+    h1 = discord.Embed(
+        title="📖 1/4 — Cum citești un semnal / How to Read a Signal",
+        description=(
+            "🇷🇴 **Când botul trimite un semnal, vei vedea:**\n"
+            "🇬🇧 **When the bot sends a signal, you'll see:**"
+        ),
+        color=0x3b82f6
+    )
+    h1.add_field(
+        name="🟢 BUY = Cumpără / Buy",
+        value=(
+            "🇷🇴 Indicatorii arată că prețul ar putea **crește**. Intri la prețul **Entry**.\n"
+            "🇬🇧 Indicators suggest the price may **go up**. Enter at the **Entry** price."
+        ),
+        inline=False
+    )
+    h1.add_field(
+        name="🔴 SELL = Vinde / Sell",
+        value=(
+            "🇷🇴 Indicatorii arată că prețul ar putea **scădea**. Poți ieși sau evita să cumperi.\n"
+            "🇬🇧 Indicators suggest the price may **go down**. Exit or avoid buying."
+        ),
+        inline=False
+    )
+    h1.add_field(
+        name="📍 Entry = Prețul de intrare",
+        value=(
+            "🇷🇴 Prețul la care BOTul sugerează să **cumperi**.\n"
+            "🇬🇧 The price at which the bot suggests you **enter** the trade."
+        ),
+        inline=True
+    )
+    h1.add_field(
+        name="🎯 TP1 / TP2 / TP3 = Take Profit",
+        value=(
+            "🇷🇴 Prețurile la care **vinzi** pentru a lua profit.\n"
+            "🇬🇧 Prices where you **sell** to lock in profit."
+        ),
+        inline=True
+    )
+    h1.add_field(
+        name="🛑 SL = Stop Loss",
+        value=(
+            "🇷🇴 Prețul la care **ieși dacă greșești** — ca să nu pierzi prea mult.\n"
+            "🇬🇧 The price where you **exit if wrong** — to limit your loss.\n"
+            "⚠️ **MEREU pune SL! / ALWAYS set SL!**"
+        ),
+        inline=False
+    )
+    h1.set_footer(text="Crypto Signals Bot  •  Ghid 1/4")
+    await send_once(howto_ch, h1, "1/4 — Cum")
+
+    # ── HOWTO GUIDE 2: Ce înseamnă indicatorii ──
+    h2 = discord.Embed(
+        title="📊 2/4 — Ce înseamnă indicatorii / What Indicators Mean",
+        description=(
+            "🇷🇴 Botul folosește 5 indicatori. Iată ce înseamnă **simplu**:\n"
+            "🇬🇧 The bot uses 5 indicators. Here's what they mean **simply**:"
+        ),
+        color=0x8b5cf6
+    )
+    h2.add_field(
+        name="📊 RSI (0–100)",
+        value=(
+            "🇷🇴 Măsoară dacă moneda e **prea cumpărată** sau **prea vândută**.\n"
+            "• `sub 30` = 🟢 ieftină, posibil BUY\n"
+            "• `peste 70` = 🔴 scumpă, posibil SELL\n"
+            "• `40–60` = ⚪ neutru\n"
+            "🇬🇧 Measures if coin is **oversold** (cheap) or **overbought** (expensive)."
+        ),
+        inline=False
+    )
+    h2.add_field(
+        name="📉 MACD",
+        value=(
+            "🇷🇴 Arată **direcția** momentumului pieței.\n"
+            "• Histogramă `verde ▲` = forță bullish (cumpărători dominanți)\n"
+            "• Histogramă `roșie ▼` = forță bearish (vânzători dominanți)\n"
+            "🇬🇧 Shows the **direction** of market momentum."
+        ),
+        inline=False
+    )
+    h2.add_field(
+        name="📐 Bollinger Bands (BB)",
+        value=(
+            "🇷🇴 Sunt ca niște **margini** în jurul prețului.\n"
+            "• Prețul lângă **banda de jos** = posibil BUY\n"
+            "• Prețul lângă **banda de sus** = posibil SELL\n"
+            "🇬🇧 Like **price boundaries** — buy near bottom band, sell near top."
+        ),
+        inline=False
+    )
+    h2.add_field(
+        name="🌀 Stochastic RSI",
+        value=(
+            "🇷🇴 Similar cu RSI, dar mai **rapid și sensibil**.\n"
+            "• `sub 0.2` = 🟢 zonaă BUY  |  `peste 0.8` = 🔴 zonă SELL\n"
+            "🇬🇧 Similar to RSI but faster. Below 0.2 = BUY zone, above 0.8 = SELL zone."
+        ),
+        inline=False
+    )
+    h2.add_field(
+        name="📈 EMA (20 / 50)",
+        value=(
+            "🇷🇴 Media prețului din ultimele 20/50 lumânări. Arată **trendul**.\n"
+            "• Preț **peste** EMA = trend ascendent 🟢\n"
+            "• Preț **sub** EMA = trend descendent 🔴\n"
+            "🇬🇧 Average price over 20/50 candles. Shows the **trend direction**."
+        ),
+        inline=False
+    )
+    h2.set_footer(text="Crypto Signals Bot  •  Ghid 2/4")
+    await send_once(howto_ch, h2, "2/4 — Ce")
+
+    # ── HOWTO GUIDE 3: Cum folosești semnalul pas cu pas ──
+    h3 = discord.Embed(
+        title="🚀 3/4 — Pași concreți / Step-by-Step Guide",
+        description=(
+            "🇷🇴 **Exact ce faci când primești un semnal BUY:**\n"
+            "🇬🇧 **Exactly what to do when you get a BUY signal:**"
+        ),
+        color=0x10b981
+    )
+    h3.add_field(
+        name="Pasul 1️⃣ — Deschide Binance / Open Binance",
+        value=(
+            "🇷🇴 Mergi la **Spot Trading** (NU Futures dacă ești începător!)\n"
+            "🇬🇧 Go to **Spot Trading** (NOT Futures if you're a beginner!)\n"
+            "💡 Spot = cumperi moneda reală, nu poți pierde mai mult decât ai investit."
+        ),
+        inline=False
+    )
+    h3.add_field(
+        name="Pasul 2️⃣ — Caută moneda / Find the coin",
+        value=(
+            "🇷🇴 Ex: semnal pe **BTC** → caută perechea `BTC/USDT` pe Binance.\n"
+            "🇬🇧 Ex: signal on **BTC** → search for `BTC/USDT` pair on Binance."
+        ),
+        inline=False
+    )
+    h3.add_field(
+        name="Pasul 3️⃣ — Stabilește cât investești / Decide amount",
+        value=(
+            "🇷🇴 **Regula de aur:** max **5–10%** din total. Ex: ai 1000$ → max 100$ per trade.\n"
+            "🇬🇧 **Golden rule:** max **5–10%** of your total. Ex: $1000 capital → max $100 per trade."
+        ),
+        inline=False
+    )
+    h3.add_field(
+        name="Pasul 4️⃣ — Setează Stop Loss ÎNAINTE / Set SL BEFORE",
+        value=(
+            "🇷🇴 Pe Binance: **OCO Order** sau **Stop-Limit**. Pune SL-ul exact din semnal.\n"
+            "🇬🇧 On Binance: use **OCO Order** or **Stop-Limit**. Set SL exactly from signal.\n"
+            "⚠️ Fără SL = risc total! / Without SL = full risk!"
+        ),
+        inline=False
+    )
+    h3.add_field(
+        name="Pasul 5️⃣ — Ia profit la TP1 mai întâi / Take profit at TP1 first",
+        value=(
+            "🇷🇴 La **TP1**: vinde 50% din poziție. Mută SL la **Entry** → nu mai poți pierde!\n"
+            "🇬🇧 At **TP1**: sell 50% of position. Move SL to **Entry** → you can't lose anymore!\n"
+            "La TP2: vinde restul. / At TP2: sell the rest."
+        ),
+        inline=False
+    )
+    h3.set_footer(text="Crypto Signals Bot  •  Ghid 3/4  •  Nu este sfat financiar")
+    await send_once(howto_ch, h3, "3/4 — Pași")
+
+    # ── HOWTO GUIDE 4: Greșeli comune + comenzi utile ──
+    h4 = discord.Embed(
+        title="⚠️ 4/4 — Greșeli de evitat + Comenzi utile",
+        description=(
+            "🇷🇴 **Cele mai frecvente greșeli ale începătorilor:**\n"
+            "🇬🇧 **Most common beginner mistakes:**"
+        ),
+        color=0xef4444
+    )
+    h4.add_field(
+        name="❌ Nu pune SL (Stop Loss)",
+        value=(
+            "🇷🇴 Fără SL poți pierde **tot** dacă piața se întoarce. Mereu protejează-te!\n"
+            "🇬🇧 Without SL you can lose **everything** if market reverses. Always protect yourself!"
+        ),
+        inline=False
+    )
+    h4.add_field(
+        name="❌ Intră cu tot capitalul (All-in)",
+        value=(
+            "🇷🇴 Dacă intri cu 100% și greșești, e **dezastru**. Max 10% per trade!\n"
+            "🇬🇧 Going all-in means one bad trade wipes you. Max 10% per trade!"
+        ),
+        inline=False
+    )
+    h4.add_field(
+        name="❌ Cumperi din FOMO (după pump mare)",
+        value=(
+            "🇷🇴 BTC a crescut 15% azi → NU cumpăra acum! Așteaptă o **corecție** și un semnal nou.\n"
+            "🇬🇧 BTC pumped 15% today → DON'T buy now! Wait for a **pullback** and new signal."
+        ),
+        inline=False
+    )
+    h4.add_field(
+        name="❌ Folosești Futures / Leverage ca începător",
+        value=(
+            "🇷🇴 Leverage 10x = o mișcare de 10% te poate **lichida** (pierzi tot). Începe cu **SPOT**!\n"
+            "🇬🇧 10x leverage = a 10% move can **liquidate** you (lose everything). Start with **SPOT**!"
+        ),
+        inline=False
+    )
+    h4.add_field(
+        name=SEP,
+        value="\u200b",
+        inline=False
+    )
+    h4.add_field(
+        name="✅ Comenzi utile / Useful Commands",
+        value=(
+            "`/tutorial` — Ghid complet pas cu pas\n"
+            "`/glossary` — Dicționar termeni crypto simplu\n"
+            "`/tip` — Sfat aleatoriu de trading\n"
+            "`/risk` — Calculator dimensiune poziție\n"
+            "`/calculate` — Calculator profit/pierdere\n"
+            "`/multi` — Analiză 4 timeframe-uri\n"
+            "`/help` — Toate comenzile disponibile"
+        ),
+        inline=False
+    )
+    h4.set_footer(text="Crypto Signals Bot  •  Ghid 4/4  •  Nu este sfat financiar")
+    await send_once(howto_ch, h4, "4/4 — Greșeli")
 
     vip_embed = discord.Embed(title="💎 GET VIP ACCESS", color=discord.Color.gold())
     vip_embed.add_field(name="🇬🇧 What you get",
@@ -2487,71 +3129,35 @@ async def pump_alert_loop():
 async def education_loop():
     await client.wait_until_ready()
     channel = client.get_channel(HOWTO_CHANNEL)
-
-    tips = [
-        ("📌 Risk Management / Gestiunea Riscului",
-         "🇬🇧 Never risk more than 1–2% of your total capital on a single trade. Protect your account first.\n"
-         "🇷🇴 Nu risca niciodată mai mult de 1–2% din capitalul total pe un singur trade. Protejează-ți contul."),
-        ("📌 Stop Loss / Stop Loss",
-         "🇬🇧 Always set a Stop Loss before entering a trade. A trade without SL is gambling, not trading.\n"
-         "🇷🇴 Setează mereu Stop Loss înainte să intri. Un trade fără SL e noroc, nu trading."),
-        ("📌 RSI Explained / RSI Explicat",
-         "🇬🇧 RSI below 30 = oversold (potential BUY). RSI above 70 = overbought (potential SELL). Best used with MACD confirmation.\n"
-         "🇷🇴 RSI sub 30 = supravândut (potențial BUY). RSI peste 70 = supraevaluat (potențial SELL). Folosește cu confirmare MACD."),
-        ("📌 Don't Chase Pumps / Nu Urmări Pump-urile",
-         "🇬🇧 If a coin pumped 20%+ already, don't buy FOMO. Wait for a pullback and a new signal.\n"
-         "🇷🇴 Dacă o monedă a crescut deja 20%+, nu cumpăra din FOMO. Așteaptă o corecție și un semnal nou."),
-        ("📌 Take Profit / Ia Profit",
-         "🇬🇧 Always take partial profit at TP1. Move SL to entry after TP1 is hit — you can't lose after that.\n"
-         "🇷🇴 Ia mereu profit parțial la TP1. Mută SL la entry după TP1 — nu mai poți pierde după aia."),
-        ("📌 Trade With the Trend / Tranzacționează cu Trendul",
-         "🇬🇧 Trade WITH the trend, not against it. If BTC is in a downtrend, avoid longing altcoins.\n"
-         "🇷🇴 Tranzacționează CU trendul, nu împotriva lui. Dacă BTC e în downtrend, evită long-urile pe altcoins."),
-        ("📌 Volume Matters / Volumul Contează",
-         "🇬🇧 A price move with high volume is more reliable than one with low volume. Always check volume.\n"
-         "🇷🇴 O mișcare de preț cu volum mare e mai sigură decât una cu volum mic. Verifică mereu volumul."),
-        ("📌 Control Your Emotions / Controlează-ți Emoțiile",
-         "🇬🇧 Fear and greed are your biggest enemies. Stick to your plan — don't close early out of fear or hold too long out of greed.\n"
-         "🇷🇴 Frica și lăcomia sunt cei mai mari dușmani. Urmează planul — nu închide din frică și nu ține prea mult din lăcomie."),
-        ("📌 MACD Explained / MACD Explicat",
-         "🇬🇧 MACD histogram above 0 = bullish momentum. Below 0 = bearish. A crossover of MACD line over signal line is a BUY sign.\n"
-         "🇷🇴 Histograma MACD peste 0 = momentum bullish. Sub 0 = bearish. Crossover MACD peste linia signal = semn BUY."),
-        ("📌 Position Sizing / Dimensiunea Poziției",
-         "🇬🇧 Use 3–5% of your portfolio per trade for low risk, 5–10% for medium. Never go all-in.\n"
-         "🇷🇴 Folosește 3–5% din portofoliu pe trade pentru risc mic, 5–10% pentru mediu. Nu intra niciodată totul."),
-        ("📌 What is SPOT? / Ce este SPOT?",
-         "🇬🇧 SPOT trading means you buy the actual coin. No leverage, no liquidation risk. Best for beginners.\n"
-         "🇷🇴 SPOT înseamnă că cumperi moneda efectivă. Fără leverage, fără risc de lichidare. Ideal pentru începători."),
-        ("📌 What is Leverage? / Ce este Leverage-ul?",
-         "🇬🇧 Leverage multiplies your position. 10x leverage means a 10% move = 100% gain OR loss. Use max 3x if you must.\n"
-         "🇷🇴 Leverage-ul îți înmulțește poziția. 10x leverage înseamnă că o mișcare de 10% = câștig SAU pierdere de 100%. Max 3x dacă folosești."),
-        ("📌 BTC Dominance / Dominanța BTC",
-         "🇬🇧 When BTC dominance rises, altcoins often drop. When it falls, altcoins rally. Watch it before trading alts.\n"
-         "🇷🇴 Când dominanța BTC crește, altcoin-urile scad de obicei. Când scade, altcoin-urile cresc. Urmărește-o înainte de a tranzacționa."),
-        ("📌 Support & Resistance / Suport și Rezistență",
-         "🇬🇧 Support = price level where buyers step in. Resistance = where sellers step in. Buy near support, sell near resistance.\n"
-         "🇷🇴 Suport = nivel unde cumpărătorii intră. Rezistență = unde vânzătorii intră. Cumpără lângă suport, vinde lângă rezistență."),
-    ]
-
     index = 0
     while True:
         await asyncio.sleep(43200)  # every 12 hours
         try:
             if channel:
-                title, value = tips[index % len(tips)]
+                title, value = TRADING_TIPS[index % len(TRADING_TIPS)]
                 embed = discord.Embed(
-                    title=f"🎓 Daily Trading Tip / Sfat Zilnic de Trading",
-                    description=title,
+                    title="🎓 Sfat de Trading / Daily Trading Tip",
+                    description=f"**{title}**",
                     color=discord.Color.teal(),
                     timestamp=datetime.utcnow()
                 )
+                embed.set_author(name="🎓 Crypto Signals Bot — Education", icon_url=BOT_ICON)
                 embed.add_field(name="\u200b", value=value, inline=False)
                 embed.add_field(
-                    name="💡 Practice / Practică",
-                    value="🇬🇧 Use `/tip` anytime for a random tip!\n🇷🇴 Folosește `/tip` oricând pentru un sfat aleatoriu!",
+                    name="📖 Vrei să înveți mai mult? / Want to learn more?",
+                    value=(
+                        "🇷🇴 Folosește aceste comenzi oricând:\n"
+                        "`/tutorial` — Ghid complet pas cu pas\n"
+                        "`/glossary` — Dicționar termeni crypto\n"
+                        "`/tip` — Sfat aleatoriu\n\n"
+                        "🇬🇧 Use these commands anytime:\n"
+                        "`/tutorial` — Full step-by-step guide\n"
+                        "`/glossary` — Crypto dictionary\n"
+                        "`/tip` — Random tip"
+                    ),
                     inline=False
                 )
-                embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+                embed.set_footer(text=f"Crypto Signals Bot  •  Tip {index+1}/{len(TRADING_TIPS)}  •  {DISCLAIMER_RO}")
                 await channel.send(embed=embed)
                 index += 1
         except Exception:
