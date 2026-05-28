@@ -6,9 +6,10 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from ta.momentum import RSIIndicator, StochRSIIndicator
-from ta.trend import MACD, EMAIndicator
-from ta.volatility import BollingerBands
+from ta.momentum import RSIIndicator, StochRSIIndicator, WilliamsRIndicator, ROCIndicator
+from ta.trend import MACD, EMAIndicator, ADXIndicator, IchimokuIndicator
+from ta.volatility import BollingerBands, AverageTrueRange
+from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
 import os
 import random
 from datetime import datetime
@@ -238,26 +239,40 @@ def get_coingecko_extra(symbol):
 # =========================
 
 def calc_indicators(df):
-    if df is None or len(df) < 35:
+    if df is None or len(df) < 52:
         return None
-    close = df["close"]
+    close  = df["close"]
+    high   = df["high"]
+    low    = df["low"]
+    volume = df["volume"] if "volume" in df.columns else pd.Series([1.0]*len(df))
 
-    rsi       = RSIIndicator(close=close, window=14).rsi().iloc[-1]
+    # ── Core momentum ──────────────────────────────────────────────
+    rsi_s     = RSIIndicator(close=close, window=14).rsi()
+    rsi       = rsi_s.iloc[-1]
+    rsi_prev  = rsi_s.iloc[-5]          # for divergence detection
 
+    # ── MACD ──────────────────────────────────────────────────────
     macd_obj  = MACD(close=close)
     macd_hist = macd_obj.macd_diff().iloc[-1]
     macd_line = macd_obj.macd().iloc[-1]
     macd_sig  = macd_obj.macd_signal().iloc[-1]
+    macd_prev = macd_obj.macd_diff().iloc[-5]
 
+    # ── EMA family ────────────────────────────────────────────────
+    ema9      = EMAIndicator(close=close, window=9).ema_indicator().iloc[-1]
     ema20     = EMAIndicator(close=close, window=20).ema_indicator().iloc[-1]
     ema50     = EMAIndicator(close=close, window=50).ema_indicator().iloc[-1]
+    ema200    = EMAIndicator(close=close, window=min(200, len(close)-1)).ema_indicator().iloc[-1]
 
+    # ── Bollinger Bands ───────────────────────────────────────────
     bb        = BollingerBands(close=close, window=20, window_dev=2)
     bb_upper  = bb.bollinger_hband().iloc[-1]
     bb_lower  = bb.bollinger_lband().iloc[-1]
     bb_mid    = bb.bollinger_mavg().iloc[-1]
-    bb_pct    = bb.bollinger_pband().iloc[-1]   # 0=lower band, 1=upper band
+    bb_pct    = bb.bollinger_pband().iloc[-1]
+    bb_width  = (bb_upper - bb_lower) / bb_mid if bb_mid else 0
 
+    # ── StochRSI ──────────────────────────────────────────────────
     try:
         stoch    = StochRSIIndicator(close=close, window=14, smooth1=3, smooth2=3)
         stoch_k  = stoch.stochrsi_k().iloc[-1]
@@ -265,71 +280,184 @@ def calc_indicators(df):
     except Exception:
         stoch_k = stoch_d = 0.5
 
-    price     = close.iloc[-1]
-    vol_avg   = df["volume"].iloc[-20:].mean() if "volume" in df.columns else 0
-    vol_now   = df["volume"].iloc[-1]          if "volume" in df.columns else 0
+    # ── Williams %R ───────────────────────────────────────────────
+    try:
+        willr  = WilliamsRIndicator(high=high, low=low, close=close, lbp=14).williams_r().iloc[-1]
+    except Exception:
+        willr  = -50.0
+
+    # ── ATR — Average True Range (volatility baseline) ────────────
+    try:
+        atr    = AverageTrueRange(high=high, low=low, close=close, window=14).average_true_range().iloc[-1]
+    except Exception:
+        atr    = close.iloc[-1] * 0.02
+
+    # ── ADX — trend strength ──────────────────────────────────────
+    try:
+        adx_obj = ADXIndicator(high=high, low=low, close=close, window=14)
+        adx      = adx_obj.adx().iloc[-1]
+        adx_pos  = adx_obj.adx_pos().iloc[-1]   # +DI
+        adx_neg  = adx_obj.adx_neg().iloc[-1]   # -DI
+    except Exception:
+        adx = 20.0; adx_pos = adx_neg = 10.0
+
+    # ── OBV — On Balance Volume ───────────────────────────────────
+    try:
+        obv_s   = OnBalanceVolumeIndicator(close=close, volume=volume).on_balance_volume()
+        obv_now = obv_s.iloc[-1]
+        obv_ma  = obv_s.iloc[-20:].mean()
+        obv_up  = obv_now > obv_ma
+    except Exception:
+        obv_now = obv_ma = 0; obv_up = True
+
+    # ── Chaikin Money Flow ────────────────────────────────────────
+    try:
+        cmf    = ChaikinMoneyFlowIndicator(high=high, low=low, close=close, volume=volume, window=20).chaikin_money_flow().iloc[-1]
+    except Exception:
+        cmf    = 0.0
+
+    # ── VWAP (session VWAP from available candles) ────────────────
+    try:
+        typical = (high + low + close) / 3
+        vwap    = (typical * volume).sum() / volume.sum() if volume.sum() > 0 else close.mean()
+    except Exception:
+        vwap    = close.mean()
+
+    # ── ROC — Rate of Change momentum ────────────────────────────
+    try:
+        roc    = ROCIndicator(close=close, window=12).roc().iloc[-1]
+    except Exception:
+        roc    = 0.0
+
+    # ── Divergence detection ──────────────────────────────────────
+    price_now  = close.iloc[-1]
+    price_prev = close.iloc[-5]
+    bull_div   = (price_now < price_prev) and (rsi > rsi_prev)   # hidden bullish divergence
+    bear_div   = (price_now > price_prev) and (rsi < rsi_prev)   # hidden bearish divergence
+
+    # ── Market structure (last 20 candles) ───────────────────────
+    highs20 = high.iloc[-20:]
+    lows20  = low.iloc[-20:]
+    struct_bull = (highs20.iloc[-1] > highs20.iloc[-10]) and (lows20.iloc[-1] > lows20.iloc[-10])
+    struct_bear = (highs20.iloc[-1] < highs20.iloc[-10]) and (lows20.iloc[-1] < lows20.iloc[-10])
+
+    # ── Volume surge ──────────────────────────────────────────────
+    vol_avg   = volume.iloc[-20:].mean()
+    vol_now   = volume.iloc[-1]
+    vol_surge = vol_now > (vol_avg * 1.5)
+
+    # ── Swing high / low for Fibonacci ───────────────────────────
+    swing_high = high.iloc[-50:].max()
+    swing_low  = low.iloc[-50:].min()
+    fib_range  = swing_high - swing_low
+    fib_levels = {
+        "0.0":   round(swing_high, 6),
+        "0.236": round(swing_high - fib_range * 0.236, 6),
+        "0.382": round(swing_high - fib_range * 0.382, 6),
+        "0.5":   round(swing_high - fib_range * 0.5,   6),
+        "0.618": round(swing_high - fib_range * 0.618, 6),
+        "0.786": round(swing_high - fib_range * 0.786, 6),
+        "1.0":   round(swing_low,  6),
+    }
 
     return {
-        "rsi": rsi, "macd_hist": macd_hist, "macd_line": macd_line, "macd_sig": macd_sig,
-        "ema20": ema20, "ema50": ema50,
-        "bb_upper": bb_upper, "bb_lower": bb_lower, "bb_mid": bb_mid, "bb_pct": bb_pct,
+        # core
+        "rsi": rsi, "rsi_prev": rsi_prev,
+        "macd_hist": macd_hist, "macd_line": macd_line, "macd_sig": macd_sig, "macd_prev": macd_prev,
+        # EMAs
+        "ema9": ema9, "ema20": ema20, "ema50": ema50, "ema200": ema200,
+        # BB
+        "bb_upper": bb_upper, "bb_lower": bb_lower, "bb_mid": bb_mid, "bb_pct": bb_pct, "bb_width": bb_width,
+        # StochRSI
         "stoch_k": stoch_k, "stoch_d": stoch_d,
-        "price": price, "vol_avg": vol_avg, "vol_now": vol_now
+        # new 2026 indicators
+        "willr": willr, "atr": atr,
+        "adx": adx, "adx_pos": adx_pos, "adx_neg": adx_neg,
+        "obv_now": obv_now, "obv_ma": obv_ma, "obv_up": obv_up,
+        "cmf": cmf, "vwap": vwap, "roc": roc,
+        # signals
+        "bull_div": bull_div, "bear_div": bear_div,
+        "struct_bull": struct_bull, "struct_bear": struct_bear,
+        "vol_surge": vol_surge, "vol_avg": vol_avg, "vol_now": vol_now,
+        # price and Fibonacci
+        "price": price_now,
+        "swing_high": swing_high, "swing_low": swing_low, "fib_levels": fib_levels,
     }
 
 def get_signal_v2(df):
+    """
+    2026 Multi-Indicator Confluence Engine
+    10 conditions scored for BUY / SELL
+    Uses: RSI, MACD, EMA9/20/50/200, BB, StochRSI,
+          Williams %R, OBV, ADX, VWAP, CMF, divergence, market structure
+    """
     ind = calc_indicators(df)
     if ind is None:
         return None, None, None, None
 
-    rsi      = ind["rsi"]
-    macd_h   = ind["macd_hist"]
-    price    = ind["price"]
-    ema50    = ind["ema50"]
-    ema20    = ind["ema20"]
-    bb_pct   = ind["bb_pct"]
-    stoch_k  = ind["stoch_k"]
-    stoch_d  = ind["stoch_d"]
+    rsi     = ind["rsi"]
+    macd_h  = ind["macd_hist"]
+    price   = ind["price"]
+    ema9    = ind["ema9"]
+    ema20   = ind["ema20"]
+    ema50   = ind["ema50"]
+    ema200  = ind["ema200"]
+    bb_pct  = ind["bb_pct"]
+    stoch_k = ind["stoch_k"]
+    stoch_d = ind["stoch_d"]
+    willr   = ind["willr"]
+    adx     = ind["adx"]
+    adx_pos = ind["adx_pos"]
+    adx_neg = ind["adx_neg"]
+    obv_up  = ind["obv_up"]
+    cmf     = ind["cmf"]
+    vwap    = ind["vwap"]
+    bull_d  = ind["bull_div"]
+    bear_d  = ind["bear_div"]
+    s_bull  = ind["struct_bull"]
+    s_bear  = ind["struct_bear"]
 
-    # 5-indicator scoring system (thresholds relaxed for more signals)
+    # ── 10-condition BUY scoring ──────────────────────────────────
     buy_signals = [
-        rsi < 40,                               # RSI oversold zone (relaxed from 35)
-        macd_h > 0,                             # MACD bullish crossover
-        price > ema50 * 0.99,                   # price near/above EMA50
-        bb_pct < 0.30,                          # price near lower Bollinger Band (relaxed from 0.25)
-        stoch_k < 0.30 and stoch_k >= stoch_d, # StochRSI oversold (relaxed from 0.25)
+        rsi < 42,                                     # 1. RSI oversold
+        macd_h > 0,                                   # 2. MACD bullish
+        price > ema50 * 0.985,                        # 3. Near/above EMA50
+        bb_pct < 0.35,                                # 4. Near lower BB
+        stoch_k < 0.35 and stoch_k >= stoch_d,       # 5. StochRSI oversold + crossing
+        willr < -65,                                  # 6. Williams %R oversold
+        obv_up or cmf > 0.05,                         # 7. Volume confirms bullish
+        price < vwap * 1.005,                         # 8. Price at/below VWAP (value zone)
+        adx > 18 and adx_pos > adx_neg,              # 9. Trending bullish (ADX+DI)
+        bull_d or (ema9 > ema20 and s_bull),          # 10. Divergence or structure bullish
     ]
+
+    # ── 10-condition SELL scoring ─────────────────────────────────
     sell_signals = [
-        rsi > 60,                               # RSI overbought zone (relaxed from 65)
-        macd_h < 0,                             # MACD bearish crossover
-        price < ema50 * 1.01,                   # price near/below EMA50
-        bb_pct > 0.70,                          # price near upper Bollinger Band (relaxed from 0.75)
-        stoch_k > 0.70 and stoch_k <= stoch_d, # StochRSI overbought (relaxed from 0.75)
+        rsi > 58,                                     # 1. RSI overbought
+        macd_h < 0,                                   # 2. MACD bearish
+        price < ema50 * 1.015,                        # 3. Near/below EMA50
+        bb_pct > 0.65,                                # 4. Near upper BB
+        stoch_k > 0.65 and stoch_k <= stoch_d,       # 5. StochRSI overbought + crossing
+        willr > -35,                                  # 6. Williams %R overbought
+        not obv_up or cmf < -0.05,                   # 7. Volume confirms bearish
+        price > vwap * 0.995,                         # 8. Price at/above VWAP (premium)
+        adx > 18 and adx_neg > adx_pos,              # 9. Trending bearish (ADX-DI)
+        bear_d or (ema9 < ema20 and s_bear),          # 10. Divergence or structure bearish
     ]
 
     buy_score  = sum(buy_signals)
     sell_score = sum(sell_signals)
 
-    if buy_score >= 2:
-        if buy_score == 5:
-            conf = "🌟 VERY HIGH"
-        elif buy_score == 4:
-            conf = "🔥 HIGH"
-        elif buy_score == 3:
-            conf = "⚡ MEDIUM"
-        else:
-            conf = "📊 LOW"
-        return "BUY",  price, rsi, conf
-    if sell_score >= 2:
-        if sell_score == 5:
-            conf = "🌟 VERY HIGH"
-        elif sell_score == 4:
-            conf = "🔥 HIGH"
-        elif sell_score == 3:
-            conf = "⚡ MEDIUM"
-        else:
-            conf = "📊 LOW"
-        return "SELL", price, rsi, conf
+    def score_to_conf(s):
+        if s >= 8:  return "🌟 VERY HIGH"
+        if s >= 6:  return "🔥 HIGH"
+        if s >= 4:  return "⚡ MEDIUM"
+        return            "📊 LOW"
+
+    if buy_score >= 3 and buy_score > sell_score:
+        return "BUY",  price, rsi, score_to_conf(buy_score)
+    if sell_score >= 3 and sell_score > buy_score:
+        return "SELL", price, rsi, score_to_conf(sell_score)
     return None, price, rsi, None
 
 def get_signal_15m(symbol):
@@ -496,16 +624,24 @@ def ai_analysis(signal, price, rsi, symbol):
 # =========================
 
 def generate_chart(df, symbol, signal=None):
-    fig, (ax1, ax2, ax3) = plt.subplots(
-        3, 1, figsize=(12, 9),
-        gridspec_kw={"height_ratios": [3, 1, 1]}
+    """Professional 4-panel chart: Price+VWAP+BB+EMA | Volume | RSI+Williams%R | MACD+StochRSI"""
+    fig, axes = plt.subplots(
+        4, 1, figsize=(14, 12),
+        gridspec_kw={"height_ratios": [4, 1, 1.5, 1.5]}
     )
+    ax1, ax_vol, ax2, ax3 = axes
     fig.patch.set_facecolor("#0d1117")
-    close   = df["close"]
-    x       = range(len(close))
 
-    ema20   = EMAIndicator(close=close, window=20).ema_indicator()
-    ema50   = EMAIndicator(close=close, window=50).ema_indicator()
+    close  = df["close"]
+    high   = df["high"]
+    low    = df["low"]
+    volume = df["volume"] if "volume" in df.columns else pd.Series([0.0]*len(df))
+    x      = range(len(close))
+
+    # ── Compute indicators ─────────────────────────────────────────
+    ema9_s  = EMAIndicator(close=close, window=9).ema_indicator()
+    ema20_s = EMAIndicator(close=close, window=20).ema_indicator()
+    ema50_s = EMAIndicator(close=close, window=50).ema_indicator()
     bb      = BollingerBands(close=close, window=20, window_dev=2)
     bb_up   = bb.bollinger_hband()
     bb_lo   = bb.bollinger_lband()
@@ -515,61 +651,122 @@ def generate_chart(df, symbol, signal=None):
     macd_l  = macd_o.macd()
     macd_sg = macd_o.macd_signal()
     macd_h  = macd_o.macd_diff()
-    color   = "#00c896" if signal == "BUY" else ("#ff4d4d" if signal == "SELL" else "#58a6ff")
 
-    for ax in (ax1, ax2, ax3):
+    try:
+        stoch   = StochRSIIndicator(close=close, window=14, smooth1=3, smooth2=3)
+        sk      = stoch.stochrsi_k() * 100
+        sd      = stoch.stochrsi_d() * 100
+    except Exception:
+        sk = sd = pd.Series([50.0]*len(close))
+
+    try:
+        willr_s = WilliamsRIndicator(high=high, low=low, close=close, lbp=14).williams_r()
+    except Exception:
+        willr_s = pd.Series([-50.0]*len(close))
+
+    # ── VWAP ──────────────────────────────────────────────────────
+    try:
+        typical = (high + low + close) / 3
+        cum_tp  = (typical * volume).cumsum()
+        cum_vol = volume.cumsum()
+        vwap_s  = cum_tp / cum_vol.replace(0, float("nan"))
+    except Exception:
+        vwap_s = close.copy()
+
+    color = "#00c896" if signal == "BUY" else ("#ff4d4d" if signal == "SELL" else "#58a6ff")
+
+    for ax in axes:
         ax.set_facecolor("#161b22")
-        ax.tick_params(colors="#8b949e")
-        ax.grid(True, alpha=0.08, color="white")
+        ax.tick_params(colors="#8b949e", labelsize=7)
+        ax.grid(True, alpha=0.07, color="white", linewidth=0.5)
         for s in ax.spines.values():
-            s.set_edgecolor("#30363d")
+            s.set_edgecolor("#21262d")
 
-    # Price + BB + EMA
-    ax1.plot(x, close, color=color,    linewidth=1.6, label="Price", zorder=4)
-    ax1.plot(x, ema20, color="#a78bfa", linewidth=0.9, linestyle="--", label="EMA20", alpha=0.85)
-    ax1.plot(x, ema50, color="#f0b232", linewidth=0.9, linestyle="--", label="EMA50", alpha=0.85)
-    ax1.plot(x, bb_up,  color="#64748b", linewidth=0.7, linestyle=":",  label="BB Upper", alpha=0.7)
-    ax1.plot(x, bb_lo,  color="#64748b", linewidth=0.7, linestyle=":",  label="BB Lower", alpha=0.7)
-    ax1.plot(x, bb_mid, color="#475569", linewidth=0.6, linestyle="-",  alpha=0.5)
+    # ═══════════════════════════════════════════════════════════════
+    # PANEL 1 — Price + BB + EMA9/20/50 + VWAP
+    # ═══════════════════════════════════════════════════════════════
+    ax1.plot(x, close,  color=color,    linewidth=1.6, label="Price", zorder=5)
+    ax1.plot(x, ema9_s,  color="#f472b6", linewidth=0.8, linestyle="--", label="EMA9",  alpha=0.9)
+    ax1.plot(x, ema20_s, color="#a78bfa", linewidth=0.8, linestyle="--", label="EMA20", alpha=0.85)
+    ax1.plot(x, ema50_s, color="#f0b232", linewidth=0.9, linestyle="--", label="EMA50", alpha=0.85)
+    ax1.plot(x, bb_up,  color="#64748b", linewidth=0.6, linestyle=":",  label="BB",    alpha=0.6)
+    ax1.plot(x, bb_lo,  color="#64748b", linewidth=0.6, linestyle=":",               alpha=0.6)
+    ax1.plot(x, bb_mid, color="#334155", linewidth=0.5, linestyle="-",               alpha=0.5)
     ax1.fill_between(x, bb_lo, bb_up, alpha=0.04, color="#64748b")
+    ax1.plot(x, vwap_s, color="#38bdf8", linewidth=1.0, linestyle="-.", label="VWAP", alpha=0.9)
 
-    sig_label = "🟢 BUY" if signal == "BUY" else ("🔴 SELL" if signal == "SELL" else "⚪ Monitor")
+    # Signal marker on last candle
+    last_x = len(close) - 1
+    if signal == "BUY":
+        ax1.annotate("BUY", xy=(last_x, close.iloc[-1]),
+                     xytext=(last_x - 5, low.min()),
+                     fontsize=8, color="#00c896", fontweight="bold",
+                     arrowprops=dict(arrowstyle="->", color="#00c896", lw=1.2))
+    elif signal == "SELL":
+        ax1.annotate("SELL", xy=(last_x, close.iloc[-1]),
+                     xytext=(last_x - 5, high.max()),
+                     fontsize=8, color="#ff4d4d", fontweight="bold",
+                     arrowprops=dict(arrowstyle="->", color="#ff4d4d", lw=1.2))
+
+    sig_txt = "BUY" if signal == "BUY" else ("SELL" if signal == "SELL" else "MONITOR")
     ax1.set_title(
-        f"{symbol}  |  {sig_label}  |  BB + EMA20/50  |  {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}",
-        color="white", fontsize=11, pad=8
+        f"{symbol}   |   {sig_txt}   |   Price + VWAP + BB + EMA9/20/50   |   {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}",
+        color="white", fontsize=10, pad=6, fontweight="bold"
     )
-    ax1.set_ylabel("Price (USDT)", color="#8b949e", fontsize=9)
-    ax1.legend(facecolor="#21262d", labelcolor="white", fontsize=7, ncol=3)
+    ax1.set_ylabel("Price (USDT)", color="#8b949e", fontsize=8)
+    ax1.legend(facecolor="#21262d", labelcolor="white", fontsize=7, ncol=4, loc="upper left")
 
-    # RSI with zones
-    ax2.plot(x, rsi_s, color="#f0b232", linewidth=1.2)
-    ax2.axhline(70, color="#ff4d4d", linestyle="--", linewidth=0.8, alpha=0.7)
-    ax2.axhline(50, color="#8b949e", linestyle=":",  linewidth=0.6, alpha=0.5)
-    ax2.axhline(30, color="#00c896", linestyle="--", linewidth=0.8, alpha=0.7)
+    # ═══════════════════════════════════════════════════════════════
+    # PANEL 2 — Volume bars with color
+    # ═══════════════════════════════════════════════════════════════
+    vol_colors = []
+    for i in range(len(close)):
+        if i == 0:
+            vol_colors.append("#58a6ff")
+        else:
+            vol_colors.append("#00c896" if close.iloc[i] >= close.iloc[i-1] else "#ff4d4d")
+    ax_vol.bar(x, volume, color=vol_colors, alpha=0.6, width=0.8)
+    vol_ma = volume.rolling(20).mean()
+    ax_vol.plot(x, vol_ma, color="#f0b232", linewidth=0.8, label="Vol MA20", alpha=0.8)
+    ax_vol.set_ylabel("Volume", color="#8b949e", fontsize=8)
+    ax_vol.legend(facecolor="#21262d", labelcolor="white", fontsize=7)
+
+    # ═══════════════════════════════════════════════════════════════
+    # PANEL 3 — RSI (14) + Williams %R
+    # ═══════════════════════════════════════════════════════════════
+    ax2.plot(x, rsi_s,    color="#f0b232", linewidth=1.2, label="RSI(14)")
+    ax2.plot(x, sk,       color="#a78bfa", linewidth=0.8, linestyle="--", label="StochRSI K", alpha=0.8)
+    ax2.axhline(70, color="#ff4d4d", linestyle="--", linewidth=0.7, alpha=0.7)
+    ax2.axhline(50, color="#8b949e", linestyle=":",  linewidth=0.5, alpha=0.4)
+    ax2.axhline(30, color="#00c896", linestyle="--", linewidth=0.7, alpha=0.7)
     ax2.fill_between(x, 70, 100, alpha=0.06, color="red")
     ax2.fill_between(x, 0,  30,  alpha=0.06, color="green")
-    ax2.set_ylabel("RSI", color="#8b949e", fontsize=9)
+    ax2.set_ylabel("RSI / StochRSI", color="#8b949e", fontsize=8)
     ax2.set_ylim(0, 100)
-    # Mark overbought / oversold regions
-    rsi_arr = rsi_s.values
-    for i, rv in enumerate(rsi_arr):
-        if rv > 70:
-            ax2.axvline(i, color="#ff4d4d", alpha=0.04, linewidth=0.5)
-        elif rv < 30:
-            ax2.axvline(i, color="#00c896", alpha=0.04, linewidth=0.5)
+    ax2.legend(facecolor="#21262d", labelcolor="white", fontsize=7, ncol=2)
 
-    # MACD histogram + lines
+    # Williams %R on twin axis (rescaled to 0-100)
+    ax2b = ax2.twinx()
+    willr_norm = (willr_s + 100)   # shift -100..0 to 0..100
+    ax2b.plot(x, willr_norm, color="#38bdf8", linewidth=0.7, alpha=0.5, label="W%R")
+    ax2b.set_ylim(0, 100)
+    ax2b.tick_params(colors="#38bdf8", labelsize=6)
+    ax2b.set_ylabel("Williams %R", color="#38bdf8", fontsize=7)
+
+    # ═══════════════════════════════════════════════════════════════
+    # PANEL 4 — MACD histogram + lines
+    # ═══════════════════════════════════════════════════════════════
     hist_colors = ["#00c896" if v >= 0 else "#ff4d4d" for v in macd_h]
     ax3.plot(x, macd_l,  color="#58a6ff", linewidth=1.0, label="MACD")
     ax3.plot(x, macd_sg, color="#f0b232", linewidth=1.0, label="Signal")
     ax3.bar(x, macd_h, color=hist_colors, alpha=0.45, width=0.8)
-    ax3.axhline(0, color="#8b949e", linewidth=0.6)
-    ax3.set_ylabel("MACD", color="#8b949e", fontsize=9)
-    ax3.legend(facecolor="#21262d", labelcolor="white", fontsize=8)
+    ax3.axhline(0, color="#8b949e", linewidth=0.5)
+    ax3.set_ylabel("MACD", color="#8b949e", fontsize=8)
+    ax3.legend(facecolor="#21262d", labelcolor="white", fontsize=7)
 
-    plt.tight_layout(pad=1.2)
+    plt.tight_layout(pad=1.0)
     fname = f"{symbol}_chart.png"
-    plt.savefig(fname, facecolor=fig.get_facecolor(), dpi=120)
+    plt.savefig(fname, facecolor=fig.get_facecolor(), dpi=130)
     plt.close()
     return fname
 
@@ -647,58 +844,106 @@ def build_free_embed(symbol, signal, price, rsi, confidence):
     embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
     return embed
 
-def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_15m=False):
+def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_15m=False, ind=None):
     coin   = symbol.replace("USDT", "")
     emoji  = COIN_EMOJI.get(symbol, "🪙")
     logo   = COIN_LOGOS.get(symbol)
     color  = COIN_COLORS.get(symbol, 0x00c896)
     is_buy = signal == "BUY"
 
-    entry  = price
-    tp1    = round(price * (1.020 if is_buy else 0.980), 4)
-    tp2    = round(price * (1.040 if is_buy else 0.960), 4)
-    tp3    = round(price * (1.065 if is_buy else 0.935), 4)
-    sl     = round(price * (0.970 if is_buy else 1.030), 4)
-    rr     = "2.2 : 1"
+    # ── ATR-based dynamic TP/SL (much more accurate than fixed %) ──
+    atr = ind["atr"] if ind and "atr" in ind else price * 0.02
+    entry = price
+    if is_buy:
+        tp1 = round(entry + 1.5 * atr, 4)
+        tp2 = round(entry + 3.0 * atr, 4)
+        tp3 = round(entry + 5.0 * atr, 4)
+        sl  = round(entry - 1.2 * atr, 4)
+    else:
+        tp1 = round(entry - 1.5 * atr, 4)
+        tp2 = round(entry - 3.0 * atr, 4)
+        tp3 = round(entry - 5.0 * atr, 4)
+        sl  = round(entry + 1.2 * atr, 4)
+
+    pct1  = abs(tp1-entry)/entry*100
+    pct2  = abs(tp2-entry)/entry*100
+    pct3  = abs(tp3-entry)/entry*100
+    pct_sl = abs(sl-entry)/entry*100
+    rr_val = round(pct2/pct_sl, 2) if pct_sl else 2.0
 
     sig_label = "🟢  V I P   B U Y" if is_buy else "🔴  V I P   S E L L"
-    mtf_badge = "✅ **MULTI-TF CONFIRMED**  •  5m + 15m aligned" if confirmed_15m else "⚠️ Single-TF signal  •  Use smaller position"
+    mtf_badge = "✅ **MULTI-TF CONFIRMED** — 5m + 15m aligned" if confirmed_15m else "⚠️ Single-TF — Use smaller position size"
+
+    # ── Market context from indicators ─────────────────────────────
+    if ind:
+        adx       = ind.get("adx", 0)
+        vwap      = ind.get("vwap", price)
+        cmf       = ind.get("cmf", 0)
+        obv_up    = ind.get("obv_up", True)
+        willr     = ind.get("willr", -50)
+        ema200    = ind.get("ema200", price)
+        struct_bull = ind.get("struct_bull", False)
+        struct_bear = ind.get("struct_bear", False)
+        struct_str  = "Higher Highs / Higher Lows" if struct_bull else ("Lower Highs / Lower Lows" if struct_bear else "Ranging / Consolidation")
+        trend_vs_ema200 = "Above EMA200 — Bull market" if price > ema200 else "Below EMA200 — Bear market"
+        vwap_pos  = "Above VWAP" if price > vwap else "Below VWAP"
+        adx_str   = f"{adx:.1f} — " + ("Strong trend" if adx > 25 else ("Moderate trend" if adx > 18 else "Weak/Ranging"))
+        cmf_str   = f"{cmf:+.3f} — " + ("Bullish money flow" if cmf > 0.05 else ("Bearish money flow" if cmf < -0.05 else "Neutral"))
+        willr_str = f"{willr:.0f} — " + ("Oversold" if willr < -80 else ("Overbought" if willr > -20 else "Neutral"))
+    else:
+        struct_str = trend_vs_ema200 = vwap_pos = adx_str = cmf_str = willr_str = "N/A"
 
     embed = discord.Embed(
         title=f"💎 {sig_label} — {coin}",
-        description=(
-            f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**\n"
-            f"{SEP}\n"
-            f"{mtf_badge}"
-        ),
+        description=f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**\n{SEP}\n{mtf_badge}",
         color=color,
         timestamp=datetime.utcnow()
     )
     if logo:
         embed.set_thumbnail(url=logo)
-    embed.set_author(name="💎 Crypto Signals Bot — VIP Exclusive", icon_url=BOT_ICON)
+    embed.set_author(name="💎 Crypto Signals Bot — VIP Exclusive 2026", icon_url=BOT_ICON)
 
+    # Trade levels (ATR-based)
     embed.add_field(
-        name="📍 Trade Levels / Niveluri Trade",
+        name="📍 ATR-Based Trade Levels",
         value=(
             f"```\n"
-            f"{'Entry':<10} ${entry:>14,.4f}\n"
-            f"{'TP1  +2%':<10} ${tp1:>14,.4f}\n"
-            f"{'TP2  +4%':<10} ${tp2:>14,.4f}\n"
-            f"{'TP3  +6.5%':<10} ${tp3:>14,.4f}\n"
-            f"{'SL   -3%':<10} ${sl:>14,.4f}\n"
-            f"{'R:R':<10} {'2.2 : 1':>14}\n"
+            f"{'Entry':<12} ${entry:>14,.4f}\n"
+            f"{'TP1 +{:.1f}%'.format(pct1):<12} ${tp1:>14,.4f}\n"
+            f"{'TP2 +{:.1f}%'.format(pct2):<12} ${tp2:>14,.4f}\n"
+            f"{'TP3 +{:.1f}%'.format(pct3):<12} ${tp3:>14,.4f}\n"
+            f"{'SL -{:.1f}%'.format(pct_sl):<12} ${sl:>14,.4f}\n"
+            f"{'ATR':<12} ${atr:>14,.4f}\n"
+            f"{'Risk:Reward':<12} {'{}:1'.format(rr_val):>14}\n"
             f"```"
         ),
         inline=False
     )
-    embed.add_field(name="📊 RSI (14)", value=rsi_bar(rsi), inline=False)
-    embed.add_field(name="⭐ Signal Quality", value=conf_stars(confidence), inline=True)
-    embed.add_field(name="📐 Direction", value=f"`{'LONG 📈' if is_buy else 'SHORT / AVOID 📉'}`", inline=True)
+
+    # Indicator panel
+    embed.add_field(name="📊 RSI (14)",          value=rsi_bar(rsi), inline=False)
+    embed.add_field(name="⭐ Signal Quality",    value=conf_stars(confidence), inline=True)
+    embed.add_field(name="📐 Direction",         value=f"`{'LONG 📈' if is_buy else 'SHORT 📉'}`", inline=True)
     embed.add_field(name="\u200b", value=SEP, inline=False)
+
+    # 2026 Advanced context
     embed.add_field(
-        name="🧠 AI Analysis / Analiză AI",
-        value=ai_text if ai_text else "_Analysis unavailable_",
+        name="🔬 2026 Indicator Panel",
+        value=(
+            f"**ADX Strength:** `{adx_str}`\n"
+            f"**Williams %R:** `{willr_str}`\n"
+            f"**Chaikin MF:** `{cmf_str}`\n"
+            f"**VWAP Position:** `{vwap_pos}`\n"
+            f"**Market Structure:** `{struct_str}`\n"
+            f"**Long-term Trend:** `{trend_vs_ema200}`"
+        ),
+        inline=False
+    )
+    embed.add_field(name="\u200b", value=SEP, inline=False)
+
+    embed.add_field(
+        name="🧠 AI Analysis / Analiza AI",
+        value=ai_text if ai_text else "_Analysis unavailable — data only mode_",
         inline=False
     )
     embed.add_field(name="\u200b", value=SEP, inline=False)
@@ -710,7 +955,7 @@ def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_1
         ),
         inline=False
     )
-    embed.set_footer(text=f"Crypto Signals Bot — VIP  •  {DISCLAIMER_RO}")
+    embed.set_footer(text=f"Crypto Signals Bot — VIP 2026  •  {DISCLAIMER_RO}")
     return embed
 
 def build_price_embed(symbol):
@@ -795,8 +1040,9 @@ async def slash_signal(interaction: discord.Interaction, coin: str = "BTCUSDT"):
         ai_text      = ai_analysis(sig, price, rsi, coin)
         tf15         = get_signal_15m(coin)
         confirmed    = tf15 == sig
+        ind_data     = calc_indicators(df)
         chart        = generate_chart(df, coin, sig)
-        embed        = build_vip_embed(coin, sig, price, rsi, conf, ai_text, confirmed)
+        embed        = build_vip_embed(coin, sig, price, rsi, conf, ai_text, confirmed, ind=ind_data)
         await interaction.followup.send(embed=embed, file=discord.File(chart))
     else:
         embed = discord.Embed(
@@ -3356,6 +3602,813 @@ async def slash_leaderboard(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed)
 
 
+# ══════════════════════════════════════════════
+#   2026 ADVANCED INDICATORS — MEGA UPDATE
+# ══════════════════════════════════════════════
+
+@tree.command(name="fibonacci", description="📐 Fibonacci retracement levels — key support/resistance zones")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP",            value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+])
+async def slash_fibonacci(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    df  = get_data(coin, interval="1h", limit=100)
+    ind = calc_indicators(df)
+    if ind is None:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    price   = ind["price"]
+    fib     = ind["fib_levels"]
+    sh      = ind["swing_high"]
+    sl_val  = ind["swing_low"]
+    coin_n  = coin.replace("USDT","")
+    emoji   = COIN_EMOJI.get(coin, "🪙")
+
+    def fib_row(label, level):
+        dist = abs(price - level)
+        pct  = dist / price * 100
+        marker = " <<< PRICE" if abs(price - level) / price < 0.005 else ""
+        side = "support" if level < price else "resist."
+        return f"{label:<8} ${level:>12,.4f}   {side}{marker}"
+
+    embed = discord.Embed(
+        title=f"📐 Fibonacci Retracement — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}**\n{SEP}\n"
+            f"🇬🇧 Key price zones based on last 50 candles (1h) — traders use these as support/resistance.\n"
+            f"🇷🇴 Zone cheie de preț bazate pe ultimele 50 lumânări (1h) — traderii le folosesc ca suport/rezistență."
+        ),
+        color=0xf0b232,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="📊 Swing Analysis",
+        value=(
+            f"```\n"
+            f"Swing High  ${sh:>14,.4f}\n"
+            f"Swing Low   ${sl_val:>14,.4f}\n"
+            f"Range       ${sh-sl_val:>14,.4f}\n"
+            f"Current     ${price:>14,.4f}\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="📐 Fibonacci Levels",
+        value=(
+            f"```\n"
+            f"{fib_row('0.0   (H)',  fib['0.0'])}\n"
+            f"{fib_row('0.236',      fib['0.236'])}\n"
+            f"{fib_row('0.382',      fib['0.382'])}\n"
+            f"{fib_row('0.5  (Mid)', fib['0.5'])}\n"
+            f"{fib_row('0.618 (Au)', fib['0.618'])}\n"
+            f"{fib_row('0.786',      fib['0.786'])}\n"
+            f"{fib_row('1.0   (L)',  fib['1.0'])}\n"
+            f"```"
+        ),
+        inline=False
+    )
+
+    closest_key = min(fib, key=lambda k: abs(price - fib[k]))
+    closest_val = fib[closest_key]
+    embed.add_field(
+        name="🎯 Closest Level",
+        value=(
+            f"Price is nearest to **Fib {closest_key}** at `${closest_val:,.4f}`\n"
+            f"`${abs(price-closest_val):,.4f}` away (`{abs(price-closest_val)/price*100:.2f}%`)"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="📖 How to use / Cum se folosesc",
+        value=(
+            "🇬🇧 **0.618** (Golden Ratio) is the strongest support/resistance.\n"
+            "Buy near support levels (0.618, 0.786) in uptrends.\n"
+            "Sell near resistance levels (0.236, 0.382) in downtrends.\n\n"
+            "🇷🇴 **0.618** (Raportul de Aur) este cel mai puternic nivel.\n"
+            "Cumpără lângă suporturi (0.618, 0.786) in uptrend.\n"
+            "Vinde lângă rezistențe (0.236, 0.382) in downtrend."
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Timeframe: 1h  •  Last 50 candles  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="smartmoney", description="🏦 Smart Money Concepts — order blocks, FVGs, market structure")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP",            value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+])
+async def slash_smartmoney(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    df  = get_data(coin, interval="1h", limit=100)
+    ind = calc_indicators(df)
+    if ind is None or df is None:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    price     = ind["price"]
+    coin_n    = coin.replace("USDT","")
+    emoji     = COIN_EMOJI.get(coin, "🪙")
+    close     = df["close"]
+    high      = df["high"]
+    low       = df["low"]
+
+    # ── Market Structure (HH/HL/LH/LL) ─────────────────────────
+    highs   = high.iloc[-20:]
+    lows    = low.iloc[-20:]
+    hh      = highs.iloc[-1] > highs.iloc[-10] > highs.iloc[-19]
+    hl      = lows.iloc[-1]  > lows.iloc[-10]  > lows.iloc[-19]
+    lh      = highs.iloc[-1] < highs.iloc[-10] < highs.iloc[-19]
+    ll      = lows.iloc[-1]  < lows.iloc[-10]  < lows.iloc[-19]
+
+    if hh and hl:
+        structure = "📈 BULLISH — Higher Highs + Higher Lows (uptrend confirmed)"
+        struct_ro = "📈 BULLISH — Maxime mai mari + Minime mai mari (uptrend)"
+    elif lh and ll:
+        structure = "📉 BEARISH — Lower Highs + Lower Lows (downtrend confirmed)"
+        struct_ro = "📉 BEARISH — Maxime mai mici + Minime mai mici (downtrend)"
+    elif hh and ll:
+        structure = "🌪️ VOLATILE — Mixed structure (HH + LL), be careful"
+        struct_ro = "🌪️ VOLATIL — Structura mixta (HH + LL), fii atent"
+    else:
+        structure = "↔️ RANGING — No clear direction, price is consolidating"
+        struct_ro = "↔️ RANGING — Fara directie clara, pretul consolideaza"
+
+    # ── Order Blocks (last significant reversal candles) ────────
+    ob_zones = []
+    for i in range(len(close)-2, max(len(close)-30, 2), -1):
+        c1 = close.iloc[i-1]
+        c2 = close.iloc[i]
+        h1 = high.iloc[i]
+        l1 = low.iloc[i]
+        # Bearish OB: large green candle before drop
+        if c2 > c1 and (c2 - c1) / c1 > 0.005:
+            pct = (price - c1) / c1 * 100
+            ob_zones.append(("BULL OB", round(l1,4), round(h1,4), f"{pct:+.1f}%"))
+            if len(ob_zones) >= 2: break
+        # Bullish OB: large red candle before pump
+        elif c2 < c1 and (c1 - c2) / c1 > 0.005:
+            pct = (price - c2) / c2 * 100
+            ob_zones.append(("BEAR OB", round(l1,4), round(h1,4), f"{pct:+.1f}%"))
+            if len(ob_zones) >= 2: break
+
+    # ── Fair Value Gaps (price gaps between candle wicks) ───────
+    fvgs = []
+    for i in range(2, min(25, len(close))):
+        prev_high = high.iloc[-i-1]
+        cur_low   = low.iloc[-i+1] if i >= 2 else low.iloc[-i]
+        if cur_low > prev_high:
+            fvgs.append(("BULL FVG", round(prev_high,4), round(cur_low,4)))
+        prev_low  = low.iloc[-i-1]
+        cur_high  = high.iloc[-i+1] if i >= 2 else high.iloc[-i]
+        if cur_high < prev_low:
+            fvgs.append(("BEAR FVG", round(cur_high,4), round(prev_low,4)))
+        if len(fvgs) >= 2: break
+
+    # ── Liquidity Zones (equal highs/lows = targets) ────────────
+    eq_highs = []
+    eq_lows  = []
+    for i in range(1, min(20, len(high))):
+        if abs(high.iloc[-i] - high.iloc[-i-1]) / high.iloc[-i] < 0.002:
+            eq_highs.append(round(high.iloc[-i], 4))
+        if abs(low.iloc[-i]  - low.iloc[-i-1])  / low.iloc[-i]  < 0.002:
+            eq_lows.append(round(low.iloc[-i], 4))
+
+    embed = discord.Embed(
+        title=f"🏦 Smart Money Concepts — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}**\n{SEP}\n"
+            f"🇬🇧 Institutional analysis: where big money is buying/selling.\n"
+            f"🇷🇴 Analiza instituțională: unde banii mari cumpara/vand."
+        ),
+        color=0x6366f1,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(name="📊 Market Structure / Structura Pietei",
+                    value=f"{structure}\n{struct_ro}", inline=False)
+
+    ob_text = ""
+    for ob in ob_zones[:2]:
+        ob_text += f"**{ob[0]}**: `${ob[1]:,} — ${ob[2]:,}` | from price: `{ob[3]}`\n"
+    if not ob_text: ob_text = "_No significant order blocks detected_"
+    embed.add_field(name="📦 Order Blocks (Institutional Zones)", value=ob_text, inline=False)
+
+    fvg_text = ""
+    for fvg in fvgs[:2]:
+        fvg_text += f"**{fvg[0]}**: `${fvg[1]:,} — ${fvg[2]:,}` (gap to be filled)\n"
+    if not fvg_text: fvg_text = "_No significant FVGs detected_"
+    embed.add_field(name="🕳️ Fair Value Gaps (FVG)", value=fvg_text, inline=False)
+
+    liq_text = ""
+    if eq_highs: liq_text += f"**Liquidity Above:** `${eq_highs[0]:,}` (equal highs)\n"
+    if eq_lows:  liq_text += f"**Liquidity Below:** `${eq_lows[0]:,}` (equal lows)\n"
+    if not liq_text: liq_text = "_No obvious liquidity pools detected_"
+    embed.add_field(name="💧 Liquidity Pools", value=liq_text, inline=False)
+
+    embed.add_field(
+        name="📖 SMC explained / SMC explicat",
+        value=(
+            "🇬🇧 **Order Block** = Zone where institutions entered big positions.\n"
+            "**FVG** = Price gap — market tends to revisit (fill) these zones.\n"
+            "**Liquidity** = Equal highs/lows — institutions hunt these levels.\n\n"
+            "🇷🇴 **Order Block** = Zona unde institutiile au intrat cu capital mare.\n"
+            "**FVG** = Gol de pret — piata revine de obicei sa-l umple.\n"
+            "**Lichiditate** = Maxime/minime egale — institutiile vaneaza aceste niveluri."
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Timeframe: 1h  •  Last 100 candles  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="ichimoku", description="☁️ Ichimoku Cloud — the complete Japanese trend system")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP",            value="XRPUSDT"),
+])
+async def slash_ichimoku(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    df  = get_data(coin, interval="1h", limit=200)
+    if df is None or len(df) < 60:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    high   = df["high"]
+    low    = df["low"]
+    close  = df["close"]
+    price  = close.iloc[-1]
+    coin_n = coin.replace("USDT","")
+    emoji  = COIN_EMOJI.get(coin, "🪙")
+
+    # ── Ichimoku calculations ────────────────────────────────────
+    tenkan  = (high.rolling(9).max()  + low.rolling(9).min())  / 2
+    kijun   = (high.rolling(26).max() + low.rolling(26).min()) / 2
+    spanA   = ((tenkan + kijun) / 2).shift(26)
+    spanB   = ((high.rolling(52).max() + low.rolling(52).min()) / 2).shift(26)
+    chikou  = close.shift(-26)
+
+    t_val  = tenkan.iloc[-1]
+    k_val  = kijun.iloc[-1]
+    sa_val = spanA.iloc[-1]  if not pd.isna(spanA.iloc[-1])  else spanA.iloc[-2]
+    sb_val = spanB.iloc[-1]  if not pd.isna(spanB.iloc[-1])  else spanB.iloc[-2]
+
+    cloud_top    = max(sa_val, sb_val) if sa_val and sb_val else price
+    cloud_bottom = min(sa_val, sb_val) if sa_val and sb_val else price
+    cloud_bull   = sa_val > sb_val if sa_val and sb_val else True
+    above_cloud  = price > cloud_top
+    below_cloud  = price < cloud_bottom
+    in_cloud     = not above_cloud and not below_cloud
+
+    tk_bull = t_val > k_val  # TK cross bullish
+    cloud_color = "Green (Bullish)" if cloud_bull else "Red (Bearish)"
+
+    # ── Signal interpretation ─────────────────────────────────────
+    bull_signals = [above_cloud, tk_bull, cloud_bull]
+    bear_signals = [below_cloud, not tk_bull, not cloud_bull]
+    b_score = sum(bull_signals)
+    s_score = sum(bear_signals)
+
+    if b_score >= 2:
+        signal = "🟢 BULLISH"
+        signal_ro = "🟢 BULLISH — semne pozitive"
+    elif s_score >= 2:
+        signal = "🔴 BEARISH"
+        signal_ro = "🔴 BEARISH — semne negative"
+    else:
+        signal = "⚪ NEUTRAL"
+        signal_ro = "⚪ NEUTRU — piata fara directie"
+
+    embed = discord.Embed(
+        title=f"☁️ Ichimoku Cloud — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}**\n{SEP}\n"
+            f"🇬🇧 The complete Japanese trend system — 5 lines, one picture.\n"
+            f"🇷🇴 Sistemul japonez complet — 5 linii, o imagine clara."
+        ),
+        color=0x00c896 if "BULL" in signal else (0xff4d4d if "BEAR" in signal else 0x8b949e),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="📊 Ichimoku Lines",
+        value=(
+            f"```\n"
+            f"{'Price':<18} ${price:>14,.4f}\n"
+            f"{'Tenkan-sen (9)':<18} ${t_val:>14,.4f}\n"
+            f"{'Kijun-sen (26)':<18} ${k_val:>14,.4f}\n"
+            f"{'Senkou Span A':<18} ${sa_val:>14,.4f}\n"
+            f"{'Senkou Span B':<18} ${sb_val:>14,.4f}\n"
+            f"{'Cloud Top':<18} ${cloud_top:>14,.4f}\n"
+            f"{'Cloud Bottom':<18} ${cloud_bottom:>14,.4f}\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="🔍 Signal Analysis",
+        value=(
+            f"**Overall:** {signal}  |  {signal_ro}\n\n"
+            f"{'✅' if above_cloud else ('🔴' if below_cloud else '⚠️')} **Price vs Cloud:** {'Above cloud (bullish)' if above_cloud else ('Below cloud (bearish)' if below_cloud else 'Inside cloud (uncertain)')}\n"
+            f"{'✅' if tk_bull else '🔴'} **TK Cross:** {'Tenkan > Kijun (bullish)' if tk_bull else 'Tenkan < Kijun (bearish)'}\n"
+            f"{'✅' if cloud_bull else '🔴'} **Cloud Color:** {cloud_color}\n"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="📖 How to trade Ichimoku",
+        value=(
+            "🇬🇧 **BUY** when: price above cloud + Tenkan > Kijun + green cloud\n"
+            "**SELL** when: price below cloud + Tenkan < Kijun + red cloud\n"
+            "**Cloud = Support/Resistance zone**\n\n"
+            "🇷🇴 **CUMPARA** cand: pret deasupra norului + Tenkan > Kijun + nor verde\n"
+            "**VINDE** cand: pret sub nor + Tenkan < Kijun + nor rosu\n"
+            "**Norul = zona de suport/rezistenta**"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Timeframe: 1h  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="vwap", description="📊 VWAP analysis — is price cheap or expensive today?")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP",            value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+])
+async def slash_vwap(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    df  = get_data(coin, interval="5m", limit=288)   # last 24h of 5m candles
+    ind = calc_indicators(df)
+    if ind is None or df is None:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    price   = ind["price"]
+    vwap    = ind["vwap"]
+    coin_n  = coin.replace("USDT","")
+    emoji   = COIN_EMOJI.get(coin, "🪙")
+    atr     = ind["atr"]
+
+    dev1u = vwap + 1.0 * atr
+    dev1d = vwap - 1.0 * atr
+    dev2u = vwap + 2.0 * atr
+    dev2d = vwap - 2.0 * atr
+
+    pct_from_vwap = (price - vwap) / vwap * 100
+    if price > dev2u:
+        zone = "🔴 Extreme premium — strong SELL zone / zona SELL puternica"
+    elif price > dev1u:
+        zone = "🟠 Premium — above fair value / deasupra valorii corecte"
+    elif price > vwap:
+        zone = "🟡 Slight premium — marginally above VWAP"
+    elif price > dev1d:
+        zone = "🟢 Slight discount — marginally below VWAP"
+    elif price > dev2d:
+        zone = "🟢 Discount — below fair value / sub valoarea corecta"
+    else:
+        zone = "🔥 Extreme discount — strong BUY zone / zona BUY puternica"
+
+    embed = discord.Embed(
+        title=f"📊 VWAP Analysis — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}**\n{SEP}\n"
+            f"🇬🇧 VWAP = Volume Weighted Average Price — the 'fair value' for the session.\n"
+            f"🇷🇴 VWAP = Prețul mediu ponderat la volum — 'valoarea corecta' a sesiunii."
+        ),
+        color=0x38bdf8,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="📈 VWAP Levels",
+        value=(
+            f"```\n"
+            f"{'Dev +2 (Extreme)':<22} ${dev2u:>12,.4f}\n"
+            f"{'Dev +1 (Premium)':<22} ${dev1u:>12,.4f}\n"
+            f"{'VWAP (Fair Value)':<22} ${vwap:>12,.4f}\n"
+            f"{'Dev -1 (Discount)':<22} ${dev1d:>12,.4f}\n"
+            f"{'Dev -2 (Extreme)':<22} ${dev2d:>12,.4f}\n"
+            f"{'--- CURRENT PRICE':<22} ${price:>12,.4f}\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(name="🎯 Current Zone", value=zone, inline=False)
+    embed.add_field(
+        name="📊 Distance from VWAP",
+        value=f"`{pct_from_vwap:+.3f}%` from fair value",
+        inline=True
+    )
+    embed.add_field(
+        name="💡 Strategy / Strategie",
+        value=(
+            "🇬🇧 **Buy** near/below VWAP — you get 'fair' or 'cheap' price.\n"
+            "**Sell** when price is 2+ standard deviations above VWAP.\n"
+            "**VWAP bounces** = high-probability entries used by institutions.\n\n"
+            "🇷🇴 **Cumpara** langa/sub VWAP — pret corect sau ieftin.\n"
+            "**Vinde** cand pretul e cu 2+ deviatii deasupra VWAP.\n"
+            "**Revenirile la VWAP** = intrari folosite de institutii."
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"VWAP calculated on last 24h (288 x 5m candles)  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="atr", description="📏 ATR — volatility & position sizing calculator")
+@app_commands.describe(coin="Choose a coin", capital="Your total capital in USDT (optional)")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP",            value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+])
+async def slash_atr(interaction: discord.Interaction, coin: str = "BTCUSDT", capital: float = 1000.0):
+    await interaction.response.defer()
+    df  = get_data(coin, interval="1h", limit=100)
+    ind = calc_indicators(df)
+    if ind is None:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    price   = ind["price"]
+    atr     = ind["atr"]
+    coin_n  = coin.replace("USDT","")
+    emoji   = COIN_EMOJI.get(coin, "🪙")
+    atr_pct = atr / price * 100
+
+    # Risk management (1% risk per trade, 2% risk per trade)
+    risk_1pct = capital * 0.01
+    risk_2pct = capital * 0.02
+    sl_1atr   = atr
+    qty_1pct  = risk_1pct / sl_1atr if sl_1atr else 0
+    qty_2pct  = risk_2pct / sl_1atr if sl_1atr else 0
+    pos_1pct  = qty_1pct * price
+    pos_2pct  = qty_2pct * price
+
+    # ATR-based TP/SL
+    tp1 = round(price + 1.5 * atr, 4)
+    tp2 = round(price + 3.0 * atr, 4)
+    tp3 = round(price + 5.0 * atr, 4)
+    sl1 = round(price - 1.2 * atr, 4)
+    sl2 = round(price - 2.0 * atr, 4)
+
+    # Volatility assessment
+    if atr_pct < 1.0:
+        vol_level = "🟢 LOW — calm market, precise entries possible"
+        vol_ro    = "🟢 SCAZUTA — piata calmã, intrari precise posibile"
+    elif atr_pct < 2.5:
+        vol_level = "🟡 MODERATE — normal crypto volatility"
+        vol_ro    = "🟡 MODERATA — volatilitate normala crypto"
+    elif atr_pct < 5.0:
+        vol_level = "🟠 HIGH — use smaller position sizes"
+        vol_ro    = "🟠 RIDICATA — foloseste pozitii mai mici"
+    else:
+        vol_level = "🔴 EXTREME — high risk, only experienced traders"
+        vol_ro    = "🔴 EXTREMA — risc ridicat, doar traderi experimentati"
+
+    embed = discord.Embed(
+        title=f"📏 ATR Volatility & Sizing — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}**\n{SEP}\n"
+            f"🇬🇧 ATR (Average True Range) = how much price moves per candle on average.\n"
+            f"🇷🇴 ATR = cât de mult se misca pretul per lumanare in medie."
+        ),
+        color=0xa78bfa,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="📊 Volatility Stats",
+        value=(
+            f"```\n"
+            f"{'Price':<18} ${price:>14,.4f}\n"
+            f"{'ATR (14, 1h)':<18} ${atr:>14,.4f}\n"
+            f"{'ATR %':<18} {atr_pct:>13.2f}%\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(name="🌡️ Volatility Level", value=f"{vol_level}\n{vol_ro}", inline=False)
+    embed.add_field(
+        name="📍 ATR-Based TP/SL Targets (BUY)",
+        value=(
+            f"```\n"
+            f"{'TP1 (1.5x ATR)':<16} ${tp1:>14,.4f}\n"
+            f"{'TP2 (3.0x ATR)':<16} ${tp2:>14,.4f}\n"
+            f"{'TP3 (5.0x ATR)':<16} ${tp3:>14,.4f}\n"
+            f"{'SL  (1.2x ATR)':<16} ${sl1:>14,.4f}\n"
+            f"{'SL  (2.0x ATR)':<16} ${sl2:>14,.4f}\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name=f"💼 Position Sizing (capital: ${capital:,.0f})",
+        value=(
+            f"```\n"
+            f"{'Risk 1%/trade':<18} ${risk_1pct:>10,.2f}  =>  {qty_1pct:.4f} {coin_n}  (${pos_1pct:,.2f})\n"
+            f"{'Risk 2%/trade':<18} ${risk_2pct:>10,.2f}  =>  {qty_2pct:.4f} {coin_n}  (${pos_2pct:,.2f})\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="💡 Pro Tip / Sfat Pro",
+        value=(
+            "🇬🇧 Never risk more than 1–2% of capital per trade.\n"
+            "Set SL at 1.2x ATR below entry for high-probability exits.\n"
+            "High ATR = larger candles = widen your SL or reduce size!\n\n"
+            "🇷🇴 Nu risca niciodata mai mult de 1–2% din capital per trade.\n"
+            "Seteaza SL la 1.2x ATR sub intrare.\n"
+            "ATR mare = lumanari mari = mareste SL sau reduce dimensiunea!"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"ATR = 14-period, 1h candles  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="backtest", description="🔬 Backtest — how well does the signal work on historical data?")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+])
+async def slash_backtest(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    # Get 4h candles for last ~60 days
+    df = get_data(coin, interval="4h", limit=360)
+    if df is None or len(df) < 60:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    coin_n = coin.replace("USDT","")
+    emoji  = COIN_EMOJI.get(coin, "🪙")
+
+    trades     = []
+    in_trade   = None
+    win = loss = 0
+    total_pnl  = 0.0
+    max_win    = 0.0
+    max_loss   = 0.0
+
+    # Rolling window backtest
+    WINDOW = 52  # minimum needed for indicators
+    for i in range(WINDOW, len(df) - 5):
+        window_df = df.iloc[i-WINDOW:i].reset_index(drop=True)
+        sig, price, rsi_v, conf = get_signal_v2(window_df)
+
+        if in_trade is None and sig == "BUY":
+            in_trade = {"entry": price, "idx": i, "type": "BUY"}
+        elif in_trade is not None:
+            bars_held = i - in_trade["idx"]
+            exit_price = df["close"].iloc[i]
+            pnl_pct = (exit_price - in_trade["entry"]) / in_trade["entry"] * 100
+            # Exit: SELL signal or 5 bars max hold
+            if sig == "SELL" or bars_held >= 5:
+                trades.append(pnl_pct)
+                total_pnl += pnl_pct
+                if pnl_pct > 0:
+                    win += 1
+                    if pnl_pct > max_win: max_win = pnl_pct
+                else:
+                    loss += 1
+                    if pnl_pct < max_loss: max_loss = pnl_pct
+                in_trade = None
+                if sig == "BUY":
+                    in_trade = {"entry": price, "idx": i, "type": "BUY"}
+
+    total_trades = len(trades)
+    win_rate     = win / total_trades * 100 if total_trades > 0 else 0
+    avg_pnl      = total_pnl / total_trades if total_trades > 0 else 0
+    avg_win_v    = sum(t for t in trades if t > 0) / win  if win  > 0 else 0
+    avg_loss_v   = sum(t for t in trades if t < 0) / loss if loss > 0 else 0
+    profit_factor = abs(avg_win_v / avg_loss_v) if avg_loss_v != 0 else 99.9
+
+    color = 0x00c896 if total_pnl > 0 else 0xff4d4d
+    perf_bar_val = min(max(int(win_rate / 10), 0), 10)
+    perf_bar = "█" * perf_bar_val + "░" * (10 - perf_bar_val)
+
+    embed = discord.Embed(
+        title=f"🔬 Signal Backtest — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}**\n{SEP}\n"
+            f"🇬🇧 Historical simulation — how the bot's signal engine performed on past data.\n"
+            f"🇷🇴 Simulare istorica — cum ar fi performat motorul de semnale pe date trecute.\n"
+            f"📅 **Data:** Last ~{len(df)//6} days (4h candles)  •  **Window:** 52 candles"
+        ),
+        color=color,
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="📊 Backtest Results / Rezultate Backtest",
+        value=(
+            f"```\n"
+            f"{'Total Trades':<22} {total_trades:>6}\n"
+            f"{'Wins':<22} {win:>6}\n"
+            f"{'Losses':<22} {loss:>6}\n"
+            f"{'Win Rate':<22} {win_rate:>5.1f}%\n"
+            f"{'Total PnL':<22} {total_pnl:>+5.2f}%\n"
+            f"{'Avg Trade PnL':<22} {avg_pnl:>+5.2f}%\n"
+            f"{'Best Trade':<22} {max_win:>+5.2f}%\n"
+            f"{'Worst Trade':<22} {max_loss:>+5.2f}%\n"
+            f"{'Profit Factor':<22} {profit_factor:>5.2f}\n"
+            f"```"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="📈 Win Rate Bar",
+        value=f"`{perf_bar}` `{win_rate:.0f}%`",
+        inline=False
+    )
+
+    if win_rate >= 60:
+        rating = "🌟 EXCELLENT — Signal is performing very well on this coin!"
+        rating_ro = "🌟 EXCELENT — Semnalul performeaza foarte bine pe aceasta moneda!"
+    elif win_rate >= 50:
+        rating = "🔥 GOOD — Above average performance, use with confidence"
+        rating_ro = "🔥 BUN — Performanta peste medie, foloseste cu incredere"
+    elif win_rate >= 40:
+        rating = "⚡ AVERAGE — Use with additional confirmation"
+        rating_ro = "⚡ MEDIU — Foloseste cu confirmare suplimentara"
+    else:
+        rating = "⚠️ WEAK — Low win rate, market may not suit this strategy"
+        rating_ro = "⚠️ SLAB — Win rate scazut, piata nu se potriveste strategiei"
+
+    embed.add_field(name="⭐ Strategy Rating", value=f"{rating}\n{rating_ro}", inline=False)
+    embed.add_field(
+        name="⚠️ Disclaimer",
+        value=(
+            "🇬🇧 Past performance does NOT guarantee future results. "
+            "This is for educational purposes only — always manage your risk!\n"
+            "🇷🇴 Performanta trecuta NU garanteaza rezultate viitoare. "
+            "Aceasta este doar in scop educational — gestioneaza-ti intotdeauna riscul!"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Backtest: 4h candles  •  10-indicator confluence engine  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="advanced", description="🔭 Full 2026 advanced analysis — all 14 indicators in one embed")
+@app_commands.describe(coin="Choose a coin")
+@app_commands.choices(coin=[
+    app_commands.Choice(name="Bitcoin (BTC)",  value="BTCUSDT"),
+    app_commands.Choice(name="Ethereum (ETH)", value="ETHUSDT"),
+    app_commands.Choice(name="Solana (SOL)",   value="SOLUSDT"),
+    app_commands.Choice(name="BNB (BNB)",      value="BNBUSDT"),
+    app_commands.Choice(name="XRP",            value="XRPUSDT"),
+    app_commands.Choice(name="Cardano (ADA)",  value="ADAUSDT"),
+    app_commands.Choice(name="Avalanche (AVAX)", value="AVAXUSDT"),
+    app_commands.Choice(name="Dogecoin (DOGE)", value="DOGEUSDT"),
+])
+async def slash_advanced(interaction: discord.Interaction, coin: str = "BTCUSDT"):
+    await interaction.response.defer()
+    df  = get_data(coin, interval="1h", limit=200)
+    ind = calc_indicators(df)
+    if ind is None:
+        await interaction.followup.send("❌ Nu s-au putut obține date.", ephemeral=True); return
+
+    price     = ind["price"]
+    coin_n    = coin.replace("USDT","")
+    emoji     = COIN_EMOJI.get(coin, "🪙")
+
+    rsi       = ind["rsi"]
+    macd_h    = ind["macd_hist"]
+    ema9      = ind["ema9"]
+    ema20     = ind["ema20"]
+    ema50     = ind["ema50"]
+    ema200    = ind["ema200"]
+    bb_pct    = ind["bb_pct"]
+    stoch_k   = ind["stoch_k"]
+    willr     = ind["willr"]
+    atr       = ind["atr"]
+    adx       = ind["adx"]
+    adx_pos   = ind["adx_pos"]
+    adx_neg   = ind["adx_neg"]
+    obv_up    = ind["obv_up"]
+    cmf       = ind["cmf"]
+    vwap      = ind["vwap"]
+    bull_div  = ind["bull_div"]
+    bear_div  = ind["bear_div"]
+    s_bull    = ind["struct_bull"]
+    s_bear    = ind["struct_bear"]
+    roc       = ind["roc"]
+    atr_pct   = atr / price * 100
+
+    def indicator_status(bull_cond, bear_cond, bull_label, bear_label, neutral_label="NEUTRAL"):
+        if bull_cond:   return f"🟢 {bull_label}"
+        elif bear_cond: return f"🔴 {bear_label}"
+        else:           return f"⚪ {neutral_label}"
+
+    # Overall score
+    bull_score = sum([
+        rsi < 42, macd_h > 0, price > ema50, bb_pct < 0.35,
+        stoch_k < 0.35, willr < -65, obv_up, cmf > 0.05,
+        price < vwap, adx > 18 and adx_pos > adx_neg,
+        bull_div, s_bull, ema9 > ema20, roc > 0
+    ])
+    bear_score = 14 - bull_score
+    overall = "🟢 BULLISH" if bull_score >= 8 else ("🔴 BEARISH" if bear_score >= 8 else "⚪ NEUTRAL")
+
+    embed = discord.Embed(
+        title=f"🔭 Full 2026 Analysis — {coin_n}",
+        description=(
+            f"{emoji} **{COIN_NAMES_EN.get(coin, coin)}** | Price: `${price:,.4f}`\n{SEP}\n"
+            f"**Overall Signal:** {overall}  `{bull_score}/14 bullish indicators`"
+        ),
+        color=0x00c896 if "BULL" in overall else (0xff4d4d if "BEAR" in overall else 0x8b949e),
+        timestamp=datetime.utcnow()
+    )
+
+    # Momentum indicators
+    embed.add_field(
+        name="📊 Momentum Indicators",
+        value=(
+            f"{indicator_status(rsi<42, rsi>58, f'RSI={rsi:.1f} Oversold', f'RSI={rsi:.1f} Overbought', f'RSI={rsi:.1f} Neutral')}\n"
+            f"{indicator_status(stoch_k<0.35, stoch_k>0.65, f'StochRSI={stoch_k:.2f} Oversold', f'StochRSI={stoch_k:.2f} Overbought', f'StochRSI={stoch_k:.2f}')}\n"
+            f"{indicator_status(willr<-65, willr>-35, f'Williams%R={willr:.0f} Oversold', f'Williams%R={willr:.0f} Overbought', f'Williams%R={willr:.0f}')}\n"
+            f"{indicator_status(roc>0, roc<0, f'ROC={roc:.2f}% Positive', f'ROC={roc:.2f}% Negative', f'ROC={roc:.2f}%')}"
+        ),
+        inline=False
+    )
+
+    # Trend indicators
+    embed.add_field(
+        name="📈 Trend Indicators",
+        value=(
+            f"{indicator_status(macd_h>0, macd_h<0, 'MACD Bullish crossover', 'MACD Bearish crossover', 'MACD Flat')}\n"
+            f"{indicator_status(price>ema50, price<ema50, 'Price > EMA50', 'Price < EMA50')}\n"
+            f"{indicator_status(price>ema200, price<ema200, 'Price > EMA200 (Bull market)', 'Price < EMA200 (Bear market)')}\n"
+            f"{indicator_status(ema9>ema20, ema9<ema20, 'EMA9 > EMA20 (Fast bull)', 'EMA9 < EMA20 (Fast bear)')}\n"
+            f"{indicator_status(adx_pos>adx_neg and adx>18, adx_neg>adx_pos and adx>18, f'ADX={adx:.0f} Bullish trend', f'ADX={adx:.0f} Bearish trend', f'ADX={adx:.0f} No trend')}"
+        ),
+        inline=False
+    )
+
+    # Volatility & Volume
+    embed.add_field(
+        name="🌊 Volatility & Volume",
+        value=(
+            f"{indicator_status(bb_pct<0.35, bb_pct>0.65, f'BB%={bb_pct:.2f} Near lower (buy zone)', f'BB%={bb_pct:.2f} Near upper (sell zone)', f'BB%={bb_pct:.2f} Middle')}\n"
+            f"`ATR: ${atr:,.4f}  ({atr_pct:.2f}% of price)`\n"
+            f"{indicator_status(obv_up, not obv_up, 'OBV Rising (volume confirms up)', 'OBV Falling (volume confirms down)')}\n"
+            f"{indicator_status(cmf>0.05, cmf<-0.05, f'CMF={cmf:.3f} Money flowing IN', f'CMF={cmf:.3f} Money flowing OUT', f'CMF={cmf:.3f} Neutral')}\n"
+            f"{indicator_status(price<vwap, price>vwap*1.02, 'Below VWAP (value zone)', 'Above VWAP (premium zone)', 'Near VWAP (fair value)')}"
+        ),
+        inline=False
+    )
+
+    # Smart Money
+    embed.add_field(
+        name="🏦 Smart Money",
+        value=(
+            f"{indicator_status(bull_div, bear_div, 'Bullish RSI Divergence detected', 'Bearish RSI Divergence detected', 'No divergence')}\n"
+            f"{indicator_status(s_bull, s_bear, 'Bullish market structure (HH+HL)', 'Bearish market structure (LH+LL)', 'Ranging structure')}"
+        ),
+        inline=False
+    )
+
+    # Fibonacci nearest level
+    fib = ind["fib_levels"]
+    nearest_fib = min(fib, key=lambda k: abs(price - fib[k]))
+    fib_dist    = abs(price - fib[nearest_fib]) / price * 100
+    embed.add_field(
+        name="📐 Fibonacci",
+        value=f"Nearest level: **Fib {nearest_fib}** = `${fib[nearest_fib]:,.4f}` | `{fib_dist:.2f}%` away",
+        inline=False
+    )
+
+    bar_b = "█" * bull_score + "░" * (14 - bull_score)
+    embed.add_field(
+        name=f"🎯 Confluence Score: {bull_score}/14 bullish",
+        value=f"`{bar_b}`",
+        inline=False
+    )
+    embed.set_footer(text=f"14-indicator 2026 engine  •  Timeframe: 1h  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
 # =========================
 # WELCOME
 # =========================
@@ -3841,7 +4894,7 @@ async def signal_loop():
                     confirmed  = tf15 == sig
                     chart      = generate_chart(df, symbol, sig)
                     f_embed    = build_free_embed(symbol, sig, price, rsi, conf)
-                    v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed)
+                    v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed, ind=ind)
                     if free_ch:
                         await free_ch.send(embed=f_embed)
                     if vip_ch:
@@ -4656,7 +5709,7 @@ async def on_message(message: discord.Message):
             confirmed = tf15 == sig
             chart     = generate_chart(df, sym, sig)
             f_embed   = build_free_embed(sym, sig, price, rsi, conf_display)
-            v_embed   = build_vip_embed(sym, sig, price, rsi, conf_display, ai_text, confirmed)
+            v_embed   = build_vip_embed(sym, sig, price, rsi, conf_display, ai_text, confirmed, ind=ind)
             free_ch   = client.get_channel(FREE_SIGNALS_CHANNEL)
             vip_ch    = client.get_channel(VIP_SIGNALS_CHANNEL)
             if free_ch:
