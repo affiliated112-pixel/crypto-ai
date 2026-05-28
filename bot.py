@@ -127,7 +127,7 @@ tree   = app_commands.CommandTree(client)
 
 def get_data_binance(symbol, interval="5m", limit=150):
     try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+        url = f"https://api.binance.us/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
         data = requests.get(url, timeout=10).json()
         if not isinstance(data, list) or len(data) < 20:
             return None
@@ -167,7 +167,7 @@ def get_data(symbol, interval="5m"):
 def get_price_info(symbol):
     """Returns 24h ticker info: price, change%, high, low, volume."""
     try:
-        url  = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+        url  = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
         data = requests.get(url, timeout=8).json()
         return {
             "price":    float(data["lastPrice"]),
@@ -291,30 +291,44 @@ def get_signal_v2(df):
     stoch_k  = ind["stoch_k"]
     stoch_d  = ind["stoch_d"]
 
-    # 5-indicator scoring system
+    # 5-indicator scoring system (thresholds relaxed for more signals)
     buy_signals = [
-        rsi < 35,                        # RSI oversold
-        macd_h > 0,                      # MACD bullish
-        price > ema50 * 0.98,            # price near/above EMA50
-        bb_pct < 0.25,                   # price near lower Bollinger Band
-        stoch_k < 0.25 and stoch_k > stoch_d,  # Stoch RSI oversold crossover
+        rsi < 40,                               # RSI oversold zone (relaxed from 35)
+        macd_h > 0,                             # MACD bullish crossover
+        price > ema50 * 0.99,                   # price near/above EMA50
+        bb_pct < 0.30,                          # price near lower Bollinger Band (relaxed from 0.25)
+        stoch_k < 0.30 and stoch_k >= stoch_d, # StochRSI oversold (relaxed from 0.25)
     ]
     sell_signals = [
-        rsi > 65,                        # RSI overbought
-        macd_h < 0,                      # MACD bearish
-        price < ema50 * 1.02,            # price near/below EMA50
-        bb_pct > 0.75,                   # price near upper Bollinger Band
-        stoch_k > 0.75 and stoch_k < stoch_d,  # Stoch RSI overbought crossover
+        rsi > 60,                               # RSI overbought zone (relaxed from 65)
+        macd_h < 0,                             # MACD bearish crossover
+        price < ema50 * 1.01,                   # price near/below EMA50
+        bb_pct > 0.70,                          # price near upper Bollinger Band (relaxed from 0.75)
+        stoch_k > 0.70 and stoch_k <= stoch_d, # StochRSI overbought (relaxed from 0.75)
     ]
 
     buy_score  = sum(buy_signals)
     sell_score = sum(sell_signals)
 
-    if buy_score >= 3:
-        conf = "🔥 HIGH" if buy_score >= 4 else "⚡ MEDIUM"
+    if buy_score >= 2:
+        if buy_score == 5:
+            conf = "🌟 VERY HIGH"
+        elif buy_score == 4:
+            conf = "🔥 HIGH"
+        elif buy_score == 3:
+            conf = "⚡ MEDIUM"
+        else:
+            conf = "📊 LOW"
         return "BUY",  price, rsi, conf
-    if sell_score >= 3:
-        conf = "🔥 HIGH" if sell_score >= 4 else "⚡ MEDIUM"
+    if sell_score >= 2:
+        if sell_score == 5:
+            conf = "🌟 VERY HIGH"
+        elif sell_score == 4:
+            conf = "🔥 HIGH"
+        elif sell_score == 3:
+            conf = "⚡ MEDIUM"
+        else:
+            conf = "📊 LOW"
         return "SELL", price, rsi, conf
     return None, price, rsi, None
 
@@ -331,10 +345,20 @@ def get_signal_15m(symbol):
         return "SELL"
     return None
 
+LAST_SIGNAL_TS = {}   # {symbol: datetime of last send}
+SIGNAL_COOLDOWN_HOURS = 4  # resend same direction after 4 hours
+
 def can_send_signal(symbol, signal):
-    global LAST_SIGNAL
-    if symbol not in LAST_SIGNAL or LAST_SIGNAL[symbol] != signal:
-        LAST_SIGNAL[symbol] = signal
+    """Allow signal if: direction changed OR cooldown elapsed."""
+    global LAST_SIGNAL, LAST_SIGNAL_TS
+    now = datetime.utcnow()
+    last_sig = LAST_SIGNAL.get(symbol)
+    last_ts  = LAST_SIGNAL_TS.get(symbol)
+    direction_changed = last_sig != signal
+    cooldown_elapsed  = last_ts is None or (now - last_ts).total_seconds() >= SIGNAL_COOLDOWN_HOURS * 3600
+    if direction_changed or cooldown_elapsed:
+        LAST_SIGNAL[symbol]    = signal
+        LAST_SIGNAL_TS[symbol] = now
         return True
     return False
 
@@ -3768,10 +3792,17 @@ async def signal_loop():
 
     while True:
         try:
+            print(f"[SIGNAL LOOP] Checking {len(SYMBOLS)} coins at {datetime.utcnow().strftime('%H:%M:%S')}")
             for symbol in SYMBOLS:
                 df  = get_data(symbol)
                 sig, price, rsi, conf = get_signal_v2(df)
                 ind = calc_indicators(df)
+
+                # Log current indicator state to console
+                if ind:
+                    bb_pct = ind.get("bb_pct", 0)
+                    stoch_k = ind.get("stoch_k", 0)
+                    print(f"  {symbol}: price={price:.2f} RSI={rsi:.1f} BB%={bb_pct:.2f} SK={stoch_k:.2f} => {sig or 'NO SIGNAL'} {conf or ''}")
 
                 if ind and check_volume_spike(ind) and alerts_ch:
                     await alerts_ch.send(embed=discord.Embed(
@@ -3794,6 +3825,7 @@ async def signal_loop():
                     ))
 
                 if sig and price and can_send_signal(symbol, sig):
+                    print(f"  >>> SENDING {sig} signal for {symbol} (conf={conf})")
                     SIGNAL_STATS[sig]     += 1
                     SIGNAL_STATS["total"] += 1
                     SIGNAL_HISTORY.append({
@@ -3814,12 +3846,16 @@ async def signal_loop():
                         await free_ch.send(embed=f_embed)
                     if vip_ch:
                         await vip_ch.send(embed=v_embed, file=discord.File(chart))
+                elif sig:
+                    print(f"  [COOLDOWN] {sig} for {symbol} blocked — same direction, cooldown not elapsed")
 
+            print(f"[SIGNAL LOOP] Done. Next check in 5 min.")
             await asyncio.sleep(300)
 
         except Exception as e:
+            print(f"[SIGNAL LOOP ERROR] {e}")
             if alerts_ch:
-                await alerts_ch.send(f"⚠️ Signal loop error: {e}")
+                await alerts_ch.send(f"⚠️ Signal loop error: `{e}`")
             await asyncio.sleep(60)
 
 # =========================
@@ -3865,7 +3901,7 @@ async def top_movers_loop():
     while True:
         await asyncio.sleep(86400)
         try:
-            data  = requests.get("https://api.binance.com/api/v3/ticker/24hr", timeout=10).json()
+            data  = requests.get("https://api.binance.us/api/v3/ticker/24hr", timeout=10).json()
             usdt  = [x for x in data if x["symbol"].endswith("USDT") and float(x["quoteVolume"]) > 5_000_000]
             srt   = sorted(usdt, key=lambda x: float(x["priceChangePercent"]))
             losers, gainers = srt[:5], srt[-5:][::-1]
@@ -4578,6 +4614,124 @@ async def on_message(message: discord.Message):
         )
         await _mod_log(message.guild, "clearwarn", message.author, target, f"{old} warns cleared")
         await asyncio.sleep(6); await confirm.delete()
+        return
+
+    # ─── !forcesignal [coin] — Admin forțează un semnal ───
+    if content_lower.startswith("!forcesignal"):
+        if not message.author.guild_permissions.administrator:
+            err = await message.channel.send("🚫 Necesită **Administrator**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        parts = message.content.split()
+        sym_input = parts[1].upper() if len(parts) > 1 else "BTC"
+        sym = sym_input if sym_input.endswith("USDT") else sym_input + "USDT"
+        if sym not in ALL_SYMBOLS:
+            sym = "BTCUSDT"
+        await message.delete()
+        status = await message.channel.send(f"⏳ Forțez semnal pentru **{sym}**...")
+        try:
+            df = get_data(sym)
+            sig, price, rsi, conf = get_signal_v2(df)
+            ind = calc_indicators(df)
+            if df is None or ind is None:
+                await status.edit(content=f"❌ Nu s-au putut obține date pentru **{sym}**.")
+                return
+            # Force reset cooldown
+            LAST_SIGNAL[sym]    = None
+            LAST_SIGNAL_TS[sym] = None
+            conf_display = conf or "📊 LOW"
+            sig_display  = sig  or "NO SIGNAL"
+            # Always force-send regardless of signal
+            if sig is None:
+                sig = "BUY" if ind["rsi"] < 50 else "SELL"
+                conf_display = "📊 FORTAT (test)"
+            LAST_SIGNAL[sym]    = sig
+            LAST_SIGNAL_TS[sym] = datetime.utcnow()
+            SIGNAL_STATS[sig]     += 1
+            SIGNAL_STATS["total"] += 1
+            SIGNAL_HISTORY.append({"symbol": sym, "signal": sig, "price": price,
+                                    "rsi": round(rsi, 2), "confidence": conf_display,
+                                    "timestamp": datetime.utcnow()})
+            ai_text   = ai_analysis(sig, price, rsi, sym)
+            tf15      = get_signal_15m(sym)
+            confirmed = tf15 == sig
+            chart     = generate_chart(df, sym, sig)
+            f_embed   = build_free_embed(sym, sig, price, rsi, conf_display)
+            v_embed   = build_vip_embed(sym, sig, price, rsi, conf_display, ai_text, confirmed)
+            free_ch   = client.get_channel(FREE_SIGNALS_CHANNEL)
+            vip_ch    = client.get_channel(VIP_SIGNALS_CHANNEL)
+            if free_ch:
+                await free_ch.send(embed=f_embed)
+            if vip_ch:
+                await vip_ch.send(embed=v_embed, file=discord.File(chart))
+            await status.edit(content=(
+                f"✅ **Semnal forțat trimis pentru {sym}!**\n"
+                f"📊 RSI={rsi:.1f} | Semnal: {sig} | Confidence: {conf_display}\n"
+                f"📢 Free signals: <#{FREE_SIGNALS_CHANNEL}> | VIP: <#{VIP_SIGNALS_CHANNEL}>"
+            ))
+        except Exception as e:
+            await status.edit(content=f"❌ Eroare: `{e}`")
+        return
+
+    # ─── !indicators [coin] — Verifică valorile live ale indicatorilor ───
+    if content_lower.startswith("!indicators"):
+        if not message.author.guild_permissions.manage_messages:
+            err = await message.channel.send("🚫 Necesită **Manage Messages**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        parts = message.content.split()
+        sym_input = parts[1].upper() if len(parts) > 1 else "BTC"
+        sym = sym_input if sym_input.endswith("USDT") else sym_input + "USDT"
+        if sym not in ALL_SYMBOLS:
+            sym = "BTCUSDT"
+        await message.delete()
+        status = await message.channel.send(f"⏳ Calculez indicatori pentru **{sym}**...")
+        try:
+            df  = get_data(sym)
+            ind = calc_indicators(df)
+            sig, price, rsi, conf = get_signal_v2(df)
+            if ind is None:
+                await status.edit(content=f"❌ Nu s-au putut obține date pentru **{sym}**.")
+                return
+            rsi_v    = ind["rsi"]
+            macd_h   = ind["macd_hist"]
+            bb_pct   = ind["bb_pct"]
+            stoch_k  = ind["stoch_k"]
+            stoch_d  = ind["stoch_d"]
+            ema50    = ind["ema50"]
+            price_v  = ind["price"]
+            # Show which buy/sell conditions are met
+            buy_c = [
+                ("RSI < 40", rsi_v < 40, f"RSI={rsi_v:.1f}"),
+                ("MACD > 0", macd_h > 0, f"MACD_H={macd_h:.5f}"),
+                ("Price > EMA50*0.99", price_v > ema50 * 0.99, f"P={price_v:.2f} EMA50={ema50:.2f}"),
+                ("BB% < 0.30", bb_pct < 0.30, f"BB%={bb_pct:.3f}"),
+                ("StochK<0.30 & K>=D", stoch_k < 0.30 and stoch_k >= stoch_d, f"K={stoch_k:.3f} D={stoch_d:.3f}"),
+            ]
+            sell_c = [
+                ("RSI > 60", rsi_v > 60, f"RSI={rsi_v:.1f}"),
+                ("MACD < 0", macd_h < 0, f"MACD_H={macd_h:.5f}"),
+                ("Price < EMA50*1.01", price_v < ema50 * 1.01, f"P={price_v:.2f} EMA50={ema50:.2f}"),
+                ("BB% > 0.70", bb_pct > 0.70, f"BB%={bb_pct:.3f}"),
+                ("StochK>0.70 & K<=D", stoch_k > 0.70 and stoch_k <= stoch_d, f"K={stoch_k:.3f} D={stoch_d:.3f}"),
+            ]
+            buy_score  = sum(1 for _, v, _ in buy_c if v)
+            sell_score = sum(1 for _, v, _ in sell_c if v)
+            buy_lines  = "\n".join(f"{'✅' if v else '❌'} {n} ({val})" for n, v, val in buy_c)
+            sell_lines = "\n".join(f"{'✅' if v else '❌'} {n} ({val})" for n, v, val in sell_c)
+            embed = discord.Embed(
+                title=f"🔍 Indicatori Live — {sym.replace('USDT','')} / ${price_v:,.2f}",
+                color=0x22c55e if buy_score > sell_score else 0xef4444 if sell_score > buy_score else 0x94a3b8,
+                timestamp=datetime.utcnow()
+            )
+            embed.add_field(name=f"🟢 BUY Score: {buy_score}/5",  value=f"```\n{buy_lines}\n```",  inline=False)
+            embed.add_field(name=f"🔴 SELL Score: {sell_score}/5", value=f"```\n{sell_lines}\n```", inline=False)
+            result = f"**Semnal: {sig} {conf}**" if sig else "**Semnal: NICIUN SEMNAL** (sub 2/5 confirmari)"
+            embed.add_field(name="📊 Rezultat", value=result, inline=False)
+            embed.set_footer(text="!indicators BTC  |  !forcesignal BTC")
+            await status.delete()
+            info = await message.channel.send(embed=embed)
+            await asyncio.sleep(60); await info.delete()
+        except Exception as e:
+            await status.edit(content=f"❌ Eroare: `{e}`")
         return
 
     # ─── !modhelp ───
