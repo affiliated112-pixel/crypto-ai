@@ -4017,6 +4017,83 @@ async def on_message(message: discord.Message):
             await warn.delete()
         except Exception:
             pass
+    # ── !sterge [numar/all] — șterge mesaje din canal ──
+    if content_lower.startswith("!sterge"):
+        # Check permissions
+        if not message.author.guild_permissions.manage_messages:
+            err = await message.channel.send(
+                f"🚫 {message.author.mention} "
+                "🇷🇴 Nu ai permisiunea să ștergi mesaje. Ai nevoie de rolul **Manage Messages**.\n"
+                "🇬🇧 You don't have permission to delete messages. You need the **Manage Messages** role."
+            )
+            await asyncio.sleep(6)
+            try:
+                await err.delete()
+                await message.delete()
+            except Exception:
+                pass
+            return
+
+        parts = message.content.split()
+        arg = parts[1].lower() if len(parts) > 1 else "10"
+
+        # Delete the command message first
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
+        if arg == "all":
+            # Delete up to 1000 messages in batches
+            deleted_total = 0
+            while True:
+                deleted = await message.channel.purge(limit=100, bulk=True)
+                deleted_total += len(deleted)
+                if len(deleted) < 100:
+                    break
+                await asyncio.sleep(1)
+            confirm = await message.channel.send(
+                embed=discord.Embed(
+                    title="🗑️ Chat șters / Chat cleared",
+                    description=(
+                        f"🇷🇴 Am șters **{deleted_total} mesaje** din acest canal.\n"
+                        f"🇬🇧 Deleted **{deleted_total} messages** from this channel.\n\n"
+                        f"👤 Executat de / Executed by: {message.author.mention}"
+                    ),
+                    color=0xef4444,
+                    timestamp=datetime.utcnow()
+                )
+            )
+        else:
+            try:
+                count = int(arg)
+                count = max(1, min(count, 500))  # clamp between 1 and 500
+            except ValueError:
+                count = 10
+
+            deleted = await message.channel.purge(limit=count, bulk=True)
+            confirm = await message.channel.send(
+                embed=discord.Embed(
+                    title="🗑️ Mesaje șterse / Messages deleted",
+                    description=(
+                        f"🇷🇴 Am șters **{len(deleted)} mesaje** din acest canal.\n"
+                        f"🇬🇧 Deleted **{len(deleted)} messages** from this channel.\n\n"
+                        f"👤 Executat de / Executed by: {message.author.mention}\n\n"
+                        "💡 `!sterge 50` → 50 mesaje  |  `!sterge all` → tot chatul"
+                    ),
+                    color=0xef4444,
+                    timestamp=datetime.utcnow()
+                )
+            )
+
+        # Auto-delete confirmation after 5 seconds
+        await asyncio.sleep(5)
+        try:
+            await confirm.delete()
+        except Exception:
+            pass
+        return
+
     await client.process_commands(message)
 
 # =========================
