@@ -12,6 +12,8 @@ from ta.volatility import BollingerBands
 import os
 import random
 from datetime import datetime
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "YOUR_BOT_TOKEN")
 
@@ -3490,6 +3492,35 @@ async def prediction_checker_loop():
         except Exception as e:
             print(f"Prediction checker error: {e}")
 
+# ══════════════════════════════════════════════
+#   KEEP-ALIVE SERVER (24/7 uptime on Replit)
+# ══════════════════════════════════════════════
+
+class _PingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/html; charset=utf-8")
+        self.end_headers()
+        uptime_info = (
+            f"<h2 style='color:#00c896;font-family:monospace'>🤖 Crypto Signals Bot — ONLINE</h2>"
+            f"<p>Signals generated: BUY <b>{SIGNAL_STATS['BUY']}</b> | SELL <b>{SIGNAL_STATS['SELL']}</b> | Total <b>{SIGNAL_STATS['total']}</b></p>"
+            f"<p>Active portfolios: <b>{len(USER_PORTFOLIOS)}</b> | Watchlists: <b>{len(USER_WATCHLISTS)}</b></p>"
+            f"<p style='color:#8b949e'>Last ping: {datetime.utcnow().strftime('%d %b %Y %H:%M:%S UTC')}</p>"
+        )
+        self.wfile.write(uptime_info.encode("utf-8"))
+
+    def log_message(self, format, *args):
+        pass  # suppress HTTP request logs from console
+
+
+def keep_alive():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), _PingHandler)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    print(f"Keep-alive server running on port {port}")
+
 # =========================
 
+keep_alive()
 client.run(TOKEN)
