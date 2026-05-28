@@ -1,0 +1,164 @@
+# 🚀 MULTI API + AI VIP SYSTEM
+
+# =========================
+
+# 📦 IMPORT
+
+# =========================
+
+import requests
+
+# =========================
+
+# 🔗 MULTI API DATA FETCH
+
+# =========================
+
+def get_data_binance(symbol):
+try:
+url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=5m&limit=100"
+data = requests.get(url).json()
+return data
+except:
+return None
+
+def get_data_coingecko(symbol):
+try:
+url = f"https://api.coingecko.com/api/v3/coins/{symbol}/market_chart?vs_currency=usd&days=1"
+data = requests.get(url).json()
+return data
+except:
+return None
+
+def get_data_cryptocompare(symbol):
+try:
+url = f"https://min-api.cryptocompare.com/data/v2/histominute?fsym={symbol}&tsym=USDT&limit=100"
+data = requests.get(url).json()
+return data
+except:
+return None
+
+# =========================
+
+# 🧠 SMART FETCH (AUTO SWITCH)
+
+# =========================
+
+def get_data(symbol):
+data = get_data_binance(symbol)
+
+```
+if data:
+    return data
+
+data = get_data_coingecko(symbol.replace("USDT","").lower())
+
+if data:
+    return data
+
+data = get_data_cryptocompare(symbol.replace("USDT",""))
+
+return data
+```
+
+# =========================
+
+# 👑 VIP CHECK
+
+# =========================
+
+VIP_ROLE_NAME = "VIP"
+
+def is_vip(user):
+return any(role.name == VIP_ROLE_NAME for role in user.roles)
+
+# =========================
+
+# 🤖 AI (FREE API - OPENROUTER)
+
+# =========================
+
+AI_API_KEY = "PASTE_API_KEY"
+
+def ai_analysis(signal, price, rsi):
+try:
+url = "https://openrouter.ai/api/v1/chat/completions"
+
+```
+    headers = {
+        "Authorization": f"Bearer {AI_API_KEY}"
+    }
+
+    payload = {
+        "model": "openai/gpt-3.5-turbo",
+        "messages": [
+            {"role": "user", "content": f"Explain this trade: {signal} at {price} RSI {rsi}"}
+        ]
+    }
+
+    res = requests.post(url, json=payload, headers=headers).json()
+
+    return res["choices"][0]["message"]["content"]
+
+except:
+    return "AI unavailable"
+```
+
+# =========================
+
+# 🚀 SIGNAL LOOP WITH VIP AI
+
+# =========================
+
+async def signal_loop():
+await client.wait_until_ready()
+
+```
+free_channel = client.get_channel(FREE_SIGNALS_CHANNEL)
+vip_channel = client.get_channel(VIP_SIGNALS_CHANNEL)
+
+while True:
+    for symbol in SYMBOLS:
+        df = get_data(symbol)
+
+        signal, price, rsi = get_signal(df)
+
+        if signal:
+
+            msg = f"""
+```
+
+🚀 SIGNAL {symbol}
+
+Type: {signal}
+Price: {price}
+RSI: {rsi}
+"""
+
+```
+            await free_channel.send(msg)
+
+            # VIP AI
+            ai_text = ai_analysis(signal, price, rsi)
+
+            await vip_channel.send(f"{msg}\n🧠 AI:\n{ai_text}")
+
+    await asyncio.sleep(300)
+```
+
+# =========================
+
+# 🔒 VIP COMMAND TEST
+
+# =========================
+
+@client.command()
+async def ai(ctx):
+if not is_vip(ctx.author):
+await ctx.send("❌ VIP ONLY")
+return
+
+```
+text = ai_analysis("BUY", 50000, 30)
+await ctx.send(text)
+```
