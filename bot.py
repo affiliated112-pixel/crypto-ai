@@ -1459,11 +1459,754 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name="/leaderboard",      value="🇬🇧 Top predictors ranking\n🇷🇴 Clasament top predictori",                                                 inline=False)
     embed.add_field(name=SEP2, value="\u200b", inline=False)
     embed.add_field(name="🎓 EDUCATION / EDUCAȚIE", value="\u200b", inline=False)
-    embed.add_field(name="/tutorial [1–5]",   value="🇬🇧 Full beginner guide (5 pages)\n🇷🇴 Ghid complet pentru începători (5 pagini)",                           inline=False)
-    embed.add_field(name="/glossary [cat]",   value="🇬🇧 Crypto dictionary: basics/indicators/risk/market\n🇷🇴 Dicționar crypto: termeni simpli explicați",       inline=False)
-    embed.add_field(name="/tip",              value="🇬🇧 Random trading tip (20+ tips)\n🇷🇴 Sfat aleatoriu de trading (20+ sfaturi)",                             inline=False)
+    embed.add_field(name="/tutorial [1–5]",      value="🇬🇧 Full beginner guide (5 pages)\n🇷🇴 Ghid complet pentru începători (5 pagini)",                inline=False)
+    embed.add_field(name="/glossary [cat]",      value="🇬🇧 Crypto dictionary: basics/indicators/risk/market\n🇷🇴 Dicționar crypto termeni simpli",          inline=False)
+    embed.add_field(name="/tip",                 value="🇬🇧 Random trading tip (20+ tips)\n🇷🇴 Sfat aleatoriu de trading (20+ sfaturi)",                     inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="🚀 BEGINNER GUIDE / GHID ÎNCEPĂTORI", value="\u200b", inline=False)
+    embed.add_field(name="/firsttrade",          value="🇬🇧 Complete beginner guide: from zero to first profitable trade\n🇷🇴 Ghid complet: de la zero la primul trade cu profit", inline=False)
+    embed.add_field(name="/binance",             value="🇬🇧 How to use Binance step by step with screenshots guide\n🇷🇴 Cum folosești Binance pas cu pas",    inline=False)
+    embed.add_field(name="/signals_explained",   value="🇬🇧 Real signal example with every field explained\n🇷🇴 Exemplu real de semnal cu explicații pentru fiecare câmp", inline=False)
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   /FIRSTTRADE — Ghid complet primul trade
+# ══════════════════════════════════════════════
+
+@tree.command(name="firsttrade", description="🚀 Complete beginner guide: from zero to first profitable trade")
+@app_commands.describe(step="Which step (1–8), or leave empty for full overview")
+async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
+
+    if step == 0:
+        # Overview — all 8 steps
+        embed = discord.Embed(
+            title="🚀 Primul Tău Trade / Your First Trade — Ghid Complet",
+            description=(
+                "🇷🇴 **Felicitări că ai ajuns aici!** Urmează acești 8 pași simpli și vei face primul tău trade cu profit.\n"
+                "🇬🇧 **Congratulations on being here!** Follow these 8 simple steps to your first profitable trade.\n"
+                f"{SEP}"
+            ),
+            color=0x22c55e, timestamp=datetime.utcnow()
+        )
+        embed.set_author(name="🚀 Crypto Signals Bot — Beginner Guide", icon_url=BOT_ICON)
+        embed.add_field(
+            name="📋 Cei 8 pași / The 8 Steps",
+            value=(
+                "**1️⃣** Creează cont Binance — `/firsttrade 1`\n"
+                "**2️⃣** Depune bani (USDT) — `/firsttrade 2`\n"
+                "**3️⃣** Înțelege Spot Trading — `/firsttrade 3`\n"
+                "**4️⃣** Citește un semnal BUY — `/firsttrade 4`\n"
+                "**5️⃣** Plasează primul trade — `/firsttrade 5`\n"
+                "**6️⃣** Setează Stop Loss + Take Profit — `/firsttrade 6`\n"
+                "**7️⃣** Monitorizează și ieși corect — `/firsttrade 7`\n"
+                "**8️⃣** Reguli de aur pentru traderi profitabili — `/firsttrade 8`"
+            ),
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Sfat înainte să începi / Tip before you start",
+            value=(
+                "🇷🇴 Începe cu o **sumă mică** pe care îți permiți să o pierzi — de exemplu **50–100$**. "
+                "Nu pune toți banii de la început. Învață mai întâi cum funcționează!\n"
+                "🇬🇧 Start with a **small amount** you can afford to lose — e.g. **$50–100$**. "
+                "Don't invest everything at once. Learn how it works first!"
+            ),
+            inline=False
+        )
+        embed.add_field(
+            name="⏱️ Cât durează? / How long does it take?",
+            value=(
+                "🇷🇴 Contul Binance: ~15 min | Depunere: ~10 min | Primul trade: ~5 min\n"
+                "🇬🇧 Binance account: ~15 min | Deposit: ~10 min | First trade: ~5 min"
+            ),
+            inline=False
+        )
+        embed.set_footer(text="Folosește /firsttrade [1-8] pentru fiecare pas  •  Crypto Signals Bot")
+        await interaction.response.send_message(embed=embed)
+        return
+
+    steps = {
+        1: {
+            "title": "1️⃣ Creează cont Binance / Create Binance Account",
+            "color": 0xF0B90B,
+            "fields": [
+                ("🌐 Pasul 1 — Mergi pe Binance / Go to Binance",
+                 "🇷🇴 Deschide browserul și mergi la **binance.com** (sau descarcă aplicația Binance)\n"
+                 "🇬🇧 Open your browser and go to **binance.com** (or download the Binance app)\n"
+                 "⚠️ Asigură-te că e site-ul oficial! Evită link-uri de pe social media."),
+
+                ("📧 Pasul 2 — Înregistrare / Register",
+                 "🇷🇴 Apasă **Register** → alege **Email** → introdu email și o parolă puternică.\n"
+                 "🇬🇧 Click **Register** → choose **Email** → enter your email and a strong password.\n"
+                 "💡 Parola bună: minim 12 caractere, litere mari/mici, cifre și simboluri."),
+
+                ("✅ Pasul 3 — Verificare email / Email verification",
+                 "🇷🇴 Binance îți trimite un email cu un cod de 6 cifre. Introdu-l pe site.\n"
+                 "🇬🇧 Binance sends a 6-digit code to your email. Enter it on the site.\n"
+                 "⚠️ Dacă nu găsești emailul, verifică folderul **Spam/Junk**."),
+
+                ("🔐 Pasul 4 — Activează 2FA / Enable 2FA",
+                 "🇷🇴 Merge la **Securitate → Google Authenticator** → descarcă app-ul pe telefon → scanează codul QR.\n"
+                 "🇬🇧 Go to **Security → Google Authenticator** → download the app → scan the QR code.\n"
+                 "💡 2FA = un cod nou la fiecare 30 secunde. Nimeni nu poate intra fără telefonul tău."),
+
+                ("🪪 Pasul 5 — Verificare identitate KYC / Identity Verification",
+                 "🇷🇴 Mergi la **Verification** → alege țara → fotografie **buletin/pașaport** față + verso + selfie.\n"
+                 "🇬🇧 Go to **Verification** → choose country → photo of **ID/passport** front + back + selfie.\n"
+                 "⏱️ Durează 5–30 minute. Necesară pentru depuneri mai mari de 100$/zi."),
+            ]
+        },
+        2: {
+            "title": "2️⃣ Depune Bani (USDT) / Deposit Money",
+            "color": 0x22c55e,
+            "fields": [
+                ("💳 Metoda 1 — Card bancar / Credit/Debit Card",
+                 "🇷🇴 Mergi la **Buy Crypto → Credit/Debit Card** → selectează **EUR** sau **RON** → alege să primești **USDT**.\n"
+                 "🇬🇧 Go to **Buy Crypto → Credit/Debit Card** → select **EUR** or your currency → choose to receive **USDT**.\n"
+                 "💡 USDT = dolari digitali. 1 USDT = ~1 dolar american. Cel mai simplu pentru început."),
+
+                ("🏦 Metoda 2 — Transfer bancar / Bank Transfer",
+                 "🇷🇴 Mergi la **Buy Crypto → Bank Transfer** → urmează instrucțiunile pentru SEPA (transfer euro).\n"
+                 "🇬🇧 Go to **Buy Crypto → Bank Transfer** → follow SEPA instructions (Euro transfer).\n"
+                 "⏱️ Durează 1–3 zile lucrătoare. Fără comision."),
+
+                ("💰 Cât să depui? / How much to deposit?",
+                 "🇷🇴 **Recomandat pentru început:** 50–200$ echivalent.\n"
+                 "Nu mai mult decât îți permiți să pierzi complet. Crypto e volatil!\n"
+                 "🇬🇧 **Recommended to start:** $50–200 equivalent.\n"
+                 "Never more than you can afford to lose completely. Crypto is volatile!"),
+
+                ("✅ Verifici dacă ai USDT",
+                 "🇷🇴 Mergi la **Wallet → Spot Wallet** → caută **USDT** în lista de monede → ar trebui să vezi soldul.\n"
+                 "🇬🇧 Go to **Wallet → Spot Wallet** → find **USDT** in the coin list → you should see your balance.\n"
+                 "💡 Dacă vezi USDT cu suma depusă, ești gata pentru Pasul 3!"),
+            ]
+        },
+        3: {
+            "title": "3️⃣ Înțelege Spot Trading / Understand Spot Trading",
+            "color": 0x3b82f6,
+            "fields": [
+                ("📦 Ce este Spot Trading?",
+                 "🇷🇴 **Spot** = cumperi moneda reală. Dacă cumperi 0.001 BTC, chiar deții acel Bitcoin.\n"
+                 "Nu poți pierde mai mult decât ai investit. **Perfect pentru începători!**\n"
+                 "🇬🇧 **Spot** = you buy the real coin. If you buy 0.001 BTC, you actually own it.\n"
+                 "Can't lose more than you invested. **Perfect for beginners!**"),
+
+                ("⚠️ Ce NU este Spot Trading",
+                 "🇷🇴 Spot NU înseamnă Futures sau Margin. Evită acele secțiuni!\n"
+                 "**Futures** = tranzacționezi cu bani împrumutați (leverage) → poți pierde TOT rapid.\n"
+                 "🇬🇧 Spot is NOT Futures or Margin. Avoid those sections!\n"
+                 "**Futures** = trading with borrowed money (leverage) → can lose EVERYTHING fast."),
+
+                ("🔍 Cum găsești Spot pe Binance",
+                 "🇷🇴 Sus pe site apasă **Trade → Spot** → ai ajuns la pagina de trading.\n"
+                 "Cauta în bara de căutare (dreapta sus): `BTC/USDT` sau `ETH/USDT`.\n"
+                 "🇬🇧 Click **Trade → Spot** at the top → you're on the trading page.\n"
+                 "Search in top right bar: `BTC/USDT` or `ETH/USDT`."),
+
+                ("📊 Ce vezi pe ecran / What you see on screen",
+                 "🇷🇴 **Graficul** = prețul în timp real | **Order Book** = cumpărătorii și vânzătorii activi\n"
+                 "**Formularul de cumpărare** = unde plasezi ordinul (stânga jos pe desktop)\n"
+                 "🇬🇧 **Chart** = real-time price | **Order Book** = active buyers and sellers\n"
+                 "**Buy form** = where you place your order (bottom left on desktop)"),
+            ]
+        },
+        4: {
+            "title": "4️⃣ Cum Citești un Semnal BUY / How to Read a BUY Signal",
+            "color": 0x00c853,
+            "fields": [
+                ("📨 Cum arată un semnal real / What a real signal looks like",
+                 "```\n"
+                 "🟢 BUY — Bitcoin (BTC)\n"
+                 "━━━━━━━━━━━━━━━━━━━━━━\n"
+                 "📍 Entry:      $94,500\n"
+                 "🎯 TP1:        $96,000  (+1.6%)\n"
+                 "🎯 TP2:        $98,500  (+4.2%)\n"
+                 "🎯 TP3:        $102,000 (+7.9%)\n"
+                 "🛑 SL:         $92,000  (-2.6%)\n"
+                 "⭐ Confidence: HIGH\n"
+                 "```"),
+
+                ("📍 Entry = Prețul de intrare",
+                 "🇷🇴 Acesta e prețul la care **cumperi**. Încearcă să cumperi cât mai aproape de acest preț.\n"
+                 "Nu cumpăra dacă prețul a depășit deja Entry-ul cu mai mult de **2%**.\n"
+                 "🇬🇧 This is the price at which you **buy**. Try to buy close to this price.\n"
+                 "Don't buy if price already exceeded Entry by more than **2%**."),
+
+                ("🎯 TP1 / TP2 / TP3 = Take Profit (Ia Profitul)",
+                 "🇷🇴 Acestea sunt prețurile la care **vinzi** pentru a lua profit.\n"
+                 "**Strategia ideală:** La TP1 vinde 50%, la TP2 vinde 30%, la TP3 vinde restul.\n"
+                 "🇬🇧 These are the prices at which you **sell** to take profit.\n"
+                 "**Ideal strategy:** At TP1 sell 50%, at TP2 sell 30%, at TP3 sell the rest."),
+
+                ("🛑 SL = Stop Loss (Oprește Pierderea)",
+                 "🇷🇴 Acesta e prețul la care **ieși automat** dacă piața merge contra ta.\n"
+                 "**NU schimba SL-ul în jos** dacă prețul cade — asta e greșeala clasică!\n"
+                 "🇬🇧 This is the price at which you **automatically exit** if market goes against you.\n"
+                 "**NEVER move SL down** if price falls — that's the classic mistake!"),
+
+                ("⭐ Confidence = Calitatea Semnalului",
+                 "🇷🇴 `LOW` = 1-2 indicatori confirmă | `MEDIUM` = 3 | `HIGH` = 4 | `VERY HIGH` = toti 5\n"
+                 "**Tranzacționează doar `HIGH` sau `VERY HIGH`!** Celelalte sunt prea riscante.\n"
+                 "🇬🇧 Only trade `HIGH` or `VERY HIGH` confidence signals! Others are too risky."),
+            ]
+        },
+        5: {
+            "title": "5️⃣ Plasează Primul Trade / Place Your First Trade",
+            "color": 0x6366f1,
+            "fields": [
+                ("📋 Înainte să începi / Before you start",
+                 "🇷🇴 Asigură-te că ai:\n"
+                 "✅ USDT în Spot Wallet\n"
+                 "✅ Un semnal BUY de la bot cu confidence `HIGH` sau `VERY HIGH`\n"
+                 "✅ Știi cât vrei să investești (max 10% din total)\n"
+                 "🇬🇧 Make sure you have:\n"
+                 "✅ USDT in Spot Wallet\n"
+                 "✅ A BUY signal from the bot with `HIGH` or `VERY HIGH` confidence\n"
+                 "✅ Know how much to invest (max 10% of total)"),
+
+                ("1. Deschide perechea de tranzacționare",
+                 "🇷🇴 Pe Binance Spot, caută perechea: Ex: semnal **BTC** → cauta `BTC/USDT`.\n"
+                 "🇬🇧 On Binance Spot, search for the pair: Ex: **BTC** signal → search `BTC/USDT`."),
+
+                ("2. Alege tipul ordinului / Choose order type",
+                 "🇷🇴 În formularul de cumpărare (stânga jos), schimbă din **Market** în **Limit**.\n"
+                 "**Limit Order** = cumperi exact la prețul Entry din semnal, nu mai scump.\n"
+                 "🇬🇧 In the buy form (bottom left), switch from **Market** to **Limit**.\n"
+                 "**Limit Order** = you buy exactly at the Entry price from signal, not higher."),
+
+                ("3. Introdu prețul și suma / Enter price and amount",
+                 "🇷🇴 La **Price** introdu Entry-ul din semnal (ex: 94500)\n"
+                 "La **Amount** introdu câte monede vrei (ex: 0.001 BTC)\n"
+                 "Sau la **Total** introdu suma în USDT (ex: 100 USDT)\n"
+                 "🇬🇧 In **Price** enter the Entry from signal (e.g. 94500)\n"
+                 "In **Amount** enter how many coins (e.g. 0.001 BTC)\n"
+                 "Or in **Total** enter the USDT amount (e.g. 100 USDT)"),
+
+                ("4. Confirmă ordinul / Confirm the order",
+                 "🇷🇴 Apasă **Buy BTC** → verifică detaliile → apasă **Confirm**.\n"
+                 "Ordinul apare în **Open Orders** jos pe pagină. Când prețul ajunge la Entry, se execută!\n"
+                 "🇬🇧 Click **Buy BTC** → verify details → click **Confirm**.\n"
+                 "Order appears in **Open Orders** at the bottom. When price reaches Entry, it executes!"),
+            ]
+        },
+        6: {
+            "title": "6️⃣ Setează Stop Loss + Take Profit / Set SL + TP",
+            "color": 0xef4444,
+            "fields": [
+                ("🏆 Metoda cea mai bună: OCO Order",
+                 "🇷🇴 **OCO** = One Cancels the Other = setezi simultan **TP** și **SL**. Binance le execută automat.\n"
+                 "Când prețul ajunge la TP → vinde automat cu profit. Dacă ajunge la SL → vinde automat cu pierdere limitată.\n"
+                 "🇬🇧 **OCO** = One Cancels the Other = set **TP** and **SL** together. Binance executes automatically.\n"
+                 "Price hits TP → auto-sell with profit. Price hits SL → auto-sell with limited loss."),
+
+                ("📋 Cum plasezi un OCO Order / How to place an OCO",
+                 "🇷🇴 1. După ce ordinul de cumpărare s-a executat, mergi la **Sell**\n"
+                 "2. Schimbă tipul din `Limit` în **`OCO`**\n"
+                 "3. La **Price (Limit)** introdu **TP1** din semnal (prețul de vânzare cu profit)\n"
+                 "4. La **Stop Price** introdu **SL** din semnal (prețul de oprire pierdere)\n"
+                 "5. La **Limit Price** pune același SL sau cu 0.5% mai jos\n"
+                 "6. Apasă **Sell BTC → Confirm**\n"
+                 "🇬🇧 1. After buy order executed, go to **Sell**\n"
+                 "2. Switch type from `Limit` to **`OCO`**\n"
+                 "3. **Price (Limit)** = TP1 from signal\n"
+                 "4. **Stop Price** = SL from signal\n"
+                 "5. **Limit Price** = same as SL or 0.5% below\n"
+                 "6. Click **Sell BTC → Confirm**"),
+
+                ("✅ Ce se întâmplă după / What happens next",
+                 "🇷🇴 Acum ești protejat! Dacă prețul crește → ia profit automat la TP1.\n"
+                 "Dacă prețul scade → iese automat la SL. **Nu mai trebuie să stai cu ochii pe ecran!**\n"
+                 "🇬🇧 Now you're protected! If price rises → auto-profit at TP1.\n"
+                 "If price falls → auto-exit at SL. **You don't need to watch the screen!**"),
+
+                ("🔄 După TP1: Mută SL la Entry / After TP1: Move SL to Entry",
+                 "🇷🇴 Când TP1 e atins: anulezi OCO-ul rămas → plasezi un nou Sell Limit la **TP2** și un **Stop Loss la Entry**.\n"
+                 "Acum ești fără risc! Chiar dacă prețul cade înapoi, nu pierzi nimic.\n"
+                 "🇬🇧 When TP1 is hit: cancel remaining OCO → place new Sell Limit at **TP2** and **SL at Entry**.\n"
+                 "Now you're risk-free! Even if price falls back, you lose nothing."),
+            ]
+        },
+        7: {
+            "title": "7️⃣ Monitorizează și Ieși Corect / Monitor and Exit Correctly",
+            "color": 0xfbbf24,
+            "fields": [
+                ("👁️ Cât de des să verifici / How often to check",
+                 "🇷🇴 O dată la 4–8 ore e suficient dacă ai OCO setat. Nu sta cu ochii mereu pe grafic!\n"
+                 "**Stresul de a urmări fiecare mișcare** duce la decizii emoționale greșite.\n"
+                 "🇬🇧 Once every 4–8 hours is enough if you have OCO set. Don't watch every minute!\n"
+                 "**Watching every move** leads to emotional, wrong decisions."),
+
+                ("✅ Ieșire corectă cu profit / Correct profitable exit",
+                 "🇷🇴 **Scenariul ideal:**\n"
+                 "• TP1 atins → 50% din poziție vândut automat cu profit ✅\n"
+                 "• Muti SL la Entry → risc zero pentru restul ✅\n"
+                 "• TP2 atins → restul vândut cu profit și mai mare ✅\n"
+                 "🇬🇧 **Ideal scenario:**\n"
+                 "• TP1 hit → 50% sold automatically with profit ✅\n"
+                 "• SL moved to Entry → zero risk on remaining ✅\n"
+                 "• TP2 hit → rest sold with even more profit ✅"),
+
+                ("❌ Ieșire cu pierdere (e OK!) / Loss exit (it's OK!)",
+                 "🇷🇴 SL-ul s-a activat? **E perfect normal.** Nu fiecare trade e câștigător.\n"
+                 "Dacă ai risc 2% per trade și câștig 4% per trade câștigat → ești pe profit chiar și cu 40% trades greșite!\n"
+                 "🇬🇧 SL triggered? **Completely normal.** Not every trade wins.\n"
+                 "Risk 2% per trade, gain 4% per winning trade → you profit even with 40% losing trades!"),
+
+                ("🚫 Nu face asta / Never do this",
+                 "🇷🇴 ❌ Nu muta SL-ul în jos sperând că se întoarce\n"
+                 "❌ Nu adăuga bani la o poziție pierzătoare\n"
+                 "❌ Nu anula SL-ul din lăcomie\n"
+                 "🇬🇧 ❌ Never move SL down hoping for recovery\n"
+                 "❌ Never add money to a losing position\n"
+                 "❌ Never cancel SL out of greed"),
+            ]
+        },
+        8: {
+            "title": "8️⃣ Regulile de Aur ale Traderului Profitabil / Golden Rules",
+            "color": 0xf59e0b,
+            "fields": [
+                ("🥇 Regula #1 — Protejează capitalul",
+                 "🇷🇴 Scopul principal nu e să câștigi mult — e **să nu pierzi mult**.\n"
+                 "Un trader care pierde -50% are nevoie de +100% ca să revină. Protejează-te!\n"
+                 "🇬🇧 The main goal is not to gain a lot — it's **not to lose a lot**.\n"
+                 "A -50% loss requires +100% gain just to break even. Protect yourself!"),
+
+                ("🥈 Regula #2 — Risc consistent",
+                 "🇷🇴 Riscă mereu același procent per trade: **1–2% din capital**.\n"
+                 "Ex: ai 500$ → riști max 5–10$ per trade. Folosește `/risk` ca să calculezi exact.\n"
+                 "🇬🇧 Always risk the same % per trade: **1–2% of capital**.\n"
+                 "Ex: $500 capital → max $5–10 risk per trade. Use `/risk` to calculate exactly."),
+
+                ("🥉 Regula #3 — Tranzacționează doar semnale HIGH",
+                 "🇷🇴 Botul trimite semnale de calitate diferită. Tranzacționează **DOAR** `HIGH` și `VERY HIGH`.\n"
+                 "Semnalele `LOW` și `MEDIUM` au mai puțini indicatori de confirmare — riscul e mai mare.\n"
+                 "🇬🇧 The bot sends different quality signals. Trade **ONLY** `HIGH` and `VERY HIGH`.\n"
+                 "`LOW` and `MEDIUM` signals have fewer confirmations — higher risk."),
+
+                ("🏅 Regula #4 — Jurnalul de trading",
+                 "🇷🇴 Notează fiecare trade: data, moneda, entry, exit, profit/pierdere, motiv.\n"
+                 "După 20 trades vei vedea exact care e pattern-ul tău și unde greșești.\n"
+                 "🇬🇧 Note every trade: date, coin, entry, exit, profit/loss, reason.\n"
+                 "After 20 trades you'll see exactly your pattern and where you go wrong."),
+
+                ("🎯 Regula #5 — Răbdare și consistență",
+                 "🇷🇴 Trading-ul profitabil nu e sprint — e **maraton**. 3–5 trades bune pe săptămână e suficient.\n"
+                 "Nu tranzacționa dacă ești obosit, stresat sau emoțional. Asteaptă starea bună.\n"
+                 "🇬🇧 Profitable trading is not a sprint — it's a **marathon**. 3–5 good trades per week is enough.\n"
+                 "Don't trade when tired, stressed or emotional. Wait for a clear mind."),
+
+                (SEP,
+                 "🚀 **Ești gata să faci primul trade!**\n"
+                 "Folosește `/signals_explained` pentru a vedea cum arată exact un semnal.\n"
+                 "Folosește `/risk` pentru a calcula dimensiunea poziției.\n"
+                 "💎 Upgrade la **VIP** pentru semnale cu TP1+TP2+TP3+SL și analiză AI!\n\n"
+                 "🚀 **You're ready for your first trade!**\n"
+                 "Use `/signals_explained` to see exactly how a signal looks.\n"
+                 "Use `/risk` to calculate your position size."),
+            ]
+        }
+    }
+
+    if step not in steps:
+        await interaction.response.send_message(
+            "❓ Pași disponibili: `0`(overview) `1` `2` `3` `4` `5` `6` `7` `8`\n"
+            "🇬🇧 Available steps: `0`(overview) `1` `2` `3` `4` `5` `6` `7` `8`",
+            ephemeral=True); return
+
+    data = steps[step]
+    embed = discord.Embed(
+        title=data["title"],
+        color=data["color"],
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="🚀 Crypto Signals Bot — First Trade Guide", icon_url=BOT_ICON)
+    for name, value in data["fields"]:
+        embed.add_field(name=name, value=value, inline=False)
+    # Navigation footer
+    next_step = step + 1 if step < 8 else 0
+    prev_step = step - 1 if step > 1 else 0
+    nav = f"◀️ `/firsttrade {prev_step}`  |  Pasul **{step}/8**  |  `/firsttrade {next_step}` ▶️" if step > 1 else f"Pasul **{step}/8**  |  Next: `/firsttrade {next_step}` ▶️"
+    embed.add_field(name="📄 Navigare / Navigation", value=nav, inline=False)
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   /BINANCE — Ghid Binance pas cu pas
+# ══════════════════════════════════════════════
+
+@tree.command(name="binance", description="🟡 How to use Binance — step by step guide for beginners")
+@app_commands.describe(topic="Choose a topic")
+@app_commands.choices(topic=[
+    app_commands.Choice(name="🏠 Overview / Prezentare generala", value="overview"),
+    app_commands.Choice(name="📝 Register / Inregistrare cont",   value="register"),
+    app_commands.Choice(name="💳 Deposit / Depunere bani",        value="deposit"),
+    app_commands.Choice(name="📊 Spot Trade / Cum faci un trade", value="trade"),
+    app_commands.Choice(name="🛡️ OCO Order / Stop Loss + TP",    value="oco"),
+])
+async def slash_binance(interaction: discord.Interaction, topic: str = "overview"):
+    topics = {
+        "overview": {
+            "title": "🟡 Binance — Prezentare Generală / Overview",
+            "color": 0xF0B90B,
+            "fields": [
+                ("Ce este Binance? / What is Binance?",
+                 "🇷🇴 Binance este cel mai mare exchange de criptomonede din lume.\n"
+                 "Îl folosești pentru a **cumpăra, vinde și schimba** monede crypto cu bani reali.\n"
+                 "🇬🇧 Binance is the world's largest crypto exchange.\n"
+                 "You use it to **buy, sell and exchange** crypto with real money."),
+
+                ("📱 Unde îl găsești / Where to find it",
+                 "🇷🇴 **Website:** binance.com | **App iOS:** App Store → caută Binance\n"
+                 "**App Android:** Google Play → caută Binance\n"
+                 "⚠️ Descarcă DOAR din sursele oficiale! Evită link-uri de pe Telegram/Instagram.\n"
+                 "🇬🇧 **Website:** binance.com | **iOS App:** App Store → search Binance\n"
+                 "**Android:** Google Play → search Binance. Only from official sources!"),
+
+                ("🗺️ Secțiunile importante / Important sections",
+                 "🇷🇴 • **Trade → Spot** = pentru cumpărare/vânzare simpla (recomandat pentru tine)\n"
+                 "• **Wallet → Spot Wallet** = soldul tau de monede\n"
+                 "• **Buy Crypto** = depune bani de pe card sau transfer bancar\n"
+                 "• **Orders → Open Orders** = ordinele tale active\n"
+                 "🇬🇧 • **Trade → Spot** = for simple buying/selling (recommended for you)\n"
+                 "• **Wallet → Spot Wallet** = your coin balances\n"
+                 "• **Buy Crypto** = deposit money from card or bank transfer\n"
+                 "• **Orders → Open Orders** = your active orders"),
+
+                ("📋 Pași rapizi / Quick steps",
+                 "`/binance register` — Cum creezi contul\n"
+                 "`/binance deposit` — Cum depui bani\n"
+                 "`/binance trade` — Cum plasezi un trade\n"
+                 "`/binance oco` — Cum setezi Stop Loss + Take Profit"),
+            ]
+        },
+        "register": {
+            "title": "📝 Binance — Înregistrare Cont / Account Registration",
+            "color": 0xF0B90B,
+            "fields": [
+                ("Pasul 1 — Mergi pe binance.com",
+                 "🇷🇴 Deschide **binance.com** în browser. Apasă butonul galben **Register** din dreapta sus.\n"
+                 "🇬🇧 Open **binance.com** in your browser. Click the yellow **Register** button top right."),
+
+                ("Pasul 2 — Completează datele / Fill in details",
+                 "🇷🇴 • Introdu **adresa de email**\n"
+                 "• Creează o **parolă puternică** (min 12 caractere, majuscule, cifre, simboluri)\n"
+                 "• Bifează că ești de acord cu termenii\n"
+                 "• Apasă **Create Account**\n"
+                 "🇬🇧 • Enter your **email address**\n"
+                 "• Create a **strong password** (min 12 chars, caps, numbers, symbols)\n"
+                 "• Check the terms agreement\n"
+                 "• Click **Create Account**"),
+
+                ("Pasul 3 — Verificare email / Email verification",
+                 "🇷🇴 Binance trimite un email cu **cod de 6 cifre**. Intră în email → copiază codul → introdu pe site.\n"
+                 "Nu ai primit email? Verifică folderul **Spam** sau **Junk**.\n"
+                 "🇬🇧 Binance sends a **6-digit code** by email. Open email → copy code → enter on site.\n"
+                 "No email? Check your **Spam** or **Junk** folder."),
+
+                ("Pasul 4 — Activează 2FA (important!)",
+                 "🇷🇴 Mergi la **Profilul tău → Securitate → Google Authenticator**\n"
+                 "1. Descarcă **Google Authenticator** pe telefon (gratuit)\n"
+                 "2. Apasă **Enable** pe Binance\n"
+                 "3. Scanează codul QR cu app-ul\n"
+                 "4. Introdu codul de 6 cifre generat → apasă **Confirm**\n"
+                 "💡 Salvează **cheia de backup** undeva sigur!\n"
+                 "🇬🇧 Go to **Profile → Security → Google Authenticator**\n"
+                 "Download the app, scan QR, confirm with 6-digit code. Save backup key!"),
+
+                ("Pasul 5 — Verificare identitate KYC",
+                 "🇷🇴 Mergi la **Profilul tău → Identificare (KYC)**\n"
+                 "• Alege **Romania** ca țară\n"
+                 "• Fotografiază **buletin/pașaport** (față + spate + selfie cu documentul)\n"
+                 "• Asteaptă 5–30 minute pentru aprobare\n"
+                 "⚠️ KYC e necesar pentru a depune bani. Datele tale sunt securizate.\n"
+                 "🇬🇧 Go to **Profile → Identification (KYC)**\n"
+                 "Photo of ID (front + back + selfie). Wait 5–30 min for approval."),
+            ]
+        },
+        "deposit": {
+            "title": "💳 Binance — Depunere Bani / Deposit Money",
+            "color": 0x22c55e,
+            "fields": [
+                ("Metoda 1 — Card bancar (cea mai rapidă!)",
+                 "🇷🇴 1. Mergi la **Buy Crypto → Credit/Debit Card**\n"
+                 "2. La **Spend** selectează suma și moneda (ex: 100 RON sau 50 EUR)\n"
+                 "3. La **Receive** alege **USDT** (sau **BTC** dacă vrei direct Bitcoin)\n"
+                 "4. Apasă **Buy** → introdu datele cardului → confirmă\n"
+                 "⏱️ Instant! USDT apare în Spot Wallet în 1–2 minute.\n"
+                 "💸 Comision: ~1.5% pentru card Visa/Mastercard\n"
+                 "🇬🇧 Instant! USDT appears in Spot Wallet in 1–2 minutes. ~1.5% fee."),
+
+                ("Metoda 2 — Transfer bancar SEPA (fara comision)",
+                 "🇷🇴 1. Mergi la **Buy Crypto → Bank Deposit**\n"
+                 "2. Alege **EUR** ca moneda și **SEPA Transfer**\n"
+                 "3. Binance iti da datele de transfer bancar\n"
+                 "4. Faci transferul din aplicatia bancii tale\n"
+                 "⏱️ Durează 1–3 zile lucrătoare. Fara comision!\n"
+                 "🇬🇧 1–3 business days. No fee! Best for larger amounts."),
+
+                ("Cât să depui? / How much to deposit?",
+                 "🇷🇴 **Recomandat pentru primele tranzacții:**\n"
+                 "• Începători: **50–100$** (100–500 RON)\n"
+                 "• Intermediar: **200–500$**\n"
+                 "Nu pune mai mult decât ți permiți să pierzi complet!\n"
+                 "🇬🇧 **Recommended for first trades:**\n"
+                 "• Beginners: **$50–100**\n"
+                 "• Intermediate: **$200–500**\n"
+                 "Never more than you can afford to lose completely!"),
+
+                ("Verifici soldul / Check your balance",
+                 "🇷🇴 Mergi la **Wallet → Spot Wallet** → caută **USDT** în listă → verifici suma.\n"
+                 "Dacă vezi suma depusă → ești gata să faci primul trade! 🎉\n"
+                 "🇬🇧 Go to **Wallet → Spot Wallet** → find **USDT** → check amount.\n"
+                 "If you see your deposited amount → ready for first trade! 🎉"),
+            ]
+        },
+        "trade": {
+            "title": "📊 Binance — Cum Faci un Trade Spot / How to Spot Trade",
+            "color": 0x3b82f6,
+            "fields": [
+                ("Pasul 1 — Deschide Spot Trading",
+                 "🇷🇴 Sus pe site: **Trade → Spot** (sau pe app: tab-ul Trading)\n"
+                 "Ești acum pe pagina de trading. Poate pare complicat la prima vedere — e normal!\n"
+                 "🇬🇧 At the top: **Trade → Spot** (or on app: Trading tab)\n"
+                 "You're on the trading page now. Looks complex at first — that's normal!"),
+
+                ("Pasul 2 — Caută perechea / Find the pair",
+                 "🇷🇴 Dreapta sus cauta: `BTC/USDT` (pentru Bitcoin) sau `ETH/USDT` (Ethereum)\n"
+                 "Alege perechea care apare în semnalul botului.\n"
+                 "🇬🇧 Top right search: `BTC/USDT` (Bitcoin) or `ETH/USDT` (Ethereum)\n"
+                 "Choose the pair shown in the bot signal."),
+
+                ("Pasul 3 — Formularul de cumpărare / Buy form",
+                 "🇷🇴 Stânga jos ai formularul. Schimbă din **Market** în **Limit**.\n"
+                 "• **Price** = Entry-ul din semnal (ex: 94500)\n"
+                 "• **Amount** = câte monede (ex: 0.001) SAU\n"
+                 "• **Total** = câți USDT vrei să cheltuiești (ex: 100)\n"
+                 "🇬🇧 Bottom left is the form. Switch from **Market** to **Limit**.\n"
+                 "• **Price** = Entry from signal (e.g. 94500)\n"
+                 "• **Total** = how many USDT to spend (e.g. 100)"),
+
+                ("Pasul 4 — Confirmă / Confirm",
+                 "🇷🇴 Apasă **Buy BTC** (sau moneda respectiva) → citeste sumarul → apasă **Confirm**.\n"
+                 "Ordinul apare în **Open Orders** jos. Cand prețul ajunge la Entry → se executa automat!\n"
+                 "🇬🇧 Click **Buy BTC** → read summary → click **Confirm**.\n"
+                 "Order appears in **Open Orders** below. When price hits Entry → executes automatically!"),
+
+                ("Pasul urmator / Next step",
+                 "🇷🇴 Dupa executare, **imediat** seteaza Stop Loss + Take Profit!\n"
+                 "Foloseste `/binance oco` pentru a vedea cum setezi OCO Order.\n"
+                 "🇬🇧 After execution, **immediately** set Stop Loss + Take Profit!\n"
+                 "Use `/binance oco` to see how to set OCO Order."),
+            ]
+        },
+        "oco": {
+            "title": "🛡️ Binance — OCO Order (Stop Loss + Take Profit)",
+            "color": 0xef4444,
+            "fields": [
+                ("Ce este OCO? / What is OCO?",
+                 "🇷🇴 **OCO = One Cancels the Other**\n"
+                 "Setezi simultan un ordin de **vânzare cu profit (TP)** și unul de **vânzare cu pierdere (SL)**.\n"
+                 "Binance le executa automat. Cand unul se activează, celălalt se anulează.\n"
+                 "🇬🇧 **OCO = One Cancels the Other**\n"
+                 "Set a **profit sell (TP)** and a **loss sell (SL)** at the same time.\n"
+                 "Binance executes automatically. When one triggers, the other cancels."),
+
+                ("Cum plasezi un OCO / How to place OCO",
+                 "🇷🇴 1. Dupa ce ai cumpărat moneda, mergi la formularul de **Sell** (vânzare)\n"
+                 "2. Schimbă tipul din `Limit` în **`OCO`**\n"
+                 "3. **Price (Limit Price)** = TP1 din semnalul botului (prețul de profit)\n"
+                 "4. **Stop Price** = SL din semnalul botului (prețul de stop)\n"
+                 "5. **Limit Price** = acelasi ca SL sau cu 0.5% mai jos\n"
+                 "6. **Amount** = câte monede ai cumpărat\n"
+                 "7. Apasă **Sell → Confirm**\n"
+                 "🇬🇧 1. After buying, go to **Sell** form\n"
+                 "2. Switch type to **`OCO`**\n"
+                 "3. **Price (Limit)** = TP1 from bot signal\n"
+                 "4. **Stop Price** = SL from bot signal\n"
+                 "5. **Limit Price** = same as SL or 0.5% below\n"
+                 "6. **Amount** = how many coins you bought\n"
+                 "7. Click **Sell → Confirm**"),
+
+                ("✅ Rezultat / Result",
+                 "🇷🇴 Acum ai două ordine active în **Open Orders**:\n"
+                 "• Un ordin Limit la TP1 (vânzare cu profit)\n"
+                 "• Un ordin Stop-Limit la SL (vânzare cu pierdere limitată)\n"
+                 "Ești protejat 100% automat!\n"
+                 "🇬🇧 Now you have two orders in **Open Orders**:\n"
+                 "• A Limit order at TP1 (profit sell)\n"
+                 "• A Stop-Limit order at SL (limited loss sell)\n"
+                 "You're 100% automatically protected!"),
+
+                ("💡 Exemplu real / Real example",
+                 "🇷🇴 Ai cumpărat BTC la $94,500. Semnalul bot spune:\n"
+                 "TP1: $96,000 | SL: $92,000\n"
+                 "• **Price (Limit):** 96000\n"
+                 "• **Stop Price:** 92000\n"
+                 "• **Limit Price:** 91500\n"
+                 "🇬🇧 Bought BTC at $94,500. Bot signal says:\n"
+                 "TP1: $96,000 | SL: $92,000\n"
+                 "• **Price (Limit):** 96000\n"
+                 "• **Stop Price:** 92000\n"
+                 "• **Limit Price:** 91500"),
+            ]
+        }
+    }
+
+    data = topics.get(topic, topics["overview"])
+    embed = discord.Embed(
+        title=data["title"],
+        description=f"🇷🇴 Ghid Binance pentru începători  •  🇬🇧 Binance guide for beginners\n{SEP}",
+        color=data["color"],
+        timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="🟡 Crypto Signals Bot — Binance Guide", icon_url=BOT_ICON)
+    embed.set_thumbnail(url="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png")
+    for name, value in data["fields"]:
+        embed.add_field(name=name, value=value, inline=False)
+    embed.add_field(
+        name=f"{SEP}\n📂 Alte secțiuni / Other sections",
+        value=(
+            "`/binance overview` — Prezentare generala\n"
+            "`/binance register` — Inregistrare cont\n"
+            "`/binance deposit` — Depunere bani\n"
+            "`/binance trade` — Cum faci un trade\n"
+            "`/binance oco` — Stop Loss + Take Profit\n"
+            "`/firsttrade` — Ghid complet primul trade"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   /SIGNALS_EXPLAINED — Exemplu real de semnal
+# ══════════════════════════════════════════════
+
+@tree.command(name="signals_explained", description="📨 Real signal example with every field explained")
+async def slash_signals_explained(interaction: discord.Interaction):
+    await interaction.response.defer()
+
+    # Get a real live price for the example
+    info = get_price_info("BTCUSDT")
+    price = info["price"] if info else 94500.0
+    tp1   = round(price * 1.016, 2)
+    tp2   = round(price * 1.042, 2)
+    tp3   = round(price * 1.079, 2)
+    sl    = round(price * 0.974, 2)
+    tp1p  = round((tp1 - price) / price * 100, 1)
+    tp2p  = round((tp2 - price) / price * 100, 1)
+    tp3p  = round((tp3 - price) / price * 100, 1)
+    slp   = round((sl - price) / price * 100, 1)
+
+    embed = discord.Embed(
+        title="📨 Cum Arată un Semnal Real / What a Real Signal Looks Like",
+        description=(
+            "🇷🇴 Iată **exact** ce vei vedea în canalul de semnale și ce înseamnă fiecare câmp:\n"
+            "🇬🇧 Here is **exactly** what you'll see in the signals channel and what each field means:\n"
+            f"{SEP}"
+        ),
+        color=0x00c853, timestamp=datetime.utcnow()
+    )
+    embed.set_author(name="📨 Crypto Signals Bot — Signal Explained", icon_url=BOT_ICON)
+
+    # Simulated signal block
+    embed.add_field(
+        name="🟢 Exemplu Semnal BUY — Bitcoin (BTC) [LIVE PRICES]",
+        value=(
+            f"```\n"
+            f"🟢 BUY SIGNAL — Bitcoin (BTC)\n"
+            f"{'━'*32}\n"
+            f"📍 Entry:      ${price:>12,.2f}\n"
+            f"🎯 TP1:        ${tp1:>12,.2f}  ({tp1p:+.1f}%)\n"
+            f"🎯 TP2:        ${tp2:>12,.2f}  ({tp2p:+.1f}%)\n"
+            f"🎯 TP3:        ${tp3:>12,.2f}  ({tp3p:+.1f}%)\n"
+            f"🛑 SL:         ${sl:>12,.2f}  ({slp:+.1f}%)\n"
+            f"⭐ Confidence: HIGH\n"
+            f"```"
+        ),
+        inline=False
+    )
+
+    # Explanation of each field
+    embed.add_field(
+        name="📍 Entry = La ce preț cumperi / Buy price",
+        value=(
+            f"🇷🇴 Cumperi BTC la **${price:,.2f}**. Folosește un **Limit Order** la acest preț pe Binance Spot.\n"
+            "⚠️ Nu cumpăra dacă prețul a depășit Entry cu mai mult de 2%!\n"
+            f"🇬🇧 Buy BTC at **${price:,.2f}**. Use a **Limit Order** at this price on Binance Spot.\n"
+            "⚠️ Don't buy if price already exceeded Entry by more than 2%!"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name=f"🎯 TP1 = ${tp1:,.2f} — Primul profit",
+        value=(
+            f"🇷🇴 La **${tp1:,.2f}** vinzi **50%** din monedele cumpărate și iei primul profit (`{tp1p:+.1f}%`).\n"
+            "Dupa aceea muti Stop Loss-ul la Entry — nu mai ai risc!\n"
+            f"🇬🇧 At **${tp1:,.2f}** sell **50%** of your coins for first profit (`{tp1p:+.1f}%`).\n"
+            "Then move Stop Loss to Entry — no more risk!"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name=f"🎯 TP2 = ${tp2:,.2f} — Al doilea profit",
+        value=(
+            f"🇷🇴 La **${tp2:,.2f}** vinzi inca **30%** (`{tp2p:+.1f}%`). Pastrezi 20% pentru TP3.\n"
+            f"🇬🇧 At **${tp2:,.2f}** sell another **30%** (`{tp2p:+.1f}%`). Keep 20% for TP3."
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name=f"🎯 TP3 = ${tp3:,.2f} — Targetul maxim",
+        value=(
+            f"🇷🇴 La **${tp3:,.2f}** vinzi restul de 20% pentru **profit maxim** (`{tp3p:+.1f}%`).\n"
+            "Numai VIP primesc TP3 in semnale!\n"
+            f"🇬🇧 At **${tp3:,.2f}** sell remaining 20% for **maximum profit** (`{tp3p:+.1f}%`).\n"
+            "Only VIP members receive TP3 in signals!"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name=f"🛑 SL = ${sl:,.2f} — Stop Loss (Protectia ta)",
+        value=(
+            f"🇷🇴 Daca prețul scade la **${sl:,.2f}** (adica `{slp:.1f}%`), ordinul OCO vinde automat.\n"
+            "Pierderea e **limitata** si **controlata**. Fara SL = risc total!\n"
+            f"🇬🇧 If price drops to **${sl:,.2f}** (`{slp:.1f}%`), OCO order auto-sells.\n"
+            "Loss is **limited** and **controlled**. Without SL = total risk!"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="⭐ Confidence = HIGH — Calitatea semnalului",
+        value=(
+            "🇷🇴 `HIGH` inseamna ca **4 din 5 indicatori** (RSI + MACD + BB + StochRSI + EMA) confirma semnalul.\n"
+            "Cu cat e mai mare, cu atat e mai sigur. **Tranzactioneaza DOAR `HIGH` sau `VERY HIGH`!**\n"
+            "🇬🇧 `HIGH` means **4 out of 5 indicators** (RSI + MACD + BB + StochRSI + EMA) confirm the signal.\n"
+            "Higher = more reliable. **Only trade `HIGH` or `VERY HIGH`!**"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name=f"{SEP}\n✅ Rezumat actiuni / Action summary",
+        value=(
+            f"🇷🇴 1. Cumpara BTC cu **Limit Order** la `${price:,.2f}`\n"
+            f"2. Seteaza **OCO Order**: TP1=`${tp1:,.2f}`, SL=`${sl:,.2f}`\n"
+            f"3. La TP1 muta SL la Entry\n"
+            f"4. La TP2 vinzi restul\n\n"
+            f"🇬🇧 1. Buy BTC with **Limit Order** at `${price:,.2f}`\n"
+            f"2. Set **OCO Order**: TP1=`${tp1:,.2f}`, SL=`${sl:,.2f}`\n"
+            f"3. At TP1 move SL to Entry\n"
+            f"4. At TP2 sell the rest"
+        ),
+        inline=False
+    )
+    embed.set_footer(text=f"Crypto Signals Bot  •  Preturi live BTC  •  {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
 
 
 @tree.command(name="sentiment", description="🧠 Full market sentiment: Fear&Greed + RSI + trend overview")
@@ -2396,28 +3139,116 @@ async def slash_leaderboard(interaction: discord.Interaction):
 
 @client.event
 async def on_member_join(member):
+    # ── Welcome message in channel ──
     ch = client.get_channel(WELCOME_CHANNEL)
-    if not ch:
-        return
-    embed = discord.Embed(
-        title=f"👋 Welcome / Bun venit, {member.display_name}!",
-        description=(
-            "🇬🇧 **Welcome to the server!**\n"
-            "We provide real-time crypto signals for BTC, ETH, SOL & BNB.\n\n"
-            f"📜 Rules → <#{RULES_CHANNEL}>\n"
-            f"📊 How to use → <#{HOWTO_CHANNEL}>\n"
-            f"💎 Get VIP → <#{GET_VIP_CHANNEL}>\n\n"
-            "🇷🇴 **Bun venit pe server!**\n"
-            "Oferim semnale crypto în timp real pentru BTC, ETH, SOL și BNB.\n\n"
-            f"📜 Reguli → <#{RULES_CHANNEL}>\n"
-            f"📊 Cum funcționează → <#{HOWTO_CHANNEL}>\n"
-            f"💎 Obține VIP → <#{GET_VIP_CHANNEL}>"
-        ),
-        color=discord.Color.gold(),
-        timestamp=datetime.utcnow()
-    )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    await ch.send(embed=embed)
+    if ch:
+        embed = discord.Embed(
+            title=f"👋 Bun venit / Welcome, {member.display_name}!",
+            description=(
+                "🇷🇴 **Bun venit pe serverul Crypto Signals!** 🎉\n"
+                "Suntem o comunitate de traderi care primesc semnale BUY/SELL în timp real pentru BTC, ETH, SOL și BNB.\n\n"
+                f"📜 Reguli → <#{RULES_CHANNEL}>\n"
+                f"📊 Cum funcționează → <#{HOWTO_CHANNEL}>\n"
+                f"💎 Obține VIP → <#{GET_VIP_CHANNEL}>\n\n"
+                "🇬🇧 **Welcome to Crypto Signals server!** 🎉\n"
+                "We're a trading community receiving real-time BUY/SELL signals for BTC, ETH, SOL & BNB.\n\n"
+                f"📜 Rules → <#{RULES_CHANNEL}>\n"
+                f"📊 How to use → <#{HOWTO_CHANNEL}>\n"
+                f"💎 Get VIP → <#{GET_VIP_CHANNEL}>"
+            ),
+            color=discord.Color.gold(),
+            timestamp=datetime.utcnow()
+        )
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.add_field(
+            name="🚀 Ești nou? Începe aici! / New here? Start here!",
+            value=(
+                "`/firsttrade` — Ghid complet: de la zero la primul trade\n"
+                "`/binance` — Cum folosești Binance pas cu pas\n"
+                "`/signals_explained` — Ce înseamnă fiecare câmp din semnal\n"
+                "`/tutorial 1` — Ce este un semnal BUY/SELL\n"
+                "`/glossary` — Dicționar termeni crypto\n"
+                "`/help` — Toate comenzile disponibile"
+            ),
+            inline=False
+        )
+        embed.set_footer(text="Crypto Signals Bot  •  Nu este sfat financiar")
+        await ch.send(embed=embed)
+
+    # ── Automatic DM with beginner starter guide ──
+    try:
+        dm_embed = discord.Embed(
+            title=f"👋 Salut {member.display_name}! Bun venit pe Crypto Signals!",
+            description=(
+                "🇷🇴 Îți mulțumim că te-ai alăturat comunității noastre de trading!\n"
+                "Am pregătit un **ghid rapid** ca să începi cu dreptul.\n\n"
+                "🇬🇧 Thank you for joining our trading community!\n"
+                "Here's a **quick guide** to get you started right.\n"
+                f"{SEP}"
+            ),
+            color=0x22c55e,
+            timestamp=datetime.utcnow()
+        )
+        dm_embed.set_thumbnail(url=BOT_ICON)
+        dm_embed.set_author(name="🤖 Crypto Signals Bot", icon_url=BOT_ICON)
+
+        dm_embed.add_field(
+            name="🎯 Pasul 1 — Înțelege cum funcționează",
+            value=(
+                "🇷🇴 Botul analizează automat BTC, ETH, SOL și BNB folosind 5 indicatori tehnici "
+                "(RSI, MACD, Bollinger Bands, StochRSI, EMA) și trimite semnale **BUY** sau **SELL**.\n"
+                "🇬🇧 The bot automatically analyzes BTC, ETH, SOL & BNB using 5 technical indicators and sends **BUY** or **SELL** signals."
+            ),
+            inline=False
+        )
+        dm_embed.add_field(
+            name="📨 Pasul 2 — Cum arată un semnal",
+            value=(
+                "🇷🇴 Fiecare semnal conține:\n"
+                "📍 **Entry** = prețul la care cumperi\n"
+                "🎯 **TP1/TP2** = prețurile la care vinzi cu profit\n"
+                "🛑 **SL** = prețul de Stop Loss (protecție automată)\n"
+                "⭐ **Confidence** = calitatea semnalului (tranzacționează doar HIGH+!)\n"
+                "🇬🇧 Entry=buy price, TP1/TP2=sell for profit, SL=stop loss protection, Confidence=signal quality."
+            ),
+            inline=False
+        )
+        dm_embed.add_field(
+            name="🏦 Pasul 3 — Ai nevoie de un cont Binance",
+            value=(
+                "🇷🇴 Dacă nu ai încă, creează un cont pe **binance.com** (gratuit, durează 15 min).\n"
+                "Folosește comenzile de mai jos pentru ghid complet:\n"
+                "🇬🇧 If you don't have one yet, create a free account at **binance.com** (15 min)."
+            ),
+            inline=False
+        )
+        dm_embed.add_field(
+            name=f"{SEP}\n📋 Comenzile esențiale / Essential Commands",
+            value=(
+                "🚀 `/firsttrade` — Ghid complet în 8 pași de la zero la primul trade\n"
+                "🟡 `/binance` — Cum folosești Binance (register, depunere, trade, OCO)\n"
+                "📨 `/signals_explained` — Exemplu real de semnal explicat câmp cu câmp\n"
+                "📖 `/tutorial 1` — Ce este un semnal BUY/SELL\n"
+                "📚 `/glossary` — Dicționar termeni: RSI, MACD, SL, TP, Spot, Futures\n"
+                "🎓 `/tip` — Sfat aleatoriu de trading\n"
+                "📋 `/help` — Toate comenzile disponibile"
+            ),
+            inline=False
+        )
+        dm_embed.add_field(
+            name="⚠️ Regula de aur / Golden Rule",
+            value=(
+                "🇷🇴 **Niciodată** nu investi mai mult decât îți permiți să pierzi complet.\n"
+                "Începe cu o sumă mică (50–100$) și învață mai întâi!\n"
+                "🇬🇧 **Never** invest more than you can afford to lose completely.\n"
+                "Start small ($50–100) and learn first!"
+            ),
+            inline=False
+        )
+        dm_embed.set_footer(text="Crypto Signals Bot  •  Nu este sfat financiar  •  Not financial advice")
+        await member.send(embed=dm_embed)
+    except discord.Forbidden:
+        pass  # User has DMs disabled — skip silently
 
 # =========================
 # ON READY
