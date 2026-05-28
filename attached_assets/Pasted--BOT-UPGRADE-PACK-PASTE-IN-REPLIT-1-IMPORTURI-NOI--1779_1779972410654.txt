@@ -1,0 +1,192 @@
+# 🚀 BOT UPGRADE PACK (PASTE IN REPLIT)
+
+# =========================
+
+# 🔥 1. IMPORTURI NOI
+
+# =========================
+
+import matplotlib.pyplot as plt
+
+# =========================
+
+# 📈 2. CHART FUNCTION
+
+# =========================
+
+def generate_chart(df, symbol):
+plt.figure()
+plt.plot(df["close"])
+plt.title(symbol)
+
+```
+file_name = f"{symbol}.png"
+plt.savefig(file_name)
+plt.close()
+
+return file_name
+```
+
+# =========================
+
+# 💰 3. MULTI COIN
+
+# =========================
+
+SYMBOLS = ["BTCUSDT", "ETHUSDT"]
+
+def get_data(symbol):
+url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=5m&limit=100"
+data = requests.get(url).json()
+
+```
+df = pd.DataFrame(data, columns=[
+    "time","open","high","low","close","volume",
+    "close_time","qav","trades","tbbav","tbqav","ignore"
+])
+
+df["close"] = df["close"].astype(float)
+return df
+```
+
+# =========================
+
+# 🧠 4. SMART SIGNAL
+
+# =========================
+
+def get_signal(df):
+rsi = RSIIndicator(close=df["close"], window=14).rsi().iloc[-1]
+price = df["close"].iloc[-1]
+
+```
+if rsi < 30:
+    return "BUY", price, rsi
+elif rsi > 70:
+    return "SELL", price, rsi
+return None, price, rsi
+```
+
+# =========================
+
+# ⚠️ 5. VOLATILITY ALERT
+
+# =========================
+
+def check_volatility(df):
+change = abs(df["close"].iloc[-1] - df["close"].iloc[-2])
+if change > 200:
+return True
+return False
+
+# =========================
+
+# 🚀 6. SIGNAL LOOP UPGRADE
+
+# =========================
+
+async def signal_loop():
+await client.wait_until_ready()
+
+```
+free_channel = client.get_channel(FREE_SIGNALS_CHANNEL)
+vip_channel = client.get_channel(VIP_SIGNALS_CHANNEL)
+alerts_channel = client.get_channel(ALERTS_CHANNEL)
+
+while True:
+    try:
+        for symbol in SYMBOLS:
+            df = get_data(symbol)
+            signal, price, rsi = get_signal(df)
+
+            if check_volatility(df):
+                await alerts_channel.send(f"⚠️ HIGH VOLATILITY on {symbol}!")
+
+            if signal:
+                chart = generate_chart(df, symbol)
+
+                free_msg = f"""
+```
+
+📊 FREE SIGNAL
+
+{signal} {symbol}
+Price: {round(price,2)}
+RSI: {round(rsi,2)}
+"""
+
+```
+                vip_msg = f"""
+```
+
+💎 VIP SIGNAL
+
+{signal} {symbol}
+
+📍 Entry: {round(price,2)}
+🎯 TP1: {round(price*1.02,2)}
+🎯 TP2: {round(price*1.04,2)}
+🛑 SL: {round(price*0.97,2)}
+
+📊 RSI: {round(rsi,2)}
+"""
+
+```
+                await free_channel.send(free_msg)
+
+                await vip_channel.send(
+                    content=vip_msg,
+                    file=discord.File(chart)
+                )
+
+        await asyncio.sleep(300)
+
+    except Exception as e:
+        await alerts_channel.send(f"⚠️ Error: {e}")
+        await asyncio.sleep(60)
+```
+
+# =========================
+
+# 📊 7. PERFORMANCE FAKE (MARKETING)
+
+# =========================
+
+async def performance_loop():
+await client.wait_until_ready()
+channel = client.get_channel(1509524196139466852)
+
+```
+while True:
+    await channel.send("""
+```
+
+📊 DAILY PERFORMANCE
+
+✅ +12% BTC trade
+✅ +8% ETH trade
+🔥 VIP WIN RATE: 87%
+
+Join VIP 💎
+""")
+await asyncio.sleep(86400)
+
+# =========================
+
+# 🧠 8. MARKET CRASH ALERT
+
+# =========================
+
+async def crash_alert():
+await client.wait_until_ready()
+channel = client.get_channel(ALERTS_CHANNEL)
+
+```
+while True:
+    df = get_data("BTCUSDT")
+
+    if df["close"].iloc[-1] < df["close"].iloc[-10]:
+        await channel.send("🚨 MARKET DROP DETECTED!")
+
+    await asyncio.sleep(600)
+```
