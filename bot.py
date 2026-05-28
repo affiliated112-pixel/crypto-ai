@@ -7,6 +7,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from ta.momentum import RSIIndicator
 import os
+import random
 
 TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "YOUR_BOT_TOKEN")
 
@@ -34,6 +35,8 @@ PERFORMANCE_CHANNEL = 1509524196139466852
 # =========================
 
 SYMBOLS = ["BTCUSDT", "ETHUSDT"]
+
+LAST_SIGNAL = {}
 
 intents = discord.Intents.default()
 intents.members = True
@@ -76,10 +79,13 @@ def get_data(symbol="BTCUSDT"):
     return df
 
 # =========================
-# SMART SIGNAL
+# SMART SIGNAL (FIX OUT OF BOUNDS)
 # =========================
 
 def get_signal(df):
+    if len(df) < 20:
+        return None, None, None
+
     rsi = RSIIndicator(close=df["close"], window=14).rsi().iloc[-1]
     price = df["close"].iloc[-1]
 
@@ -87,7 +93,60 @@ def get_signal(df):
         return "BUY", price, rsi
     elif rsi > 70:
         return "SELL", price, rsi
+
     return None, price, rsi
+
+# =========================
+# ANTI-SPAM
+# =========================
+
+def can_send_signal(symbol, signal):
+    global LAST_SIGNAL
+
+    if symbol not in LAST_SIGNAL:
+        LAST_SIGNAL[symbol] = signal
+        return True
+
+    if LAST_SIGNAL[symbol] != signal:
+        LAST_SIGNAL[symbol] = signal
+        return True
+
+    return False
+
+# =========================
+# PRO SIGNAL FORMAT
+# =========================
+
+def format_signal(symbol, signal, price, rsi):
+    return f"""
+🚀 {symbol} SIGNAL
+
+📍 Type: {signal}
+💰 Entry: {round(price,2)}
+
+🎯 Take Profit:
+TP1: {round(price*1.02,2)}
+TP2: {round(price*1.04,2)}
+
+🛑 Stop Loss:
+SL: {round(price*0.97,2)}
+
+📊 RSI: {round(rsi,2)}
+
+⚠️ Risk: Medium
+🔥 Confidence: High
+"""
+
+# =========================
+# AI EXPLANATION
+# =========================
+
+def explain_trade(signal, rsi):
+    if signal == "BUY":
+        return f"AI: Market is oversold (RSI {round(rsi,2)}). Potential upward reversal."
+    elif signal == "SELL":
+        return f"AI: Market is overbought (RSI {round(rsi,2)}). Potential drop incoming."
+    return ""
 
 # =========================
 # VOLATILITY ALERT
@@ -143,7 +202,11 @@ async def on_ready():
 """)
 
     howto_channel = client.get_channel(HOWTO_CHANNEL)
-    await howto_channel.send("""
+    async for msg in howto_channel.history(limit=10):
+        if "HOW TO USE SIGNALS" in msg.content:
+            break
+    else:
+        await howto_channel.send("""
 📊 HOW TO USE SIGNALS
 
 1. Use Binance / Bybit
@@ -169,13 +232,13 @@ Premium signals + analysis 📈
 """)
 
     client.loop.create_task(signal_loop())
-    client.loop.create_task(news_loop())
+    client.loop.create_task(market_news_loop())
     client.loop.create_task(announcement_loop())
     client.loop.create_task(performance_loop())
     client.loop.create_task(crash_alert())
 
 # =========================
-# SIGNAL LOOP (MULTI COIN + CHART)
+# SIGNAL LOOP (ANTI-SPAM + PRO FORMAT)
 # =========================
 
 async def signal_loop():
@@ -191,36 +254,18 @@ async def signal_loop():
                 df = get_data(symbol)
                 signal, price, rsi = get_signal(df)
 
-                if check_volatility(df):
-                    await alerts_channel.send(f"⚠️ HIGH VOLATILITY on {symbol}!")
+                if df is not None and len(df) >= 2:
+                    if check_volatility(df):
+                        await alerts_channel.send(f"⚠️ HIGH VOLATILITY on {symbol}!")
 
-                if signal:
+                if signal and price and can_send_signal(symbol, signal):
                     chart = generate_chart(df, symbol)
+                    msg = format_signal(symbol, signal, price, rsi)
+                    explanation = explain_trade(signal, rsi)
 
-                    free_msg = f"""
-📊 FREE SIGNAL
-
-{signal} {symbol}
-Price: {round(price,2)}
-RSI: {round(rsi,2)}
-"""
-
-                    vip_msg = f"""
-💎 VIP SIGNAL
-
-{signal} {symbol}
-
-📍 Entry: {round(price,2)}
-🎯 TP1: {round(price*1.02,2)}
-🎯 TP2: {round(price*1.04,2)}
-🛑 SL: {round(price*0.97,2)}
-
-📊 RSI: {round(rsi,2)}
-"""
-
-                    await free_channel.send(free_msg)
+                    await free_channel.send(msg)
                     await vip_channel.send(
-                        content=vip_msg,
+                        content=f"{msg}\n🧠 {explanation}",
                         file=discord.File(chart)
                     )
 
@@ -231,15 +276,23 @@ RSI: {round(rsi,2)}
             await asyncio.sleep(60)
 
 # =========================
-# NEWS LOOP
+# MARKET NEWS LOOP (RANDOM)
 # =========================
 
-async def news_loop():
+async def market_news_loop():
     await client.wait_until_ready()
     channel = client.get_channel(MARKET_NEWS_CHANNEL)
 
+    news = [
+        "🚨 BTC volatility increasing!",
+        "📉 Market correction possible",
+        "📈 Bullish momentum detected",
+        "🔥 ETH gaining strength"
+    ]
+
     while True:
-        await channel.send("📰 Market update: BTC volatility detected!")
+        msg = random.choice(news)
+        await channel.send(msg)
         await asyncio.sleep(1800)
 
 # =========================

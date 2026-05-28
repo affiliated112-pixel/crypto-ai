@@ -1,0 +1,175 @@
+# 🚀 UPDATE V2 – FIX + PRO FEATURES
+
+# =========================
+
+# ❗ 1. FIX ERROR (OUT OF BOUNDS)
+
+# =========================
+
+def get_signal(df):
+if len(df) < 20:
+return None, None, None  # evita crash
+
+```
+rsi = RSIIndicator(close=df["close"], window=14).rsi().iloc[-1]
+price = df["close"].iloc[-1]
+
+if rsi < 30:
+    return "BUY", price, rsi
+elif rsi > 70:
+    return "SELL", price, rsi
+
+return None, price, rsi
+```
+
+# =========================
+
+# ❗ 2. FIX SPAM MESSAGES
+
+# =========================
+
+LAST_SIGNAL = {}
+
+def can_send_signal(symbol, signal):
+global LAST_SIGNAL
+
+```
+if symbol not in LAST_SIGNAL:
+    LAST_SIGNAL[symbol] = signal
+    return True
+
+if LAST_SIGNAL[symbol] != signal:
+    LAST_SIGNAL[symbol] = signal
+    return True
+
+return False
+```
+
+# =========================
+
+# 🔥 3. UPGRADED SIGNAL MESSAGE (PRO STYLE)
+
+# =========================
+
+def format_signal(symbol, signal, price, rsi):
+return f"""
+🚀 {symbol} SIGNAL
+
+📍 Type: {signal}
+💰 Entry: {round(price,2)}
+
+🎯 Take Profit:
+TP1: {round(price*1.02,2)}
+TP2: {round(price*1.04,2)}
+
+🛑 Stop Loss:
+SL: {round(price*0.97,2)}
+
+📊 RSI: {round(rsi,2)}
+
+⚠️ Risk: Medium
+🔥 Confidence: High
+"""
+
+# =========================
+
+# 🤖 4. AI EXPLANATION (FAKE BUT COOL)
+
+# =========================
+
+def explain_trade(signal, rsi):
+if signal == "BUY":
+return f"AI: Market is oversold (RSI {round(rsi,2)}). Potential upward reversal."
+elif signal == "SELL":
+return f"AI: Market is overbought (RSI {round(rsi,2)}). احتمال drop."
+return ""
+
+# =========================
+
+# 🧠 5. MARKET NEWS FAKE AUTO
+
+# =========================
+
+async def market_news_loop():
+await client.wait_until_ready()
+channel = client.get_channel(1509522484594999387)
+
+```
+news = [
+    "🚨 BTC volatility increasing!",
+    "📉 Market correction possible",
+    "📈 Bullish momentum detected",
+    "🔥 ETH gaining strength"
+]
+
+while True:
+    msg = random.choice(news)
+    await channel.send(msg)
+    await asyncio.sleep(1800)
+```
+
+# =========================
+
+# 📊 6. SIGNAL LOOP FINAL (ANTI SPAM)
+
+# =========================
+
+async def signal_loop():
+await client.wait_until_ready()
+
+```
+free_channel = client.get_channel(FREE_SIGNALS_CHANNEL)
+vip_channel = client.get_channel(VIP_SIGNALS_CHANNEL)
+
+while True:
+    for symbol in SYMBOLS:
+        df = get_data(symbol)
+        signal, price, rsi = get_signal(df)
+
+        if signal and can_send_signal(symbol, signal):
+
+            msg = format_signal(symbol, signal, price, rsi)
+            explanation = explain_trade(signal, rsi)
+
+            await free_channel.send(msg)
+
+            await vip_channel.send(f"{msg}\n🧠 {explanation}")
+
+    await asyncio.sleep(300)
+```
+
+# =========================
+
+# 🟢 7. HOW TO USE (SEND ONLY ONCE)
+
+# =========================
+
+@client.event
+async def on_ready():
+print("Bot ONLINE")
+
+```
+channel = client.get_channel(1509522378072391801)
+
+async for msg in channel.history(limit=10):
+    if "HOW TO USE SIGNALS" in msg.content:
+        break
+else:
+    await channel.send("""
+```
+
+📊 HOW TO USE SIGNALS
+
+1. Use Binance / Bybit
+2. Follow Entry / TP / SL
+3. Use risk management
+
+🇷🇴
+
+1. Folosește Binance / Bybit
+2. Urmează Entry / TP / SL
+3. Gestionează riscul
+   """)
+
+   client.loop.create_task(signal_loop())
+   client.loop.create_task(market_news_loop())
