@@ -44,9 +44,17 @@ VIP_ROLE_NAME = "VIP"
 DISCLAIMER_EN = "Crypto Signals Bot | Not financial advice. Invest responsibly."
 DISCLAIMER_RO = "Crypto Signals Bot | Nu e sfat financiar. Investește responsabil."
 
-LAST_SIGNAL  = {}
-SIGNAL_STATS = {"BUY": 0, "SELL": 0, "total": 0}
-PRICE_ALERTS = {}
+LAST_SIGNAL    = {}
+SIGNAL_STATS   = {"BUY": 0, "SELL": 0, "total": 0}
+PRICE_ALERTS   = {}
+SIGNAL_HISTORY = []   # {symbol, signal, price, rsi, confidence, timestamp}
+
+SCAM_KEYWORDS = [
+    "dm me", "free crypto", "100x guaranteed", "dm for profit",
+    "recovery service", "tripling funds", "click here", "t.me/",
+    "investment platform", "double your", "recuperare fonduri",
+    "trimiteti", "castig garantat", "dm pentru profit"
+]
 
 COIN_COLORS = {
     "BTCUSDT": 0xF7931A,
@@ -740,6 +748,123 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name="/signal 💎 VIP",   value="🇬🇧 Live signal on-demand (VIP only)\n🇷🇴 Semnal live instant (doar VIP)", inline=False)
     embed.add_field(name="/tip",             value="🇬🇧 Random trading tip\n🇷🇴 Sfat de trading aleatoriu",                    inline=False)
     embed.add_field(name="/removealert [coin]", value="🇬🇧 Delete a price alert\n🇷🇴 Șterge o alertă de preț",                inline=False)
+    embed.add_field(name="/sentiment",       value="🇬🇧 Full market sentiment overview\n🇷🇴 Tablou complet de sentiment piață",   inline=False)
+    embed.add_field(name="/history",         value="🇬🇧 Last 10 signals with details\n🇷🇴 Ultimele 10 semnale cu detalii",       inline=False)
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.response.send_message(embed=embed)
+
+
+@tree.command(name="sentiment", description="🧠 Full market sentiment: Fear&Greed + RSI + trend overview")
+async def slash_sentiment(interaction: discord.Interaction):
+    await interaction.response.defer()
+    try:
+        fg_score, fg_class = get_fear_greed()
+    except Exception:
+        fg_score, fg_class = "N/A", "Unknown"
+
+    rows = []
+    overall_rsi_vals = []
+    for sym in SYMBOLS:
+        try:
+            df = get_data(sym)
+            if df is None or len(df) < 14:
+                continue
+            delta = df["close"].diff()
+            gain  = delta.clip(lower=0).rolling(14).mean()
+            loss  = (-delta.clip(upper=0)).rolling(14).mean()
+            rs    = gain / loss.replace(0, 1e-9)
+            rsi_v = round(float(100 - 100 / (1 + rs.iloc[-1])), 1)
+            overall_rsi_vals.append(rsi_v)
+            p = df["close"].iloc[-1]
+            p_prev = df["close"].iloc[-2]
+            pct = round((p - p_prev) / p_prev * 100, 2)
+            trend = "🟢 Bullish" if rsi_v < 70 and pct > 0 else ("🔴 Bearish" if rsi_v > 30 and pct < 0 else "🟡 Neutral")
+            rows.append(f"**{sym.replace('USDT','')}** — RSI `{rsi_v}` | `{'+' if pct>=0 else ''}{pct}%` | {trend}")
+        except Exception:
+            pass
+
+    avg_rsi = round(sum(overall_rsi_vals) / len(overall_rsi_vals), 1) if overall_rsi_vals else 0
+
+    if isinstance(fg_score, int):
+        if fg_score <= 25:
+            overall = "😱 Extreme Fear / Frică extremă"
+        elif fg_score <= 45:
+            overall = "😟 Fear / Frică"
+        elif fg_score <= 55:
+            overall = "😐 Neutral / Neutru"
+        elif fg_score <= 75:
+            overall = "😄 Greed / Lăcomie"
+        else:
+            overall = "🤑 Extreme Greed / Lăcomie extremă"
+    else:
+        overall = "❓ Unknown"
+
+    mkt_bias = "🟢 Bullish" if avg_rsi < 55 and (isinstance(fg_score, int) and fg_score > 50) else \
+               ("🔴 Bearish" if avg_rsi > 55 and (isinstance(fg_score, int) and fg_score < 50) else "🟡 Mixed")
+
+    embed = discord.Embed(
+        title="🧠 Market Sentiment / Sentiment Piață",
+        description=(
+            f"🇬🇧 Combined view: Fear & Greed + RSI + price momentum\n"
+            f"🇷🇴 Vedere combinată: Fear & Greed + RSI + momentum preț"
+        ),
+        color=discord.Color.dark_blue(),
+        timestamp=datetime.utcnow()
+    )
+    embed.add_field(
+        name="😱 Fear & Greed Index",
+        value=f"`{fg_score}/100` — **{fg_class}**\n{overall}",
+        inline=False
+    )
+    embed.add_field(
+        name="📊 RSI Overview / Privire de ansamblu RSI",
+        value="\n".join(rows) if rows else "N/A",
+        inline=False
+    )
+    embed.add_field(
+        name="📈 Average RSI / RSI Mediu",
+        value=f"`{avg_rsi}` — {mkt_bias}",
+        inline=True
+    )
+    embed.add_field(
+        name="📡 Signals Today / Semnale azi",
+        value=f"🟢 BUY: `{SIGNAL_STATS['BUY']}` | 🔴 SELL: `{SIGNAL_STATS['SELL']}`",
+        inline=True
+    )
+    embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+    await interaction.followup.send(embed=embed)
+
+
+@tree.command(name="history", description="📜 Show last 10 signals with details")
+async def slash_history(interaction: discord.Interaction):
+    if not SIGNAL_HISTORY:
+        await interaction.response.send_message(
+            "🇬🇧 No signals recorded yet this session.\n🇷🇴 Niciun semnal înregistrat în această sesiune.",
+            ephemeral=True
+        )
+        return
+    embed = discord.Embed(
+        title="📜 Signal History / Istoricul Semnalelor",
+        description=(
+            "🇬🇧 Last recorded signals this session\n"
+            "🇷🇴 Ultimele semnale înregistrate în această sesiune"
+        ),
+        color=discord.Color.dark_gold(),
+        timestamp=datetime.utcnow()
+    )
+    for s in reversed(SIGNAL_HISTORY[-10:]):
+        ts = s["timestamp"].strftime("%d %b %H:%M UTC")
+        icon = "🟢" if s["signal"] == "BUY" else "🔴"
+        embed.add_field(
+            name=f"{icon} {s['symbol'].replace('USDT','')} — {s['signal']} @ ${s['price']:,.2f}",
+            value=f"RSI: `{s['rsi']}` | Confidence: `{s['confidence']}%` | {ts}",
+            inline=False
+        )
+    embed.add_field(
+        name="📊 Session totals / Total sesiune",
+        value=f"🟢 BUY: `{SIGNAL_STATS['BUY']}` | 🔴 SELL: `{SIGNAL_STATS['SELL']}` | Total: `{SIGNAL_STATS['total']}`",
+        inline=False
+    )
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
@@ -859,6 +984,7 @@ async def on_ready():
     client.loop.create_task(price_alert_checker())
     client.loop.create_task(neutral_market_loop())
     client.loop.create_task(education_loop())
+    client.loop.create_task(weekly_recap_loop())
 
 # =========================
 # SIGNAL LOOP
@@ -900,6 +1026,14 @@ async def signal_loop():
                 if sig and price and can_send_signal(symbol, sig):
                     SIGNAL_STATS[sig]     += 1
                     SIGNAL_STATS["total"] += 1
+                    SIGNAL_HISTORY.append({
+                        "symbol": symbol, "signal": sig,
+                        "price": price, "rsi": round(rsi, 2),
+                        "confidence": conf,
+                        "timestamp": datetime.utcnow()
+                    })
+                    if len(SIGNAL_HISTORY) > 500:
+                        SIGNAL_HISTORY.pop(0)
                     ai_text    = ai_analysis(sig, price, rsi, symbol)
                     tf15       = get_signal_15m(symbol)
                     confirmed  = tf15 == sig
@@ -1250,6 +1384,99 @@ async def education_loop():
                 index += 1
         except Exception:
             pass
+
+# =========================
+# AUTO-MODERATION
+# =========================
+
+@client.event
+async def on_message(message: discord.Message):
+    if message.author.bot:
+        return
+    content_lower = message.content.lower()
+    if any(kw in content_lower for kw in SCAM_KEYWORDS):
+        try:
+            await message.delete()
+            warn = await message.channel.send(
+                f"⚠️ {message.author.mention} "
+                "🇬🇧 Your message was removed. Spam/scam content is not allowed on this server.\n"
+                "🇷🇴 Mesajul tău a fost șters. Conținutul spam/scam nu este permis pe acest server."
+            )
+            await asyncio.sleep(8)
+            await warn.delete()
+        except Exception:
+            pass
+    await client.process_commands(message)
+
+# =========================
+# WEEKLY RECAP LOOP
+# =========================
+
+async def weekly_recap_loop():
+    await client.wait_until_ready()
+    channel = client.get_channel(PERFORMANCE_CHANNEL)
+    while True:
+        try:
+            now = datetime.utcnow()
+            days_until_sunday = (6 - now.weekday()) % 7
+            if days_until_sunday == 0 and now.hour == 20:
+                week_signals = [s for s in SIGNAL_HISTORY
+                                if (now - s["timestamp"]).days < 7]
+                buys  = sum(1 for s in week_signals if s["signal"] == "BUY")
+                sells = sum(1 for s in week_signals if s["signal"] == "SELL")
+                total = len(week_signals)
+
+                best_coin, best_count = "N/A", 0
+                coin_counts = {}
+                for s in week_signals:
+                    coin_counts[s["symbol"]] = coin_counts.get(s["symbol"], 0) + 1
+                if coin_counts:
+                    best_coin = max(coin_counts, key=coin_counts.get).replace("USDT", "")
+                    best_count = coin_counts[max(coin_counts, key=coin_counts.get)]
+
+                try:
+                    fg_score, fg_class = get_fear_greed()
+                    fg_str = f"`{fg_score}/100` — {fg_class}"
+                except Exception:
+                    fg_str = "N/A"
+
+                embed = discord.Embed(
+                    title="📊 Weekly Recap / Rezumat Săptămânal",
+                    description=(
+                        f"🇬🇧 Here's how the market looked this week.\n"
+                        f"🇷🇴 Iată cum a arătat piața săptămâna aceasta."
+                    ),
+                    color=discord.Color.gold(),
+                    timestamp=now
+                )
+                embed.add_field(
+                    name="📡 Signals this week / Semnale săptămâna asta",
+                    value=f"🟢 BUY: `{buys}` | 🔴 SELL: `{sells}` | Total: `{total}`",
+                    inline=False
+                )
+                embed.add_field(
+                    name="🏆 Most active coin / Moneda cea mai activă",
+                    value=f"**{best_coin}** — `{best_count}` semnale",
+                    inline=True
+                )
+                embed.add_field(
+                    name="😱 Fear & Greed (end of week)",
+                    value=fg_str,
+                    inline=True
+                )
+                embed.add_field(
+                    name="💎 Want better results? / Vrei rezultate mai bune?",
+                    value=f"→ <#{GET_VIP_CHANNEL}>",
+                    inline=False
+                )
+                embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
+                if channel:
+                    await channel.send(embed=embed)
+                await asyncio.sleep(3600)
+            else:
+                await asyncio.sleep(1800)
+        except Exception:
+            await asyncio.sleep(1800)
 
 # =========================
 
