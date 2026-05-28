@@ -58,6 +58,10 @@ USER_WATCHLISTS  = {}   # {user_id: [symbol, ...]}
 WATCHLIST_NOTIF  = {}   # {user_id_symbol: last_ts}
 PREDICTIONS      = {}   # {user_id: {symbol, direction, price, ts}}
 PRED_SCORES      = {}   # {user_id: {correct, total, username}}
+USER_WARNINGS    = {}   # {user_id: [{reason, mod, ts}]}
+USER_JOURNAL     = {}   # {user_id: [{coin, entry, exit_price, size, profit, ts, note}]}
+SPAM_TRACKER     = {}   # {user_id: [timestamp, ...]}
+SPAM_MUTED       = set()  # user_ids currently auto-muted for spam
 
 SCAM_KEYWORDS = [
     "dm me", "free crypto", "100x guaranteed", "dm for profit",
@@ -1465,8 +1469,24 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name=SEP2, value="\u200b", inline=False)
     embed.add_field(name="🚀 BEGINNER GUIDE / GHID ÎNCEPĂTORI", value="\u200b", inline=False)
     embed.add_field(name="/firsttrade",          value="🇬🇧 Complete beginner guide: from zero to first profitable trade\n🇷🇴 Ghid complet: de la zero la primul trade cu profit", inline=False)
-    embed.add_field(name="/binance",             value="🇬🇧 How to use Binance step by step with screenshots guide\n🇷🇴 Cum folosești Binance pas cu pas",    inline=False)
-    embed.add_field(name="/signals_explained",   value="🇬🇧 Real signal example with every field explained\n🇷🇴 Exemplu real de semnal cu explicații pentru fiecare câmp", inline=False)
+    embed.add_field(name="/binance",             value="🇬🇧 How to use Binance step by step\n🇷🇴 Cum folosești Binance pas cu pas",                                                inline=False)
+    embed.add_field(name="/signals_explained",   value="🇬🇧 Real signal example with every field explained\n🇷🇴 Exemplu real de semnal cu explicații",                            inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="📓 TRADING JOURNAL", value="\u200b", inline=False)
+    embed.add_field(name="/journal add",         value="🇬🇧 Log a trade (coin, entry, exit, size, note)\n🇷🇴 Adaugă un trade în jurnalul personal",                               inline=False)
+    embed.add_field(name="/journal view",        value="🇬🇧 See your last 10 logged trades\n🇷🇴 Vezi ultimele 10 tranzacții înregistrate",                                        inline=False)
+    embed.add_field(name="/journal stats",       value="🇬🇧 Win rate, P&L, R:R ratio, best/worst trade\n🇷🇴 Statistici complete: win rate, profit, rating",                       inline=False)
+    embed.add_field(name=SEP2, value="\u200b", inline=False)
+    embed.add_field(name="🛡️ MODERARE / MODERATION (prefix !)", value="\u200b", inline=False)
+    embed.add_field(name="!mute @user [min] [motiv]",    value="🔇 Mute utilizator (default 10 min) — necesită Moderate Members",  inline=False)
+    embed.add_field(name="!unmute @user",                value="🔊 Unmute utilizator",                                              inline=False)
+    embed.add_field(name="!kick @user [motiv]",          value="👢 Kick de pe server — necesită Kick Members",                     inline=False)
+    embed.add_field(name="!ban @user [motiv]",           value="🔨 Ban permanent — necesită Ban Members",                          inline=False)
+    embed.add_field(name="!warn @user [motiv]",          value="⚠️ Avertisment (se trimite și DM userului)",                       inline=False)
+    embed.add_field(name="!warnings @user",              value="📋 Vezi istoricul avertismentelor",                                inline=False)
+    embed.add_field(name="!clearwarnings @user",         value="🗑️ Sterge avertismentele — necesită Administrator",               inline=False)
+    embed.add_field(name="!sterge [nr/all]",             value="🗑️ Sterge mesaje din canal — necesită Manage Messages",           inline=False)
+    embed.add_field(name="!modhelp",                     value="📋 Lista completa comenzi moderare",                               inline=False)
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.response.send_message(embed=embed)
 
@@ -2207,6 +2227,185 @@ async def slash_signals_explained(interaction: discord.Interaction):
     )
     embed.set_footer(text=f"Crypto Signals Bot  •  Preturi live BTC  •  {DISCLAIMER_RO}")
     await interaction.followup.send(embed=embed)
+
+
+# ══════════════════════════════════════════════
+#   /JOURNAL — Jurnal de trading personal
+# ══════════════════════════════════════════════
+
+@tree.command(name="journal", description="📓 Personal trading journal — log, view and track your trades")
+@app_commands.describe(
+    action="What to do",
+    coin="Coin traded (e.g. BTC)",
+    entry="Entry price in USD",
+    exit_price="Exit price in USD",
+    size="Trade size in USD",
+    note="Optional note about this trade"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="➕ add — Log a new trade",         value="add"),
+    app_commands.Choice(name="📋 view — See last 10 trades",     value="view"),
+    app_commands.Choice(name="📊 stats — Win rate & profit",     value="stats"),
+    app_commands.Choice(name="🗑️ clear — Delete all trades",    value="clear"),
+])
+async def slash_journal(
+    interaction: discord.Interaction,
+    action: str,
+    coin: str = "",
+    entry: float = 0.0,
+    exit_price: float = 0.0,
+    size: float = 0.0,
+    note: str = ""
+):
+    uid = str(interaction.user.id)
+
+    # ── ADD ──
+    if action == "add":
+        if not coin or entry <= 0 or exit_price <= 0 or size <= 0:
+            await interaction.response.send_message(
+                "❌ 🇷🇴 Completează toate câmpurile: `coin`, `entry`, `exit_price`, `size`\n"
+                "❌ 🇬🇧 Fill all fields: `coin`, `entry`, `exit_price`, `size`\n"
+                "**Exemplu:** `/journal add coin:BTC entry:94500 exit_price:96000 size:200`",
+                ephemeral=True
+            ); return
+
+        profit_pct  = (exit_price - entry) / entry * 100
+        profit_usd  = size * profit_pct / 100
+        outcome     = "✅ WIN" if profit_usd > 0 else "❌ LOSS" if profit_usd < 0 else "➖ BREAK EVEN"
+
+        trade = {
+            "coin":       coin.upper().replace("USDT",""),
+            "entry":      entry,
+            "exit_price": exit_price,
+            "size":       size,
+            "profit_pct": round(profit_pct, 2),
+            "profit_usd": round(profit_usd, 2),
+            "outcome":    "WIN" if profit_usd > 0 else "LOSS" if profit_usd < 0 else "BE",
+            "note":       note,
+            "ts":         datetime.utcnow().strftime("%d.%m.%Y %H:%M")
+        }
+        if uid not in USER_JOURNAL:
+            USER_JOURNAL[uid] = []
+        USER_JOURNAL[uid].append(trade)
+
+        embed = discord.Embed(
+            title=f"📓 Trade Adăugat / Trade Logged — {outcome}",
+            color=0x22c55e if profit_usd > 0 else 0xef4444 if profit_usd < 0 else 0x94a3b8,
+            timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=f"📓 Jurnalul lui {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
+        embed.add_field(name="🪙 Moneda",   value=f"`{trade['coin']}`",                      inline=True)
+        embed.add_field(name="📍 Entry",    value=f"`${entry:,.2f}`",                         inline=True)
+        embed.add_field(name="🏁 Exit",     value=f"`${exit_price:,.2f}`",                    inline=True)
+        embed.add_field(name="💰 Marime",   value=f"`${size:,.2f}`",                          inline=True)
+        embed.add_field(name="📈 P&L %",    value=f"`{profit_pct:+.2f}%`",                   inline=True)
+        embed.add_field(name="💵 P&L $",    value=f"`${profit_usd:+.2f}`",                   inline=True)
+        if note:
+            embed.add_field(name="📝 Nota", value=note, inline=False)
+        total = len(USER_JOURNAL[uid])
+        wins  = sum(1 for t in USER_JOURNAL[uid] if t["outcome"] == "WIN")
+        embed.set_footer(text=f"Trade #{total}  •  Win rate: {wins/total*100:.0f}%  •  Crypto Signals Bot")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # ── VIEW ──
+    elif action == "view":
+        trades = USER_JOURNAL.get(uid, [])
+        if not trades:
+            await interaction.response.send_message(
+                "📓 🇷🇴 Nu ai niciun trade înregistrat. Foloseste `/journal add` pentru a loga un trade.\n"
+                "📓 🇬🇧 No trades logged yet. Use `/journal add` to log a trade.",
+                ephemeral=True
+            ); return
+
+        embed = discord.Embed(
+            title=f"📓 Ultimele tranzactii / Last Trades — {interaction.user.display_name}",
+            color=0x6366f1, timestamp=datetime.utcnow()
+        )
+        embed.set_author(name=f"📓 Trading Journal", icon_url=interaction.user.display_avatar.url)
+        for t in trades[-10:][::-1]:
+            icon = "✅" if t["outcome"] == "WIN" else "❌" if t["outcome"] == "LOSS" else "➖"
+            embed.add_field(
+                name=f"{icon} {t['coin']} — {t['ts']}",
+                value=(
+                    f"📍 Entry: `${t['entry']:,.2f}` → 🏁 Exit: `${t['exit_price']:,.2f}`\n"
+                    f"💰 Size: `${t['size']:,.0f}` | P&L: `{t['profit_pct']:+.2f}%` (`${t['profit_usd']:+.2f}`)"
+                    + (f"\n📝 {t['note']}" if t.get('note') else "")
+                ),
+                inline=False
+            )
+        embed.set_footer(text=f"Afiseaza ultimele 10 din {len(trades)}  •  Crypto Signals Bot")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # ── STATS ──
+    elif action == "stats":
+        trades = USER_JOURNAL.get(uid, [])
+        if not trades:
+            await interaction.response.send_message(
+                "📓 🇷🇴 Nu ai niciun trade înregistrat. Foloseste `/journal add` pentru a loga un trade.",
+                ephemeral=True
+            ); return
+
+        total     = len(trades)
+        wins      = [t for t in trades if t["outcome"] == "WIN"]
+        losses    = [t for t in trades if t["outcome"] == "LOSS"]
+        win_rate  = len(wins) / total * 100
+        total_pnl = sum(t["profit_usd"] for t in trades)
+        avg_win   = sum(t["profit_usd"] for t in wins) / len(wins)   if wins   else 0
+        avg_loss  = sum(t["profit_usd"] for t in losses) / len(losses) if losses else 0
+        best      = max(trades, key=lambda x: x["profit_usd"])
+        worst     = min(trades, key=lambda x: x["profit_usd"])
+        rr_ratio  = abs(avg_win / avg_loss) if avg_loss != 0 else float('inf')
+
+        # Streak
+        streak, max_streak, cur = 0, 0, None
+        for t in reversed(trades):
+            if t["outcome"] == cur:
+                streak += 1
+            else:
+                if streak > max_streak:
+                    max_streak = streak
+                streak = 1
+                cur = t["outcome"]
+
+        pnl_color = 0x22c55e if total_pnl >= 0 else 0xef4444
+        embed = discord.Embed(
+            title=f"📊 Statistici Trading / Trading Stats — {interaction.user.display_name}",
+            color=pnl_color, timestamp=datetime.utcnow()
+        )
+        embed.set_author(name="📊 Journal Statistics", icon_url=interaction.user.display_avatar.url)
+        embed.add_field(name="📊 Total Trades",      value=f"`{total}`",                        inline=True)
+        embed.add_field(name="✅ Wins / ❌ Losses",   value=f"`{len(wins)}W / {len(losses)}L`",  inline=True)
+        embed.add_field(name="🎯 Win Rate",          value=f"`{win_rate:.1f}%`",                 inline=True)
+        embed.add_field(name="💵 Total P&L",         value=f"`${total_pnl:+.2f}`",               inline=True)
+        embed.add_field(name="📈 Avg Win",           value=f"`${avg_win:+.2f}`",                 inline=True)
+        embed.add_field(name="📉 Avg Loss",          value=f"`${avg_loss:+.2f}`",                inline=True)
+        embed.add_field(name="⚖️ Risk/Reward Ratio", value=f"`1 : {rr_ratio:.2f}`",              inline=True)
+        embed.add_field(name="🏆 Best Trade",        value=f"`{best['coin']}` `${best['profit_usd']:+.2f}` ({best['ts']})", inline=False)
+        embed.add_field(name="😰 Worst Trade",       value=f"`{worst['coin']}` `${worst['profit_usd']:+.2f}` ({worst['ts']})", inline=False)
+
+        # Performance rating
+        if win_rate >= 60 and total_pnl > 0:
+            rating = "🌟 Excelent — Trader profitabil consistent!"
+        elif win_rate >= 50 and total_pnl > 0:
+            rating = "✅ Bun — Pe profit. Continua!"
+        elif win_rate >= 40:
+            rating = "⚠️ Mediu — Imbunatateste R:R ratio si win rate."
+        else:
+            rating = "🔴 Necesita imbunatatiri — Revizuieste strategia."
+
+        embed.add_field(name=f"{SEP}\n⭐ Evaluare / Rating", value=rating, inline=False)
+        embed.set_footer(text=f"Bazat pe {total} trades  •  Crypto Signals Bot")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    # ── CLEAR ──
+    elif action == "clear":
+        count = len(USER_JOURNAL.get(uid, []))
+        USER_JOURNAL[uid] = []
+        await interaction.response.send_message(
+            f"🗑️ 🇷🇴 **{count} trades** au fost sterse din jurnalul tau.\n"
+            f"🗑️ 🇬🇧 **{count} trades** deleted from your journal.",
+            ephemeral=True
+        )
 
 
 @tree.command(name="sentiment", description="🧠 Full market sentiment: Fear&Greed + RSI + trend overview")
@@ -4092,6 +4291,313 @@ async def on_message(message: discord.Message):
             await confirm.delete()
         except Exception:
             pass
+        return
+
+    # ══════════════════════════════════════════
+    # ANTI-SPAM — auto-mute dacă >5 msg / 4 sec
+    # ══════════════════════════════════════════
+    uid = message.author.id
+    now_ts = datetime.utcnow().timestamp()
+    if not message.author.guild_permissions.manage_messages:
+        if uid not in SPAM_TRACKER:
+            SPAM_TRACKER[uid] = []
+        SPAM_TRACKER[uid] = [t for t in SPAM_TRACKER[uid] if now_ts - t < 4]
+        SPAM_TRACKER[uid].append(now_ts)
+        if len(SPAM_TRACKER[uid]) >= 6 and uid not in SPAM_MUTED:
+            SPAM_MUTED.add(uid)
+            SPAM_TRACKER[uid] = []
+            try:
+                until = discord.utils.utcnow() + __import__("datetime").timedelta(minutes=5)
+                await message.author.timeout(until, reason="Auto-mute: spam detectat de bot")
+                await message.delete()
+                warn_msg = await message.channel.send(
+                    embed=discord.Embed(
+                        title="🤖 Anti-Spam — Mute Automat",
+                        description=(
+                            f"🇷🇴 {message.author.mention} a fost **mutat automat 5 minute** pentru spam.\n"
+                            "🇬🇧 User was **auto-muted for 5 minutes** for spamming."
+                        ),
+                        color=0xef4444,
+                        timestamp=datetime.utcnow()
+                    )
+                )
+                await asyncio.sleep(10)
+                await warn_msg.delete()
+                await asyncio.sleep(300)
+                SPAM_MUTED.discard(uid)
+            except Exception:
+                SPAM_MUTED.discard(uid)
+            return
+
+    # ══════════════════════════════════════════
+    # MODERARE — !mute !unmute !kick !warn etc.
+    # ══════════════════════════════════════════
+    import re as _re
+
+    async def _mod_log(guild, action, mod, target, reason="—"):
+        """Post mod action to STATUS channel as a log embed."""
+        ch = client.get_channel(STATUS_CHANNEL)
+        if not ch:
+            return
+        color = {"mute":0xfbbf24,"unmute":0x22c55e,"kick":0xf97316,"ban":0xef4444,
+                 "warn":0xa78bfa,"clearwarn":0x6ee7b7,"unban":0x34d399}.get(action, 0x94a3b8)
+        embed = discord.Embed(
+            title=f"🔨 MOD LOG — {action.upper()}",
+            color=color,
+            timestamp=datetime.utcnow()
+        )
+        embed.add_field(name="👤 Utilizator / User", value=str(target), inline=True)
+        embed.add_field(name="🛡️ Moderator",         value=str(mod),    inline=True)
+        embed.add_field(name="📝 Motiv / Reason",    value=reason,      inline=False)
+        embed.set_footer(text="Crypto Signals Bot — Mod Log")
+        await ch.send(embed=embed)
+
+    # ─── !mute @user [minute] [motiv] ───
+    if content_lower.startswith("!mute"):
+        if not message.author.guild_permissions.moderate_members:
+            err = await message.channel.send(f"🚫 {message.author.mention} Lipseste permisiunea **Moderate Members**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        parts = message.content.split()
+        if not message.mentions:
+            err = await message.channel.send("❌ Folosire: `!mute @user [minute] [motiv]`")
+            await asyncio.sleep(5); await err.delete(); return
+        target = message.mentions[0]
+        minutes = 10
+        reason = "Fara motiv specificat"
+        for i, p in enumerate(parts):
+            if p.isdigit() and i > 0:
+                minutes = max(1, min(int(p), 10080))
+            elif i > 1 and not p.startswith("<@"):
+                reason = " ".join(w for w in parts[i:] if not w.startswith("<@") and not w.isdigit())
+                break
+        try:
+            import datetime as _dt
+            until = discord.utils.utcnow() + _dt.timedelta(minutes=minutes)
+            await target.timeout(until, reason=f"{reason} (de {message.author})")
+            await message.delete()
+            confirm = await message.channel.send(
+                embed=discord.Embed(
+                    title="🔇 Utilizator Mutat / User Muted",
+                    description=(
+                        f"👤 **{target.mention}** a primit **mute {minutes} minute**\n"
+                        f"📝 Motiv: `{reason}`\n"
+                        f"🛡️ Moderator: {message.author.mention}"
+                    ),
+                    color=0xfbbf24, timestamp=datetime.utcnow()
+                )
+            )
+            await _mod_log(message.guild, "mute", message.author, target, f"{reason} ({minutes} min)")
+            await asyncio.sleep(8); await confirm.delete()
+        except Exception as e:
+            err = await message.channel.send(f"❌ Eroare: `{e}`")
+            await asyncio.sleep(5); await err.delete()
+        return
+
+    # ─── !unmute @user ───
+    if content_lower.startswith("!unmute"):
+        if not message.author.guild_permissions.moderate_members:
+            err = await message.channel.send(f"🚫 {message.author.mention} Lipseste permisiunea **Moderate Members**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        if not message.mentions:
+            err = await message.channel.send("❌ Folosire: `!unmute @user`")
+            await asyncio.sleep(5); await err.delete(); return
+        target = message.mentions[0]
+        try:
+            await target.timeout(None, reason=f"Unmute de {message.author}")
+            await message.delete()
+            confirm = await message.channel.send(
+                embed=discord.Embed(
+                    description=f"🔊 **{target.mention}** a fost **unmutat** de {message.author.mention}",
+                    color=0x22c55e, timestamp=datetime.utcnow()
+                )
+            )
+            await _mod_log(message.guild, "unmute", message.author, target)
+            await asyncio.sleep(6); await confirm.delete()
+        except Exception as e:
+            err = await message.channel.send(f"❌ Eroare: `{e}`")
+            await asyncio.sleep(5); await err.delete()
+        return
+
+    # ─── !kick @user [motiv] ───
+    if content_lower.startswith("!kick"):
+        if not message.author.guild_permissions.kick_members:
+            err = await message.channel.send(f"🚫 {message.author.mention} Lipseste permisiunea **Kick Members**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        if not message.mentions:
+            err = await message.channel.send("❌ Folosire: `!kick @user [motiv]`")
+            await asyncio.sleep(5); await err.delete(); return
+        target = message.mentions[0]
+        parts = message.content.split()
+        reason = " ".join(p for p in parts[2:] if not p.startswith("<@")) if len(parts) > 2 else "Fara motiv"
+        try:
+            await target.kick(reason=f"{reason} (de {message.author})")
+            await message.delete()
+            confirm = await message.channel.send(
+                embed=discord.Embed(
+                    title="👢 Utilizator Kickat / User Kicked",
+                    description=(
+                        f"👤 **{target}** a fost **kickat** din server\n"
+                        f"📝 Motiv: `{reason}`\n"
+                        f"🛡️ Moderator: {message.author.mention}"
+                    ),
+                    color=0xf97316, timestamp=datetime.utcnow()
+                )
+            )
+            await _mod_log(message.guild, "kick", message.author, target, reason)
+            await asyncio.sleep(8); await confirm.delete()
+        except Exception as e:
+            err = await message.channel.send(f"❌ Eroare: `{e}`")
+            await asyncio.sleep(5); await err.delete()
+        return
+
+    # ─── !ban @user [motiv] ───
+    if content_lower.startswith("!ban"):
+        if not message.author.guild_permissions.ban_members:
+            err = await message.channel.send(f"🚫 {message.author.mention} Lipseste permisiunea **Ban Members**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        if not message.mentions:
+            err = await message.channel.send("❌ Folosire: `!ban @user [motiv]`")
+            await asyncio.sleep(5); await err.delete(); return
+        target = message.mentions[0]
+        parts = message.content.split()
+        reason = " ".join(p for p in parts[2:] if not p.startswith("<@")) if len(parts) > 2 else "Fara motiv"
+        try:
+            await target.ban(reason=f"{reason} (de {message.author})", delete_message_days=1)
+            await message.delete()
+            confirm = await message.channel.send(
+                embed=discord.Embed(
+                    title="🔨 Utilizator Banat / User Banned",
+                    description=(
+                        f"🔨 **{target}** a fost **banat** definitiv\n"
+                        f"📝 Motiv: `{reason}`\n"
+                        f"🛡️ Moderator: {message.author.mention}"
+                    ),
+                    color=0xef4444, timestamp=datetime.utcnow()
+                )
+            )
+            await _mod_log(message.guild, "ban", message.author, target, reason)
+            await asyncio.sleep(10); await confirm.delete()
+        except Exception as e:
+            err = await message.channel.send(f"❌ Eroare: `{e}`")
+            await asyncio.sleep(5); await err.delete()
+        return
+
+    # ─── !warn @user [motiv] ───
+    if content_lower.startswith("!warn"):
+        if not message.author.guild_permissions.manage_messages:
+            err = await message.channel.send(f"🚫 {message.author.mention} Lipseste permisiunea **Manage Messages**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        if not message.mentions:
+            err = await message.channel.send("❌ Folosire: `!warn @user [motiv]`")
+            await asyncio.sleep(5); await err.delete(); return
+        target = message.mentions[0]
+        parts = message.content.split()
+        reason = " ".join(p for p in parts[2:] if not p.startswith("<@")) if len(parts) > 2 else "Comportament inadecvat"
+        tid = str(target.id)
+        if tid not in USER_WARNINGS:
+            USER_WARNINGS[tid] = []
+        USER_WARNINGS[tid].append({
+            "reason": reason,
+            "mod": str(message.author),
+            "ts": datetime.utcnow().strftime("%d.%m.%Y %H:%M")
+        })
+        count = len(USER_WARNINGS[tid])
+        await message.delete()
+        confirm = await message.channel.send(
+            embed=discord.Embed(
+                title="⚠️ Avertisment / Warning",
+                description=(
+                    f"👤 {target.mention} a primit avertisment **#{count}**\n"
+                    f"📝 Motiv: `{reason}`\n"
+                    f"🛡️ Moderator: {message.author.mention}\n\n"
+                    f"{'🔴 **ATENTIE: 3+ avertismente! Considera mute/kick.**' if count >= 3 else ''}"
+                ),
+                color=0xa78bfa, timestamp=datetime.utcnow()
+            )
+        )
+        await _mod_log(message.guild, "warn", message.author, target, f"#{count}: {reason}")
+        # DM the warned user
+        try:
+            dm = discord.Embed(
+                title="⚠️ Ai primit un avertisment pe Crypto Signals",
+                description=(
+                    f"📝 Motiv: `{reason}`\n"
+                    f"🛡️ Dat de: `{message.author}`\n"
+                    f"📊 Total avertismente: **{count}**\n\n"
+                    "Respecta regulile serverului pentru a evita mute/kick."
+                ),
+                color=0xa78bfa, timestamp=datetime.utcnow()
+            )
+            await target.send(embed=dm)
+        except Exception:
+            pass
+        await asyncio.sleep(8); await confirm.delete()
+        return
+
+    # ─── !warnings @user ───
+    if content_lower.startswith("!warnings"):
+        if not message.author.guild_permissions.manage_messages:
+            err = await message.channel.send(f"🚫 Lipseste permisiunea **Manage Messages**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        target = message.mentions[0] if message.mentions else message.author
+        tid = str(target.id)
+        warns = USER_WARNINGS.get(tid, [])
+        await message.delete()
+        if not warns:
+            info = await message.channel.send(f"✅ **{target}** nu are avertismente.")
+            await asyncio.sleep(6); await info.delete(); return
+        embed = discord.Embed(
+            title=f"⚠️ Avertismentele lui {target}",
+            color=0xa78bfa, timestamp=datetime.utcnow()
+        )
+        for i, w in enumerate(warns[-10:], 1):
+            embed.add_field(name=f"#{i} — {w['ts']}", value=f"📝 {w['reason']}\n🛡️ {w['mod']}", inline=False)
+        embed.set_footer(text=f"Total: {len(warns)} avertismente")
+        info = await message.channel.send(embed=embed)
+        await asyncio.sleep(30); await info.delete()
+        return
+
+    # ─── !clearwarnings @user ───
+    if content_lower.startswith("!clearwarnings"):
+        if not message.author.guild_permissions.administrator:
+            err = await message.channel.send(f"🚫 Lipseste permisiunea **Administrator**.")
+            await asyncio.sleep(5); await err.delete(); await message.delete(); return
+        target = message.mentions[0] if message.mentions else None
+        if not target:
+            err = await message.channel.send("❌ Folosire: `!clearwarnings @user`")
+            await asyncio.sleep(5); await err.delete(); return
+        tid = str(target.id)
+        old = len(USER_WARNINGS.get(tid, []))
+        USER_WARNINGS[tid] = []
+        await message.delete()
+        confirm = await message.channel.send(
+            embed=discord.Embed(
+                description=f"✅ **{old}** avertismente sterse pentru **{target}** de {message.author.mention}",
+                color=0x6ee7b7, timestamp=datetime.utcnow()
+            )
+        )
+        await _mod_log(message.guild, "clearwarn", message.author, target, f"{old} warns cleared")
+        await asyncio.sleep(6); await confirm.delete()
+        return
+
+    # ─── !modhelp ───
+    if content_lower.strip() == "!modhelp":
+        await message.delete()
+        embed = discord.Embed(
+            title="🛡️ Comenzi Moderare / Moderation Commands",
+            color=0x6366f1, timestamp=datetime.utcnow()
+        )
+        embed.add_field(name="!mute @user [min] [motiv]",  value="🔇 Mute utilizator (default 10 min)", inline=False)
+        embed.add_field(name="!unmute @user",               value="🔊 Unmute utilizator",               inline=False)
+        embed.add_field(name="!kick @user [motiv]",         value="👢 Kick utilizator de pe server",     inline=False)
+        embed.add_field(name="!ban @user [motiv]",          value="🔨 Ban permanent",                    inline=False)
+        embed.add_field(name="!warn @user [motiv]",         value="⚠️ Adauga avertisment (cu DM)",       inline=False)
+        embed.add_field(name="!warnings @user",             value="📋 Vezi avertismentele unui user",    inline=False)
+        embed.add_field(name="!clearwarnings @user",        value="🗑️ Sterge toate avertismentele",     inline=False)
+        embed.add_field(name="!sterge [nr/all]",            value="🗑️ Sterge mesaje din canal",         inline=False)
+        embed.set_footer(text="Vizibil doar pentru moderatori  •  Auto-delete 30s")
+        info = await message.channel.send(embed=embed)
+        await asyncio.sleep(30); await info.delete()
         return
 
     await client.process_commands(message)
