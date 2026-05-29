@@ -1,6 +1,4 @@
-"""bot_extended.py — Railway entrypoint that wraps bot.py.
-Beginner explainer DISABLED. Admin commands registered.
-"""
+"""bot_extended.py — Railway entrypoint that wraps bot.py."""
 import asyncio
 import discord
 import bot
@@ -8,6 +6,7 @@ import commands_ext
 import commands_ext2
 import commands_stats
 import commands_admin
+import commands_help
 import pro_embeds
 import smart_filter
 import tracker
@@ -71,12 +70,13 @@ commands_ext.register(bot.tree, bot.client)
 commands_ext2.register(bot.tree, bot.client)
 commands_stats.register(bot.tree, bot.client)
 commands_admin.register(bot.tree, bot.client)
+commands_help.register(bot.tree, bot.client)
 
 print("[explainer] DISABLED (user request)", flush=True)
 
 async def _startup_extras():
     await bot.client.wait_until_ready()
-    print(f"[bot_extended] Extras starting (alongside bot.py loops)", flush=True)
+    print(f"[bot_extended] Extras starting", flush=True)
     symbols = getattr(bot, "SYMBOLS", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"])
     try:
         tasks = [smart_filter._cached_fear_greed(), smart_filter._cached_sentiment()]
