@@ -22,30 +22,51 @@ def _env(name: str, default: str = "") -> str:
     return (os.environ.get(name) or default).strip()
 
 
+def _sanitize_discord_token(raw: str) -> str:
+    """Curăță tokenul copiat greșit din Discord / Railway."""
+    token = raw.strip().strip('"').strip("'")
+    if token.lower().startswith("bot "):
+        token = token[4:].strip()
+    return token
+
+
 def _require_discord_token() -> str:
     """Discord token from Railway/env (never hardcode)."""
-    token = (
+    token = _sanitize_discord_token(
         _env("DISCORD_BOT_TOKEN")
         or _env("DISCORD_TOKEN")
         or _env("BOT_TOKEN")
     )
-    if not token or token == "YOUR_BOT_TOKEN":
-        print(
-            "\n"
-            "============================================================\n"
-            "  DISCORD TOKEN LIPSESTE SAU E INVALID\n"
-            "============================================================\n"
-            "  Railway -> Project -> Variables -> New Variable:\n"
-            "    Name:  DISCORD_BOT_TOKEN\n"
-            "    Value: (token din Discord Developer Portal -> Bot)\n"
-            "\n"
-            "  Apoi: Redeploy serviciul.\n"
-            "  Portal: https://discord.com/developers/applications\n"
-            "============================================================\n",
-            flush=True,
+    if not token or token in ("YOUR_BOT_TOKEN", "PUNE_TOKENUL_DISCORD_AICI"):
+        _print_token_help("LIPSESTE")
+        sys.exit(1)
+
+    parts = token.split(".")
+    if len(parts) != 3 or len(token) < 50:
+        _print_token_help(
+            "FORMAT INVALID — foloseste BOT TOKEN (nu Client Secret, nu Application ID)"
         )
         sys.exit(1)
+
+    print(f"[config] DISCORD_BOT_TOKEN set ({len(token)} chars)", flush=True)
     return token
+
+
+def _print_token_help(reason: str) -> None:
+    print(
+        "\n"
+        "============================================================\n"
+        f"  DISCORD TOKEN: {reason}\n"
+        "============================================================\n"
+        "  1. https://discord.com/developers/applications\n"
+        "  2. Aplicatia ta -> Bot -> Reset Token -> Copy\n"
+        "  3. Railway -> Variables -> Raw Editor:\n"
+        "       DISCORD_BOT_TOKEN=tokenul_copiat\n"
+        "     (fara ghilimele, fara 'Bot ' in fata)\n"
+        "  4. Deploy -> Redeploy (obligatoriu)\n"
+        "============================================================\n",
+        flush=True,
+    )
 
 
 TOKEN = _require_discord_token()
@@ -6176,4 +6197,11 @@ def keep_alive():
 # =========================
 
 keep_alive()
-client.run(TOKEN)
+
+try:
+    client.run(TOKEN)
+except discord.LoginFailure:
+    _print_token_help(
+        "RESPINS DE DISCORD (401) — token gresit sau resetat. Genereaza unul NOU in Portal."
+    )
+    sys.exit(1)
