@@ -1,4 +1,4 @@
-﻿__pycache__/
+__pycache__/
 *.py[cod]
 .env
 bot_data.db
@@ -8,3 +8,13 @@ bot_data.db
 Thumbs.db
 *.log
 .ipynb_checkpoints/
+
+# Generated chart images (created at runtime by bot.py)
+*_chart.png
+BTCUSDT.png
+ETHUSDT.png
+SOLUSDT.png
+BNBUSDT.png
+
+# Diagnostic logs
+gcm-diagnose.log
