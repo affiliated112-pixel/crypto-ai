@@ -1,0 +1,229 @@
+﻿Diagnose log at 2026-05-29T03:28:39Z
+
+AppPath: C:\Program Files\Git\mingw64\bin\git-credential-manager.exe
+InstallDir: C:\Program Files\Git\mingw64\bin\
+Version: 2.7.3+5fa7116896c82164996a609accd1c5ad90fe730a
+
+------------
+Diagnostic: Environment
+Skipped: False
+Success: True
+Exception: None
+Log:
+OSType: Windows
+OSVersion: 10.0 (build 26200)
+Reading environment variables... OK
+ Variables:
+VSCODE_PID=11568
+GEM_SPEC_CACHE=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\gem-specs
+EFC_4800_2283032206=1
+EFC_4800_2775293581=1
+UV_CACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\uv
+TMP=C:\Users\bcale\AppData\Local\Temp
+EFC_4800_1262719628=1
+NO_COLOR=1
+PSModulePath=C:\Users\bcale\Documents\WindowsPowerShell\Modules;C:\Program Files\WindowsPowerShell\Modules;C:\Windows\system32\WindowsPowerShell\v1.0\Modules
+NX_CACHE_DIRECTORY=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\nx
+VSCODE_CRASH_REPORTER_PROCESS_TYPE=extensionHost
+ProgramW6432=C:\Program Files
+ProgramData=C:\ProgramData
+HOMEBREW_CACHE=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\homebrew
+CONDA_PKGS_DIRS=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\conda
+PSExecutionPolicyPreference=Bypass
+FPS_BROWSER_USER_PROFILE_STRING=Default
+ComSpec=C:\Windows\system32\cmd.exe
+EFC_4800_344590478=1
+PROCESSOR_REVISION=9702
+PIP_CACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\pip
+NUMBER_OF_PROCESSORS=12
+LC_CTYPE=C.UTF-8
+YARN_CACHE_FOLDER=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\yarn
+ProgramFiles(x86)=C:\Program Files (x86)
+VSCODE_CWD=C:\Users\bcale\AppData\Local\Programs\cursor
+BUNDLE_PATH=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\bundle
+GRADLE_USER_HOME=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\gradle
+PROCESSOR_LEVEL=6
+SystemDrive=C:
+SESSIONNAME=Console
+CURSOR_AGENT=1
+NUGET_PACKAGES=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\nuget
+CP_HOME_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\cocoapods
+CYPRESS_CACHE_FOLDER=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\cypress
+USERPROFILE=C:\Users\bcale
+PLAYWRIGHT_BROWSERS_PATH=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\playwright
+VSCODE_HANDLES_UNCAUGHT_ERRORS=true
+CommonProgramFiles(x86)=C:\Program Files (x86)\Common Files
+VSCODE_NLS_CONFIG={"userLocale":"en-us","osLocale":"en-gb","resolvedLanguage":"en","defaultMessagesFile":"C:\\Users\\bcale\\AppData\\Local\\Programs\\cursor\\resources\\app\\out\\nls.messages.json","locale":"en-us","availableLanguages":{}}
+VSCODE_IPC_HOOK=\\.\pipe\ed4dc866-3.5.33-main-sock
+ACSetupSvcPort=23210
+CURSOR_WORKSPACE_LABEL=crypto-ai-main
+RlsSvcPort=22112
+COMPUTERNAME=ALEX
+PUPPETEER_CACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\puppeteer
+LOGONSERVER=\\ALEX
+HOMEDRIVE=C:
+PROCESSOR_ARCHITECTURE=AMD64
+CHROME_CRASHPAD_PIPE_NAME=\\.\pipe\crashpad_11568_RITJFCBVZRDGXOEH
+CARGO_TARGET_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\cargo-target
+PUBLIC=C:\Users\Public
+GOCACHE=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\go-build
+OS=Windows_NT
+EFC_4800_3789132940=1
+EFC_4800_4126798990=1
+windir=C:\Windows
+_ZO_DOCTOR=0
+PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 151 Stepping 2, GenuineIntel
+FORCE_COLOR=0
+APPDATA=C:\Users\bcale\AppData\Roaming
+HOMEPATH=\Users\bcale
+Path=C:/Program Files/Git/mingw64/libexec/git-core;C:\Program Files\Git\mingw64\bin;C:\Program Files\Git\usr\bin;C:\Users\bcale\bin;c:\Users\bcale\AppData\Local\Programs\cursor\resources\app\resources\helpers;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files\NVIDIA Corporation\NVIDIA App\NvDLISR;C:\Program Files\dotnet\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\nodejs\;C:\Program Files\Git\cmd;C:\Users\bcale\AppData\Local\Programs\Python\Python314\Scripts\;C:\Users\bcale\AppData\Local\Programs\Python\Python314\;C:\Users\bcale\AppData\Local\Programs\Python\Launcher\;C:\Users\bcale\AppData\Local\Microsoft\WindowsApps;C:\Users\bcale\AppData\Local\Python\bin;C:\Users\bcale\AppData\Local\Programs\cursor\resources\app\bin;C:\Users\bcale\AppData\Local\Programs\Ollama;C:\Users\bcale\AppData\Roaming\npm;C:\Users\bcale\AppData\Local\OpenClaw\deps\portable-git\mingw64\bin;C:\Users\bcale\AppData\Local\OpenClaw\deps\portable-git\usr\bin;C:\Users\bcale\AppData\Local\Programs\Microsoft VS Code\bin;C:\Users\bcale\AppData\Local\GitHubDesktop\bin
+TERM=dumb
+LOCALAPPDATA=C:\Users\bcale\AppData\Local
+PATHEXT=.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC;.CPL
+PLINK_PROTOCOL=ssh
+GOMODCACHE=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\go-mod
+TURBO_CACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\turbo
+POETRY_CACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\poetry
+OneDrive=C:\Users\bcale\OneDrive
+CCACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\ccache
+VSCODE_ESM_ENTRYPOINT=vs/workbench/api/node/extensionHostProcess
+USERNAME=bcale
+COMPOSER_HOME=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\composer
+PNPM_STORE_PATH=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\pnpm-store
+ProgramFiles=C:\Program Files
+DriverData=C:\Windows\System32\Drivers\DriverData
+CURSOR_LAYOUT=glass
+FPS_BROWSER_APP_PROFILE_STRING=Internet Explorer
+BUN_INSTALL_CACHE_DIR=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\bun
+TMPDIR=C:\Users\bcale\AppData\Local\Temp
+VSCODE_CODE_CACHE_PATH=C:\Users\bcale\AppData\Roaming\Cursor\CachedData\aac81804b986d739acab348ed96b8bea6e83cc50
+USERDOMAIN=ALEX
+CommonProgramW6432=C:\Program Files\Common Files
+TEMP=C:\Users\bcale\AppData\Local\Temp
+GIT_EXEC_PATH=C:/Program Files/Git/mingw64/libexec/git-core
+ALLUSERSPROFILE=C:\ProgramData
+npm_config_devdir=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\node-gyp
+GIT_TRACE2_PARENT_SID=030fa230-082e-4204-b6f1-160d3e3d7981
+CommonProgramFiles=C:\Program Files\Common Files
+VSCODE_PROCESS_TITLE=extension-host  crypto-ai-main [1-2]
+NPM_CONFIG_CACHE=C:\Users\bcale\AppData\Local\Temp\cursor-sandbox-cache\b26493290252b5825cba9ea0a19107e9\npm
+MSYSTEM=MINGW64
+USERDOMAIN_ROAMINGPROFILE=ALEX
+SystemRoot=C:\Windows
+EFC_4800_1592913036=1
+HOME=C:\Users\bcale
+
+
+------------
+Diagnostic: File system
+Skipped: False
+Success: True
+Exception: None
+Log:
+Temporary directory is 'C:\Users\bcale\AppData\Local\Temp\'...
+Checking basic file I/O...
+Writing to temporary file 'C:\Users\bcale\AppData\Local\Temp\d6524c17a9adf9fa9fc34d01'... OK
+Reading from temporary file 'C:\Users\bcale\AppData\Local\Temp\d6524c17a9adf9fa9fc34d01'... OK
+Deleting temporary file 'C:\Users\bcale\AppData\Local\Temp\d6524c17a9adf9fa9fc34d01'... OK
+Testing IFileSystem instance...
+UserHomePath: C:\Users\bcale
+UserDataDirectoryPath: C:\Users\bcale\.gcm
+GetCurrentDirectory(): C:\Users\bcale\crypto-ai
+
+------------
+Diagnostic: Networking
+Skipped: False
+Success: True
+Exception: None
+Log:
+Checking networking and HTTP stack...
+Creating HTTP client... OK
+IsNetworkAvailable: True
+Sending HEAD request to http://example.com...Sending HEAD request to https://example.com... OK
+ OK
+Acquiring free TCP port... OK
+Testing local HTTP loopback connections...
+Creating new HTTP listener for http://localhost:49585/... OK
+Waiting for loopback connection... OK
+Writing response... OK
+Waiting for response data... OK
+Loopback connection data OK
+
+------------
+Diagnostic: Git
+Skipped: False
+Success: True
+Exception: None
+Log:
+Getting Git version... OK
+Git version is '2.54.0.windows.1'
+Locating current repository...Git repository at 'C:/Users/bcale/crypto-ai/.git'
+ OK
+Listing all Git configuration... OK
+Git configuration:
+file:C:/Program Files/Git/etc/gitconfig	diff.astextplain.textconv=astextplain
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.clean=git-lfs clean -- %f
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.smudge=git-lfs smudge -- %f
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.process=git-lfs filter-process
+file:C:/Program Files/Git/etc/gitconfig	filter.lfs.required=true
+file:C:/Program Files/Git/etc/gitconfig	http.sslbackend=schannel
+file:C:/Program Files/Git/etc/gitconfig	core.autocrlf=true
+file:C:/Program Files/Git/etc/gitconfig	core.fscache=true
+file:C:/Program Files/Git/etc/gitconfig	core.symlinks=false
+file:C:/Program Files/Git/etc/gitconfig	pull.rebase=false
+file:C:/Program Files/Git/etc/gitconfig	credential.helper=manager
+file:C:/Program Files/Git/etc/gitconfig	credential.https://dev.azure.com.usehttppath=true
+file:C:/Program Files/Git/etc/gitconfig	init.defaultbranch=master
+file:C:/Users/bcale/.gitconfig	filter.lfs.process=git-lfs filter-process
+file:C:/Users/bcale/.gitconfig	filter.lfs.required=true
+file:C:/Users/bcale/.gitconfig	filter.lfs.clean=git-lfs clean -- %f
+file:C:/Users/bcale/.gitconfig	filter.lfs.smudge=git-lfs smudge -- %f
+file:C:/Users/bcale/.gitconfig	user.name=bcj20084-collab
+file:C:/Users/bcale/.gitconfig	user.email=bcj20084@gmail.com
+file:.git/config	core.repositoryformatversion=0
+file:.git/config	core.filemode=false
+file:.git/config	core.bare=false
+file:.git/config	core.logallrefupdates=true
+file:.git/config	core.symlinks=false
+file:.git/config	core.ignorecase=true
+file:.git/config	remote.origin.url=https://github.com/affiliated112-pixel/crypto-ai.git
+file:.git/config	remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*
+file:.git/config	branch.main.remote=origin
+file:.git/config	branch.main.merge=refs/heads/main
+
+
+------------
+Diagnostic: Credential storage
+Skipped: False
+Success: True
+Exception: None
+Log:
+ICredentialStore instance is of type: CredentialStore
+Writing test credential... OK
+Reading test credential... OK
+Deleting test credential... OK
+
+------------
+Diagnostic: Microsoft authentication (AAD/MSA)
+Skipped: False
+Success: True
+Exception: None
+Log:
+Broker is not enabled.
+Flow type is: Auto
+Gathering MSAL token cache data... OK
+CacheDirectory: C:\Users\bcale\AppData\Local\.IdentityService
+CacheFileName: msal.cache
+CacheFilePath: C:\Users\bcale\AppData\Local\.IdentityService\msal.cache
+Creating cache helper... OK
+Verifying MSAL token cache persistence... OK
+
+------------
+Diagnostic: GitHub API
+Skipped: False
+Success: True
+Exception: None
+Log:
+Using 'https://github.com/' as API target.
+Querying '/meta' endpoint... OK
+
