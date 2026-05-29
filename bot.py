@@ -746,119 +746,17 @@ def is_vip(member):
 # AI ANALYSIS — 4 API-URI GRATUITE
 # =========================
 
-def ai_analysis_groq(signal, price, rsi, symbol):
-    """Groq — llama3 gratuit, cel mai rapid."""
-    try:
-        res = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {GROQ_API_KEY}",
-                     "Content-Type": "application/json"},
-            json={
-                "model": "llama3-8b-8192",
-                "messages": [{"role": "user", "content":
-                    f"In exactly 2 sentences, explain this crypto trade signal professionally: "
-                    f"{signal} {symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
-                }],
-                "max_tokens": 120,
-            },
-            timeout=10
-        ).json()
-        return res["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return None
-
-def ai_analysis_cohere(signal, price, rsi, symbol):
-    """Cohere — Command-R gratuit."""
-    try:
-        res = requests.post(
-            "https://api.cohere.com/v1/chat",
-            headers={"Authorization": f"Bearer {COHERE_API_KEY}",
-                     "Content-Type": "application/json"},
-            json={
-                "model": "command-r",
-                "message": (
-                    f"In 2 concise sentences, explain this crypto signal professionally: "
-                    f"{signal} {symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
-                ),
-                "max_tokens": 120,
-            },
-            timeout=10
-        ).json()
-        return res.get("text", "").strip()
-    except Exception:
-        return None
-
-def ai_analysis_huggingface(signal, price, rsi, symbol):
-    """HuggingFace Inference API — gratuit."""
-    try:
-        prompt = (
-            f"Explain this crypto trade signal in 2 sentences: "
-            f"{signal} {symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
-        )
-        res = requests.post(
-            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1",
-            headers={"Content-Type": "application/json"},
-            json={"inputs": prompt, "parameters": {"max_new_tokens": 100}},
-            timeout=12
-        ).json()
-        if isinstance(res, list) and res:
-            text = res[0].get("generated_text", "")
-            text = text.replace(prompt, "").strip()
-            return text[:300] if text else None
-        return None
-    except Exception:
-        return None
-
-def ai_analysis_openrouter(signal, price, rsi, symbol):
-    """OpenRouter — fallback plătit dacă ai cheie."""
-    try:
-        res = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-            json={
-                "model": "openai/gpt-3.5-turbo",
-                "messages": [{"role": "user", "content":
-                    f"In 2 sentences, explain professionally: {signal} "
-                    f"{symbol.replace('USDT','')} at ${price:.2f}, RSI={rsi:.1f}."
-                }]
-            },
-            timeout=10
-        ).json()
-        return res["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return None
-
-def ai_analysis_local(signal, price, rsi, symbol):
-    """Fallback inteligent fără API."""
-    coin = symbol.replace("USDT","")
-    if signal == "BUY":
-        strength = "extreme oversold" if rsi < 25 else "oversold"
-        ro = f"RSI-ul la {rsi:.1f} indică piață {('extrem supravândută' if rsi < 25 else 'supravândută')} — probabilitate crescută de revenire."
-        en = f"RSI at {rsi:.1f} indicates {strength} conditions — potential reversal upward expected."
-    else:
-        strength = "extreme overbought" if rsi > 75 else "overbought"
-        ro = f"RSI-ul la {rsi:.1f} indică piață {('extrem supraevaluată' if rsi > 75 else 'supraevaluată')} — presiune de vânzare detectată."
-        en = f"RSI at {rsi:.1f} indicates {strength} conditions — selling pressure detected."
-    return f"🇬🇧 {en}\n🇷🇴 {ro}"
-
-def ai_analysis(signal, price, rsi, symbol):
-    """Încearcă API-urile în ordine — cel mai rapid primul."""
-    if GROQ_API_KEY:
-        result = ai_analysis_groq(signal, price, rsi, symbol)
-        if result:
-            return result
-    if COHERE_API_KEY:
-        result = ai_analysis_cohere(signal, price, rsi, symbol)
-        if result:
-            return result
-    if OPENROUTER_API_KEY:
-        result = ai_analysis_openrouter(signal, price, rsi, symbol)
-        if result:
-            return result
-    result = ai_analysis_huggingface(signal, price, rsi, symbol)
-    if result:
-        return result
-    return ai_analysis_local(signal, price, rsi, symbol)
+# AI Analysis — redirected to ai_analysis.py (unified engine)
+try:
+    import ai_analysis as _ai_mod
+    def ai_analysis(signal, price, rsi, symbol, ind=None):
+        return _ai_mod.ai_analysis(signal, price, rsi, symbol, ind=ind)
+    print("[ai] ai_analysis.py loaded — DeepSeek/Groq/Gemini/Mistral/Cohere/Local", flush=True)
+except ImportError:
+    def ai_analysis(signal, price, rsi, symbol, ind=None):
+        coin = symbol.replace('USDT','')
+        return f"🤖 {signal} {coin} @ ${price:.4f} | RSI {rsi:.1f}"
+    print("[ai] ai_analysis.py not found — using minimal fallback", flush=True)
 
 # =========================
 # CHART GENERATION (3 PANELS, DARK PRO)
