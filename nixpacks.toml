@@ -1,6 +1,7 @@
-# Railway / Nixpacks — matplotlib needs system fonts
+# Railway / Nixpacks — matplotlib charts
 [phases.setup]
-nixPkgs = ["...", "freetype", "fontconfig", "libpng"]
+nixPkgs = ["...", "freetype", "fontconfig", "libpng", "dejavu_fonts"]
 
 [variables]
 PYTHONUNBUFFERED = "1"
+MPLCONFIGDIR = "/tmp/matplotlib"

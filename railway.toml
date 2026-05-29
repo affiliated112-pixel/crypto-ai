@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python -u bot.py"
+startCommand = "mkdir -p /tmp/matplotlib /tmp/fontconfig-cache && python -u bot.py"
 numReplicas = 1
 healthcheckPath = "/health"
 healthcheckTimeout = 120

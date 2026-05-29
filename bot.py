@@ -1,3 +1,13 @@
+import os
+import sys
+
+# Matplotlib on Railway/Nixpacks — before pyplot import
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+os.environ.setdefault("MPLBACKEND", "Agg")
+_fc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fontconfig", "fonts.conf")
+if os.path.isfile(_fc):
+    os.environ.setdefault("FONTCONFIG_FILE", _fc)
+
 import discord
 from discord import app_commands
 import asyncio
@@ -6,12 +16,12 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+plt.rcParams["font.family"] = "DejaVu Sans"
+plt.rcParams["font.sans-serif"] = ["DejaVu Sans"]
 from ta.momentum import RSIIndicator, StochRSIIndicator, WilliamsRIndicator, ROCIndicator
 from ta.trend import MACD, EMAIndicator, ADXIndicator, IchimokuIndicator
 from ta.volatility import BollingerBands, AverageTrueRange
 from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
-import os
-import sys
 import json
 import random
 import warnings
