@@ -537,14 +537,30 @@ class UserPortfolioView(ui.View):
 async def setup_demo_channel(client: discord.Client) -> discord.TextChannel | None:
     """Find or create the demo-trading channel inside the admin category."""
     for guild in client.guilds:
-        category = guild.get_channel(CATEGORY_ID)
+        # Must use guild.categories to get CategoryChannel objects
+        category = None
+        for cat in guild.categories:
+            if cat.id == CATEGORY_ID:
+                category = cat
+                break
+
+        # Fallback: ID might be a text channel inside the right category
         if category is None:
+            ch_obj = guild.get_channel(CATEGORY_ID)
+            if ch_obj and hasattr(ch_obj, 'category') and ch_obj.category:
+                category = ch_obj.category
+                print(f"[demo_app] resolved category via child channel: {category.name}", flush=True)
+
+        if category is None:
+            print(f"[demo_app] category {CATEGORY_ID} not found in guild '{guild.name}'", flush=True)
             continue
-        # Find existing channel
+
+        # Find existing demo channel in this category
         for ch in category.channels:
             if isinstance(ch, discord.TextChannel) and "demo" in ch.name.lower():
                 print(f"[demo_app] found existing channel: {ch.name} ({ch.id})", flush=True)
                 return ch
+
         # Create new channel
         try:
             ch = await guild.create_text_channel(
@@ -556,6 +572,7 @@ async def setup_demo_channel(client: discord.Client) -> discord.TextChannel | No
             return ch
         except Exception as e:
             print(f"[demo_app] could not create channel: {e}", flush=True)
+
     print(f"[demo_app] category {CATEGORY_ID} not found in any guild", flush=True)
     return None
 
