@@ -5349,32 +5349,33 @@ async def market_news_loop():
     while True:
         try:
             if channel:
-                r = requests.get(
-                    "https://cryptopanic.com/api/free/v1/posts/?auth_token=&public=true&kind=news",
-                    timeout=8
-                )
-                items = r.json().get("results", [])
-                fresh = [it for it in items if it.get("url") and it["url"] not in posted_links]
+                import news as _news_mod
+                items = await asyncio.to_thread(_news_mod.fetch_news, 5)
+                fresh = [it for it in items if it.get("link") and it["link"] not in posted_links]
                 if fresh:
                     item  = fresh[0]
-                    posted_links.add(item["url"])
+                    posted_links.add(item["link"])
                     if len(posted_links) > 100:
                         posted_links = set(list(posted_links)[-50:])
-                    votes  = item.get("votes", {})
-                    bull   = votes.get("positive", 0)
-                    bear   = votes.get("negative", 0)
-                    mood   = "🟢 Bullish" if bull > bear else ("🔴 Bearish" if bear > bull else "⚪ Neutral")
-                    color  = discord.Color.green() if bull > bear else (discord.Color.red() if bear > bull else discord.Color.light_grey())
+                    mood   = item.get("mood", "⚪")
+                    mood_l = "🟢 Bullish" if mood == "🟢" else ("🔴 Bearish" if mood == "🔴" else "⚪ Neutral")
+                    color  = discord.Color.green() if mood == "🟢" else (discord.Color.red() if mood == "🔴" else discord.Color.light_grey())
                     title  = item.get("title", "Crypto News")[:200]
-                    source = item.get("source", {}).get("title", "CryptoPanic")
+                    source = item.get("source", "Multi-source RSS")
+                    emoji  = item.get("emoji", "📰")
+                    summary = item.get("summary", "")
                     embed  = discord.Embed(
-                        title=f"📰 {title}",
-                        url=item["url"],
-                        description=f"{mood} | Sursă: **{source}**\n🔗 [Citește articolul complet]({item['url']})",
+                        title=f"{emoji} {title}",
+                        url=item["link"],
+                        description=(
+                            f"{mood_l} | Sursă: **{source}**\n"
+                            + (f"\n{summary}\n" if summary else "")
+                            + f"\n🔗 [Citește articolul complet]({item['link']})"
+                        ),
                         color=color,
                         timestamp=utcnow()
                     )
-                    embed.set_footer(text=f"📡 Date reale CryptoPanic  |  {DISCLAIMER_EN}")
+                    embed.set_footer(text=f"📡 Date reale: CoinDesk · Decrypt · CryptoSlate · CoinGecko  |  {DISCLAIMER_EN}")
                     await channel.send(embed=embed)
         except Exception as e:
             print(f"[market_news] error: {e}", flush=True)
