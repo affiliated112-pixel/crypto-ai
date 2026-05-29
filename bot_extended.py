@@ -31,6 +31,7 @@ import coins_config
 import coin_ticket
 import clean_signals
 import signal_engine
+import on_demand
 import paper_trading
 import commands_paper
 import paper_interactive
@@ -421,6 +422,11 @@ async def _startup_extras():
         print('[ticket] slash commands registered: /subscribe /mysignals /unsubscribe', flush=True)
     except Exception as e:
         print(f'[ticket] command register error: {e}', flush=True)
+    try:
+        on_demand.register_commands(bot.tree)
+        print('[on_demand] slash commands registered: /signal /scan', flush=True)
+    except Exception as e:
+        print(f'[on_demand] command register error: {e}', flush=True)
     # Paper trading slash commands
     try:
         commands_paper.register(bot.tree)
