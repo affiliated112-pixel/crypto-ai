@@ -5266,28 +5266,42 @@ async def neutral_market_loop():
 # =========================
 
 async def market_news_loop():
+    """REAL news from CryptoPanic API — no hardcoded text."""
     await client.wait_until_ready()
     channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
-    news = [
-        ("🚨 High Volatility Alert / Alertă Volatilitate Ridicată",
-         "🇬🇧 BTC volatility increasing! Monitor open positions.\n🇷🇴 Volatilitate BTC în creștere! Monitorizează pozițiile.", discord.Color.orange()),
-        ("📉 Possible Correction / Corecție Posibilă",
-         "🇬🇧 Market showing signs of weakness short-term.\n🇷🇴 Piața arată semne de slăbiciune pe termen scurt.", discord.Color.red()),
-        ("📈 Bullish Momentum / Momentum Bullish",
-         "🇬🇧 BTC showing strength — watch for BUY signals.\n🇷🇴 BTC arată forță — urmărește semnalele 🟢.", discord.Color.green()),
-        ("🔥 ETH Gaining Strength / ETH Câștigă Forță",
-         "🇬🇧 Ethereum rising vs BTC dominance.\n🇷🇴 Ethereum în creștere față de dominanța BTC.", discord.Color.purple()),
-        ("⚡ Whale Movement Detected / Mișcare de Balenă",
-         "🇬🇧 Large on-chain transaction detected.\n🇷🇴 Tranzacție mare on-chain detectată.", discord.Color.yellow()),
-        ("🛡️ Key Support Held / Suport Cheie Menținut",
-         "🇬🇧 BTC held key support level — bullish sign.\n🇷🇴 BTC a menținut suportul cheie — semn bullish.", discord.Color.blue()),
-    ]
+    posted_links = set()
     while True:
-        if channel:
-            title, desc, color = random.choice(news)
-            embed = discord.Embed(title=title, description=desc, color=color, timestamp=utcnow())
-            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-            await channel.send(embed=embed)
+        try:
+            if channel:
+                r = requests.get(
+                    "https://cryptopanic.com/api/free/v1/posts/?auth_token=&public=true&kind=news",
+                    timeout=8
+                )
+                items = r.json().get("results", [])
+                fresh = [it for it in items if it.get("url") and it["url"] not in posted_links]
+                if fresh:
+                    item  = fresh[0]
+                    posted_links.add(item["url"])
+                    if len(posted_links) > 100:
+                        posted_links = set(list(posted_links)[-50:])
+                    votes  = item.get("votes", {})
+                    bull   = votes.get("positive", 0)
+                    bear   = votes.get("negative", 0)
+                    mood   = "🟢 Bullish" if bull > bear else ("🔴 Bearish" if bear > bull else "⚪ Neutral")
+                    color  = discord.Color.green() if bull > bear else (discord.Color.red() if bear > bull else discord.Color.light_grey())
+                    title  = item.get("title", "Crypto News")[:200]
+                    source = item.get("source", {}).get("title", "CryptoPanic")
+                    embed  = discord.Embed(
+                        title=f"📰 {title}",
+                        url=item["url"],
+                        description=f"{mood} | Sursă: **{source}**\n🔗 [Citește articolul complet]({item['url']})",
+                        color=color,
+                        timestamp=utcnow()
+                    )
+                    embed.set_footer(text=f"📡 Date reale CryptoPanic  |  {DISCLAIMER_EN}")
+                    await channel.send(embed=embed)
+        except Exception as e:
+            print(f"[market_news] error: {e}", flush=True)
         await asyncio.sleep(1800)
 
 # =========================
@@ -5295,26 +5309,43 @@ async def market_news_loop():
 # =========================
 
 async def announcement_loop():
+    """REAL educational announcements — zero fake performance claims."""
     await client.wait_until_ready()
     channel = await fetch_message_channel(ANNOUNCEMENTS_CHANNEL, "ANNOUNCEMENTS")
     items = [
-        ("📢 VIP Signals Available! / Semnale VIP Disponibile!",
-         "🇬🇧 Upgrade now for full premium access 💎\n🇷🇴 Upgrade acum pentru acces complet premium 💎"),
-        ("🔥 87% Win Rate This Month! / Win Rate 87% Luna Aceasta!",
-         "🇬🇧 Join the winning team 💎\n🇷🇴 Alătură-te echipei câștigătoare 💎"),
-        ("💡 Did you know? / Știai?",
-         "🇬🇧 VIP members get RSI + MACD charts + AI analysis with every signal!\n🇷🇴 Membrii VIP primesc grafice RSI + MACD + analiză AI la fiecare semnal!"),
-        ("⚡ New Feature! / Feature Nou!",
-         "🇬🇧 Set price alerts with `/alert BTC 70000` — get notified via DM!\n🇷🇴 Setează alerte de preț cu `/alert BTC 70000` — primești DM automat!"),
+        ("⚖️ Disclaimer Legal / Legal Disclaimer",
+         "🇷🇴 Semnalele sunt opinii algoritmice bazate pe indicatori tehnici reali (RSI, MACD, BB, EMA). "
+         "**Nu sunt sfat financiar.** Poți pierde bani. Folosește Stop Loss. Riscă max 1-2% per trade.\n\n"
+         "🇬🇧 Signals are algorithmic opinions based on real technical indicators. "
+         "**Not financial advice.** You can lose money. Always use Stop Loss. Risk max 1-2% per trade."),
+        ("💡 Cum funcționează semnalele / How signals work",
+         "🇷🇴 Botul analizează **10 condiții tehnice** (RSI, MACD, EMA, BB, Stoch, ADX, VWAP, OBV, Williams %R, divergențe) "
+         "din date live Binance. Semnalul apare doar când minim 3 condiții se aliniază.\n\n"
+         "🇬🇧 The bot checks **10 real technical conditions** from live Binance data. A signal fires only when at least 3 align."),
+        ("📊 Comenzi utile / Useful commands",
+         "`/stats` — win rate real  |  `/history` — ultimele semnale\n"
+         "`/fear` — Fear & Greed live  |  `/news` — știri reale\n"
+         "`/price BTC` — preț live  |  `/compare` — 6 burse simultan\n"
+         "`/signal BTC` — semnal VIP instant  |  `/tip` — sfat trading"),
+        ("🛡️ Siguranța ta / Your safety",
+         "🇷🇴 **REGULI DE AUR:**\n"
+         "• Pune Stop Loss ÎNAINTE de a cumpăra\n"
+         "• Riscă max 1-2% din portofoliu per trade\n"
+         "• Nu investi bani pe care nu îți permiți să-i pierzi\n"
+         "• Fă-ți propria cercetare (DYOR)\n\n"
+         "🇬🇧 **GOLDEN RULES:** Set SL before buying • Risk max 1-2% • Never invest what you can't lose • DYOR"),
     ]
     i = 0
     while True:
-        if channel:
-            title, desc = items[i % len(items)]
-            embed = discord.Embed(title=title, description=desc, color=discord.Color.gold(), timestamp=utcnow())
-            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-            await channel.send(embed=embed)
-        i += 1
+        try:
+            if channel:
+                title, desc = items[i % len(items)]
+                embed = discord.Embed(title=title, description=desc, color=discord.Color.blue(), timestamp=utcnow())
+                embed.set_footer(text=f"📚 Educational only  |  {DISCLAIMER_EN}")
+                await channel.send(embed=embed)
+            i += 1
+        except Exception as e:
+            print(f"[announcement] error: {e}", flush=True)
         await asyncio.sleep(86400)
 
 # =========================
@@ -5322,22 +5353,85 @@ async def announcement_loop():
 # =========================
 
 async def performance_loop():
+    """REAL daily performance from live Binance 24h data + signal tracker."""
     await client.wait_until_ready()
     channel = await fetch_message_channel(PERFORMANCE_CHANNEL, "PERFORMANCE")
     while True:
-        if channel:
-            embed = discord.Embed(
-                title="📊 Daily Performance / Performanță Zilnică",
-                color=discord.Color.green(), timestamp=utcnow()
-            )
-            embed.add_field(name="✅ BTC", value="+12%", inline=True)
-            embed.add_field(name="✅ ETH", value="+8%",  inline=True)
-            embed.add_field(name="✅ SOL", value="+15%", inline=True)
-            embed.add_field(name="🔥 VIP Win Rate", value="87%", inline=False)
-            embed.add_field(name="💎 Want results like these? / Vrei rezultate ca acestea?",
-                            value=f"→ <#{GET_VIP_CHANNEL}>", inline=False)
-            embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-            await channel.send(embed=embed)
+        try:
+            if channel:
+                # Fetch REAL 24h price changes from Binance
+                real_changes = {}
+                for sym in SYMBOLS:
+                    try:
+                        r = requests.get(
+                            f"https://api.binance.us/api/v3/ticker/24hr?symbol={sym}",
+                            timeout=8
+                        )
+                        d = r.json()
+                        real_changes[sym] = {
+                            "change": float(d["priceChangePercent"]),
+                            "price":  float(d["lastPrice"]),
+                            "high":   float(d["highPrice"]),
+                            "low":    float(d["lowPrice"]),
+                        }
+                    except Exception:
+                        pass
+
+                # Real signal stats from tracker
+                wins = losses = total = 0
+                win_rate = 0.0
+                try:
+                    import json as _json, os as _os
+                    tf = _os.environ.get("SIGNAL_TRACKER_FILE", "signal_tracker.json")
+                    if _os.path.isfile(tf):
+                        records = _json.load(open(tf))
+                        closed  = [r for r in records if r.get("status") in ("WIN", "LOSS")]
+                        wins    = sum(1 for r in closed if r["status"] == "WIN")
+                        losses  = sum(1 for r in closed if r["status"] == "LOSS")
+                        total   = wins + losses
+                        win_rate = (wins / total * 100) if total > 0 else 0.0
+                except Exception:
+                    pass
+
+                color = discord.Color.green() if all(
+                    v["change"] >= 0 for v in real_changes.values()
+                ) else discord.Color.orange()
+
+                embed = discord.Embed(
+                    title="📊 Performanță Zilnică — DATE REALE BINANCE",
+                    description="🔍 Toate datele de mai jos sunt preluate **live de pe Binance**. Zero cifre inventate.",
+                    color=color,
+                    timestamp=utcnow()
+                )
+
+                for sym, data in real_changes.items():
+                    name  = sym.replace("USDT", "")
+                    ch    = data["change"]
+                    sign  = "+" if ch >= 0 else ""
+                    emoji = "🟢" if ch >= 0 else "🔴"
+                    embed.add_field(
+                        name=f"{emoji} {name}/USDT",
+                        value=f"`${data['price']:,.2f}`\n`{sign}{ch:.2f}%` 24h",
+                        inline=True
+                    )
+
+                if total > 0:
+                    embed.add_field(
+                        name="🎯 Win Rate Real Semnale",
+                        value=f"`{win_rate:.1f}%` ({wins}W / {losses}L din {total} trades)",
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="🎯 Win Rate Semnale",
+                        value="⏳ Se acumulează date reale... Revino mai târziu.",
+                        inline=False
+                    )
+
+                embed.set_footer(text=f"📡 Sursa: Binance.US API live  |  {DISCLAIMER_EN}")
+                await channel.send(embed=embed)
+        except Exception as e:
+            print(f"[performance] error: {e}", flush=True)
         await asyncio.sleep(86400)
 
 # =========================
@@ -6325,15 +6419,19 @@ class _PingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = (self.path or "/").split("?")[0]
         if path in ("/health", "/healthz"):
+            ready = client.is_ready()
             payload = {
-                "status": "ok",
-                "discord_ready": client.is_ready(),
+                "status": "ok" if ready else "degraded",
+                "discord_ready": ready,
                 "bot": str(client.user) if client.user else None,
                 "signals": SIGNAL_STATS,
                 "utc": utcnow().isoformat(),
             }
             body = json.dumps(payload).encode("utf-8")
-            self.send_response(200)
+            # Return 503 when Discord is not connected so Railway restarts the container.
+            # /healthz stays 200 to allow a lightweight liveness probe that does not trigger restarts.
+            status_code = 200 if (ready or path == "/healthz") else 503
+            self.send_response(status_code)
             self.send_header("Content-type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
