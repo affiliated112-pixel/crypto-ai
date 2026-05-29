@@ -32,6 +32,7 @@ import coin_ticket
 import clean_signals
 import signal_engine
 import smart_loop
+import signal_results
 import on_demand
 import paper_trading
 import commands_paper
@@ -416,9 +417,11 @@ async def _startup_extras():
     bot.client.loop.create_task(real_loops.real_market_news_loop(bot, interval=1800))
     bot.client.loop.create_task(real_loops.real_announcement_loop(bot, interval=86400))
     # SMART SIGNAL LOOP — replaces all old loops
-    # Scans every 15 min, sends max 3 FREE + 5 VIP per day (best only)
     bot.client.loop.create_task(smart_loop.smart_signal_loop(bot.client, bot))
     print('[smart_loop] started — 15min scan | 3 FREE/day | 5 VIP/day', flush=True)
+    # SIGNAL RESULTS — posts TP1/TP2/TP3/SL results to channel 1509524216821579839
+    bot.client.loop.create_task(signal_results.results_loop(bot.client))
+    print('[results] loop started — channel 1509524216821579839', flush=True)
     # COIN TICKET — register /subscribe /mysignals /unsubscribe
     try:
         coin_ticket.register_commands(bot.tree)
