@@ -241,11 +241,13 @@ async def smart_signal_loop(client, bot_module):
                         c["symbol"], c["signal"], c["price"],
                         c["rsi"], c["conf"], c["ind"], c["score"],
                     )
-                    # Track
                     if _HAS_TRACKER:
                         _record_signal(c["symbol"], c["signal"], float(c["price"]))
                     if _HAS_PAPER:
                         paper_trading.hook_signal(c["symbol"], c["signal"], float(c["price"]))
+                    if _HAS_RESULTS:
+                        atr = c["ind"].get("atr", c["price"] * 0.018) if c["ind"] else c["price"] * 0.018
+                        signal_results.register_signal(c["symbol"], c["signal"], float(c["price"]), atr=atr, score=c["score"], tier="free")
                 except Exception as e:
                     print(f"  [SEND FREE] Error: {e}", flush=True)
 
@@ -267,6 +269,9 @@ async def smart_signal_loop(client, bot_module):
                         _record_signal(c["symbol"], c["signal"], float(c["price"]))
                     if _HAS_PAPER:
                         paper_trading.hook_signal(c["symbol"], c["signal"], float(c["price"]))
+                    if _HAS_RESULTS:
+                        atr = c["ind"].get("atr", c["price"] * 0.018) if c["ind"] else c["price"] * 0.018
+                        signal_results.register_signal(c["symbol"], c["signal"], float(c["price"]), atr=atr, score=c["score"], tier="vip")
                     sent_vip += 1
                     await asyncio.sleep(3)   # space out sends
                 except Exception as e:
