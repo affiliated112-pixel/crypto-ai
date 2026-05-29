@@ -1,6 +1,5 @@
 """bot_extended.py — Railway entrypoint that wraps bot.py.
-Optimized + does NOT clobber bot.py's on_ready.
-Beginner explainer DISABLED (user request).
+Beginner explainer DISABLED. Admin commands registered.
 """
 import asyncio
 import discord
@@ -8,16 +7,15 @@ import bot
 import commands_ext
 import commands_ext2
 import commands_stats
+import commands_admin
 import pro_embeds
 import smart_filter
 import tracker
 
-# ---- 1. Fix bot.py's broken on_message ----
 async def _noop_process_commands(*args, **kwargs):
     return None
 bot.client.process_commands = _noop_process_commands  # type: ignore[attr-defined]
 
-# ---- 2. Wrap signal generator + embed builders ----
 _orig_get_signal = bot.get_signal_v2  # type: ignore[attr-defined]
 _LAST_EVAL = {}
 
@@ -69,15 +67,13 @@ bot.build_free_embed = _patched_build_free_embed  # type: ignore[attr-defined]
 bot.build_vip_embed = _patched_build_vip_embed  # type: ignore[attr-defined]
 print("[pro] Patched get_signal_v2 + build_free_embed + build_vip_embed", flush=True)
 
-# ---- 3. Register extended slash commands ----
 commands_ext.register(bot.tree, bot.client)
 commands_ext2.register(bot.tree, bot.client)
 commands_stats.register(bot.tree, bot.client)
+commands_admin.register(bot.tree, bot.client)
 
-# ---- 4. Beginner explainer DISABLED ----
 print("[explainer] DISABLED (user request)", flush=True)
 
-# ---- 5. Background tasks via setup_hook ----
 async def _startup_extras():
     await bot.client.wait_until_ready()
     print(f"[bot_extended] Extras starting (alongside bot.py loops)", flush=True)
