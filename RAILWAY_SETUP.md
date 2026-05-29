@@ -45,7 +45,16 @@ OPENROUTER_API_KEY=
 
 - **Settings → Source:** repo `affiliated112-pixel/crypto-ai` (branch `main`)
 - **Settings → Deploy:** Start Command = `python bot.py` (sau lasă `railway.toml`)
+- **Settings → Deploy → Replicas:** trebuie să fie **1** (două instanțe = 401 / session invalidated)
 - După Variables → **Deploy** / **Redeploy**
+
+### Discord — permisiuni bot
+
+Pe serverul tău, rolul botului trebuie să aibă în canalele de semnale:
+- View Channel
+- Send Messages
+- Attach Files (pentru grafice VIP)
+- Embed Links
 
 ## 5. Loguri OK
 

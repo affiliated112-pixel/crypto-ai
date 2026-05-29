@@ -13,8 +13,11 @@ from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
 import os
 import sys
 import random
-from datetime import datetime
+import warnings
+from datetime import datetime, timezone
 import threading
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 
@@ -174,6 +177,50 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 tree   = app_commands.CommandTree(client)
+_background_tasks_started = False
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
+async def fetch_message_channel(channel_id: int, label: str = ""):
+    """Resolve channel from cache or API; log if missing or no send permission."""
+    ch = client.get_channel(channel_id)
+    if ch is None:
+        try:
+            ch = await client.fetch_channel(channel_id)
+        except discord.NotFound:
+            print(f"[config] Channel {label or channel_id}: ID invalid or bot not on that server", flush=True)
+            return None
+        except discord.Forbidden:
+            print(f"[config] Channel {label or channel_id}: bot cannot access", flush=True)
+            return None
+        except discord.HTTPException as e:
+            print(f"[config] Channel {label or channel_id}: HTTP {e.status}", flush=True)
+            return None
+    if not isinstance(ch, discord.abc.Messageable):
+        return None
+    if isinstance(ch, discord.TextChannel):
+        perms = ch.permissions_for(ch.guild.me)
+        if not perms.send_messages:
+            print(f"[config] #{ch.name}: missing Send Messages permission", flush=True)
+            return None
+    return ch
+
+
+async def verify_signal_channels():
+    names = {
+        "FREE_SIGNALS": FREE_SIGNALS_CHANNEL,
+        "VIP_SIGNALS": VIP_SIGNALS_CHANNEL,
+        "ALERTS": ALERTS_CHANNEL,
+        "STATUS": STATUS_CHANNEL,
+    }
+    for label, cid in names.items():
+        ch = await fetch_message_channel(cid, label)
+        if ch and isinstance(ch, discord.TextChannel):
+            print(f"[config] #{ch.name} ({label}) OK", flush=True)
+
 
 # =========================
 # MULTI-API DATA FETCH
@@ -4585,11 +4632,13 @@ async def on_member_join(member):
 
 @client.event
 async def on_ready():
+    global _background_tasks_started
     print(f"Bot online: {client.user}")
     await tree.sync()
     print("Slash commands synced.")
+    await verify_signal_channels()
 
-    status_ch = client.get_channel(STATUS_CHANNEL)
+    status_ch = await fetch_message_channel(STATUS_CHANNEL, "STATUS")
     if status_ch:
         embed = discord.Embed(
             title="🟢 Bot ONLINE",
@@ -4619,10 +4668,10 @@ async def on_ready():
                     value="• No spam\n• No scams\n• Respect everyone\n• Signals are NOT financial advice", inline=True)
     rules_embed.add_field(name="🇷🇴 Reguli",
                     value="• Fără spam\n• Fără scam\n• Respectă pe toată lumea\n• Semnalele NU sunt sfaturi financiare", inline=True)
-    rules_ch = client.get_channel(RULES_CHANNEL)
+    rules_ch = await fetch_message_channel(RULES_CHANNEL, "RULES")
     await send_once(rules_ch, rules_embed, "Rules")
 
-    howto_ch = client.get_channel(HOWTO_CHANNEL)
+    howto_ch = await fetch_message_channel(HOWTO_CHANNEL, "HOWTO")
 
     # ── HOWTO GUIDE 1: Cum citești un semnal ──
     h1 = discord.Embed(
@@ -4866,8 +4915,14 @@ async def on_ready():
     vip_embed.add_field(name="📩 Contact",
         value="👤 <@1426677891269267618>\n👤 <@1463583046962909410>", inline=False)
     vip_embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-    vip_ch = client.get_channel(GET_VIP_CHANNEL)
+    vip_ch = await fetch_message_channel(GET_VIP_CHANNEL, "GET_VIP")
     await send_once(vip_ch, vip_embed, "VIP")
+
+    if _background_tasks_started:
+        print("[config] Reconnected — background tasks already running", flush=True)
+        return
+    _background_tasks_started = True
+    print("[config] Starting background tasks (single instance)", flush=True)
 
     client.loop.create_task(signal_loop())
     client.loop.create_task(market_news_loop())
@@ -4892,13 +4947,14 @@ async def on_ready():
 
 async def signal_loop():
     await client.wait_until_ready()
-    free_ch   = client.get_channel(FREE_SIGNALS_CHANNEL)
-    vip_ch    = client.get_channel(VIP_SIGNALS_CHANNEL)
-    alerts_ch = client.get_channel(ALERTS_CHANNEL)
+    await asyncio.sleep(5)  # avoid overlap with old container during Railway deploy
 
     while True:
+        free_ch   = await fetch_message_channel(FREE_SIGNALS_CHANNEL, "FREE_SIGNALS")
+        vip_ch    = await fetch_message_channel(VIP_SIGNALS_CHANNEL, "VIP_SIGNALS")
+        alerts_ch = await fetch_message_channel(ALERTS_CHANNEL, "ALERTS")
         try:
-            print(f"[SIGNAL LOOP] Checking {len(SYMBOLS)} coins at {datetime.utcnow().strftime('%H:%M:%S')}")
+            print(f"[SIGNAL LOOP] Checking {len(SYMBOLS)} coins at {utcnow().strftime('%H:%M:%S')}")
             for symbol in SYMBOLS:
                 df  = get_data(symbol)
                 sig, price, rsi, conf = get_signal_v2(df)
@@ -4958,10 +5014,23 @@ async def signal_loop():
             print(f"[SIGNAL LOOP] Done. Next check in 5 min.")
             await asyncio.sleep(300)
 
+        except discord.HTTPException as e:
+            print(f"[SIGNAL LOOP ERROR] HTTP {e.status}: {e}", flush=True)
+            if e.status == 401:
+                print(
+                    "[SIGNAL LOOP] Session invalid — set Railway Replicas to 1 and redeploy once.",
+                    flush=True,
+                )
+            elif e.status == 403:
+                print("[SIGNAL LOOP] Missing channel permissions — check bot role on Discord.", flush=True)
+            await asyncio.sleep(120)
         except Exception as e:
-            print(f"[SIGNAL LOOP ERROR] {e}")
-            if alerts_ch:
-                await alerts_ch.send(f"⚠️ Signal loop error: `{e}`")
+            print(f"[SIGNAL LOOP ERROR] {e}", flush=True)
+            if alerts_ch and client.is_ready():
+                try:
+                    await alerts_ch.send(f"⚠️ Signal loop error: `{e}`")
+                except discord.HTTPException:
+                    pass
             await asyncio.sleep(60)
 
 # =========================
