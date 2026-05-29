@@ -32,6 +32,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 import db
+import signal_engine
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
 CONFIG = {}
@@ -517,16 +518,71 @@ def calc_indicators(df):
     bull_div   = (price_now < price_prev) and (rsi > rsi_prev)   # hidden bullish divergence
     bear_div   = (price_now > price_prev) and (rsi < rsi_prev)   # hidden bearish divergence
 
-    # ── Market structure (last 20 candles) ───────────────────────
-    highs20 = high.iloc[-20:]
-    lows20  = low.iloc[-20:]
-    struct_bull = (highs20.iloc[-1] > highs20.iloc[-10]) and (lows20.iloc[-1] > lows20.iloc[-10])
-    struct_bear = (highs20.iloc[-1] < highs20.iloc[-10]) and (lows20.iloc[-1] < lows20.iloc[-10])
+    # ── [IMPROVEMENT 2] Market structure — proper HH/HL / LH/LL detection ──
+    #    Finds real swing highs and lows, confirms trend structure.
+    #    struct_score 0-3 = how many swing pairs confirm the structure.
+    def _find_swing_pts(series, n=2, lookback=60):
+        s = list(series.iloc[-lookback:]) if len(series) >= lookback else list(series)
+        pts = []
+        for i in range(n, len(s) - n):
+            if all(s[i] > s[i-j] for j in range(1, n+1)) and \
+               all(s[i] > s[i+j] for j in range(1, n+1)):
+                pts.append(s[i])
+        return pts
+
+    sh_pts = _find_swing_pts(high, n=2, lookback=60)
+    sl_inv = _find_swing_pts(pd.Series([-v for v in low.values]), n=2, lookback=60)
+    sl_pts = [-v for v in sl_inv]
+
+    struct_bull  = False
+    struct_bear  = False
+    struct_score = 0
+
+    if len(sh_pts) >= 2 and len(sl_pts) >= 2:
+        hh = sh_pts[-1] > sh_pts[-2]
+        hl = sl_pts[-1] > sl_pts[-2]
+        lh = sh_pts[-1] < sh_pts[-2]
+        ll = sl_pts[-1] < sl_pts[-2]
+        struct_bull = hh and hl
+        struct_bear = lh and ll
+        if struct_bull or struct_bear:
+            struct_score = 2
+            if len(sh_pts) >= 3 and len(sl_pts) >= 3:
+                if struct_bull and sh_pts[-2] > sh_pts[-3] and sl_pts[-2] > sl_pts[-3]:
+                    struct_score = 3
+                elif struct_bear and sh_pts[-2] < sh_pts[-3] and sl_pts[-2] < sl_pts[-3]:
+                    struct_score = 3
+    else:
+        highs20 = high.iloc[-20:]
+        lows20  = low.iloc[-20:]
+        struct_bull = (highs20.iloc[-1] > highs20.iloc[-10]) and (lows20.iloc[-1] > lows20.iloc[-10])
+        struct_bear = (highs20.iloc[-1] < highs20.iloc[-10]) and (lows20.iloc[-1] < lows20.iloc[-10])
+        struct_score = 1 if (struct_bull or struct_bear) else 0
 
     # ── Volume surge ──────────────────────────────────────────────
     vol_avg   = volume.iloc[-20:].mean()
     vol_now   = volume.iloc[-1]
     vol_surge = vol_now > (vol_avg * 1.5)
+
+    # ── [IMPROVEMENT 3] Volume Profile — Point of Control (POC) ──
+    #    POC = price with highest traded volume — institutional magnet level.
+    try:
+        _lk = min(100, len(close))
+        _h  = high.iloc[-_lk:]
+        _l  = low.iloc[-_lk:]
+        _v  = volume.iloc[-_lk:]
+        _pm = float(_l.min())
+        _px = float(_h.max())
+        _nb = 30
+        _bs = (_px - _pm) / _nb if _px > _pm else 1e-9
+        _vp = [0.0] * _nb
+        for _i in range(_lk):
+            _mid = (float(_h.iloc[_i]) + float(_l.iloc[_i])) / 2
+            _bi  = max(0, min(_nb - 1, int((_mid - _pm) / _bs)))
+            _vp[_bi] += float(_v.iloc[_i])
+        poc = _pm + (_vp.index(max(_vp)) + 0.5) * _bs
+    except Exception:
+        poc = float(close.iloc[-1])
 
     # ── Swing high / low for Fibonacci ───────────────────────────
     swing_high = high.iloc[-50:].max()
@@ -552,7 +608,7 @@ def calc_indicators(df):
         "bb_upper": bb_upper, "bb_lower": bb_lower, "bb_mid": bb_mid, "bb_pct": bb_pct, "bb_width": bb_width,
         # StochRSI
         "stoch_k": stoch_k, "stoch_d": stoch_d,
-        # new 2026 indicators
+        # momentum / trend indicators
         "willr": willr, "atr": atr,
         "adx": adx, "adx_pos": adx_pos, "adx_neg": adx_neg,
         "obv_now": obv_now, "obv_ma": obv_ma, "obv_up": obv_up,
@@ -560,10 +616,13 @@ def calc_indicators(df):
         # signals
         "bull_div": bull_div, "bear_div": bear_div,
         "struct_bull": struct_bull, "struct_bear": struct_bear,
+        "struct_score": struct_score,   # [IMP 2] HH/HL strength 0-3
         "vol_surge": vol_surge, "vol_avg": vol_avg, "vol_now": vol_now,
         # price and Fibonacci
         "price": price_now,
         "swing_high": swing_high, "swing_low": swing_low, "fib_levels": fib_levels,
+        # [IMP 3] Volume Profile
+        "poc": poc,
     }
 
 def get_signal_v2(df):
@@ -5037,6 +5096,14 @@ async def signal_loop():
         alerts_ch = await fetch_message_channel(ALERTS_CHANNEL, "ALERTS")
         try:
             print(f"[SIGNAL LOOP] Checking {len(SYMBOLS)} coins at {utcnow().strftime('%H:%M:%S')}")
+
+            # [IMPROVEMENT 4] Update BTC macro cache first (used by all altcoins below)
+            _btc_df  = get_data("BTCUSDT")
+            _btc_ind = calc_indicators(_btc_df) if _btc_df is not None else None
+            if _btc_ind:
+                _btc_sig_now, _btc_px, _, _ = get_signal_v2(_btc_df)
+                signal_engine.cache_btc_signal(_btc_sig_now, price=_btc_px)
+
             for symbol in SYMBOLS:
                 df  = get_data(symbol)
                 sig, price, rsi, conf = get_signal_v2(df)
@@ -5044,9 +5111,18 @@ async def signal_loop():
 
                 # Log current indicator state to console
                 if ind:
-                    bb_pct = ind.get("bb_pct", 0)
+                    bb_pct  = ind.get("bb_pct", 0)
                     stoch_k = ind.get("stoch_k", 0)
-                    print(f"  {symbol}: price={price:.2f} RSI={rsi:.1f} BB%={bb_pct:.2f} SK={stoch_k:.2f} => {sig or 'NO SIGNAL'} {conf or ''}")
+                    poc     = ind.get("poc", 0)
+                    ss      = ind.get("struct_score", 0)
+                    print(f"  {symbol}: price={price:.2f} RSI={rsi:.1f} BB%={bb_pct:.2f} SK={stoch_k:.2f} POC={poc:.2f} SS={ss} => {sig or 'NO SIGNAL'} {conf or ''}")
+
+                # [IMPROVEMENT 5] Compute dynamic TP/SL levels
+                if sig and ind:
+                    _atr = ind.get("atr", price * 0.018)
+                    _atr_pct = _atr / price if price > 0 else 0.018
+                    _levels = signal_engine.compute_levels(price, sig, _atr, _atr_pct)
+                    ind["_levels"] = _levels   # attach for embed builders
 
                 if ind and check_volume_spike(ind) and alerts_ch:
                     await alerts_ch.send(embed=discord.Embed(
