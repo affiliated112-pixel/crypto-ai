@@ -30,6 +30,7 @@ import vip_analysis
 import coins_config
 import coin_ticket
 import clean_signals
+import signal_engine
 import paper_trading
 import commands_paper
 import paper_interactive
@@ -160,6 +161,11 @@ def _patch_signal_loop_for_demo():
 
                 import discord as _disc
                 # FREE loop: use coins_config.FREE_SYMBOLS (6 major coins only)
+                # Cache BTC signal for context checks on altcoins
+                btc_df  = _bot.get_data('BTCUSDT')
+                btc_sig, _, _, _ = _bot.get_signal_v2(btc_df) if btc_df is not None else (None, None, None, None)
+                signal_engine.cache_btc_signal(btc_sig)
+
                 for symbol in coins_config.FREE_SYMBOLS:
                     df  = _bot.get_data(symbol)
                     sig, price, rsi, conf = _bot.get_signal_v2(df)
@@ -224,16 +230,44 @@ def _patch_signal_loop_for_demo():
                             ai_text=ai_text, ind=ind,
                             sector=getattr(vip_analysis, 'COIN_SECTORS', {}).get(symbol, 'Crypto'),
                         )
-                        if free_ch:
+                        # ── Quality gate ──────────────────────────────
+                        btc_ctx = signal_engine.get_cached_btc_signal()
+                        free_ok, free_score, free_reason = signal_engine.should_send_free(
+                            symbol, sig, price, ind or {}, btc_ctx
+                        )
+                        vip_ok, vip_score, vip_reason = signal_engine.should_send_vip(
+                            symbol, sig, price, ind or {}, btc_signal=btc_ctx
+                        )
+
+                        print(f'  [GATE] {symbol}: FREE={free_ok}(score={free_score}) VIP={vip_ok}(score={vip_score})', flush=True)
+
+                        if not free_ok and not vip_ok:
+                            print(f'  [GATE] BLOCKED {symbol}: {free_reason or vip_reason}', flush=True)
+                            continue
+
+                        quality = signal_engine.quality_label(vip_score)
+                        f_embed_clean = clean_signals.build_free_signal(
+                            symbol, sig, price, rsi, conf,
+                            atr=ind.get('atr') if ind else None
+                        )
+                        v_embed_clean = clean_signals.build_vip_signal(
+                            symbol, sig, price, rsi, conf,
+                            ai_text=ai_text, ind=ind or {},
+                            smart_score=vip_score,
+                            sector=getattr(vip_analysis, 'COIN_SECTORS', {}).get(symbol, 'Crypto'),
+                        )
+
+                        if free_ok and free_ch:
                             await free_ch.send(embed=f_embed_clean, view=demo_view)
-                        if vip_ch:
+                        if vip_ok and vip_ch:
                             await vip_ch.send(embed=v_embed_clean,
                                              file=_disc.File(chart),
                                              view=paper_interactive.TryDemoButton(symbol, sig, price))
-                        # Deliver to personal subscription channels
-                        bot.client.loop.create_task(
-                            coin_ticket.deliver_to_subscribers(bot.client, symbol, v_embed_clean)
-                        )
+                        # Deliver to personal subscription channels (VIP quality)
+                        if vip_ok:
+                            bot.client.loop.create_task(
+                                coin_ticket.deliver_to_subscribers(bot.client, symbol, v_embed_clean)
+                            )
 
                 print(f'[SIGNAL LOOP] Done. Next check in {getattr(_bot,"SIGNAL_LOOP_SECONDS",900)//60} min.')
                 await asyncio.sleep(getattr(_bot, 'SIGNAL_LOOP_SECONDS', 900))
