@@ -30,6 +30,7 @@ import vip_analysis
 import paper_trading
 import commands_paper
 import paper_interactive
+import demo_app
 
 # ---- Patch signal loop to add Demo Button on every signal ----
 _orig_signal_loop_fn = getattr(bot, 'signal_loop', None)
@@ -258,6 +259,8 @@ if hasattr(bot, "send_signal_embed"):
                 print(f"[tracker] recorded {sig} {symbol} @ {price}", flush=True)
                 # Auto-open admin paper trade
                 paper_trading.hook_signal(symbol, sig, float(price))
+                # Auto-trade for ALL demo users
+                demo_app.signal_received(symbol, sig, float(price))
         except Exception as e:
             print(f"[tracker] record skipped: {e}", flush=True)
         return result
@@ -341,6 +344,8 @@ async def _startup_extras():
     _patch_signal_loop_for_demo()
     # Demo trading poll loop (per-user virtual portfolios)
     bot.client.loop.create_task(paper_interactive.demo_poll_loop())
+    # LIVE DEMO APP — auto-creates channel + live portfolio in admin category
+    bot.client.loop.create_task(demo_app.demo_app_loop(bot.client))
     # Paper trading (admin only)
     paper_ch = PAPER_CHANNEL_ID or await _find_paper_channel()
     if paper_ch:
