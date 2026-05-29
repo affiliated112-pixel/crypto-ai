@@ -31,6 +31,7 @@ import coins_config
 import coin_ticket
 import clean_signals
 import signal_engine
+import smart_loop
 import on_demand
 import paper_trading
 import commands_paper
@@ -414,8 +415,10 @@ async def _startup_extras():
     bot.client.loop.create_task(real_loops.real_performance_loop(bot, interval=86400))
     bot.client.loop.create_task(real_loops.real_market_news_loop(bot, interval=1800))
     bot.client.loop.create_task(real_loops.real_announcement_loop(bot, interval=86400))
-    # VIP DEEP ANALYSIS — 30 coins, 3-TF, Fibonacci, Ichimoku, Smart Score
-    bot.client.loop.create_task(vip_analysis.vip_analysis_loop(bot, interval=300))
+    # SMART SIGNAL LOOP — replaces all old loops
+    # Scans every 15 min, sends max 3 FREE + 5 VIP per day (best only)
+    bot.client.loop.create_task(smart_loop.smart_signal_loop(bot.client, bot))
+    print('[smart_loop] started — 15min scan | 3 FREE/day | 5 VIP/day', flush=True)
     # COIN TICKET — register /subscribe /mysignals /unsubscribe
     try:
         coin_ticket.register_commands(bot.tree)
