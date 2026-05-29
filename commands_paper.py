@@ -3,12 +3,11 @@
 /paper_reset  — reset paper trading (admin only)
 /paper_trades — show last 10 closed trades
 """
+import os
 import discord
 from discord import app_commands
 import paper_trading
 
-ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()] if True else []
-import os
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()]
 
 def is_admin(interaction: discord.Interaction) -> bool:
@@ -53,7 +52,6 @@ def register(tree: app_commands.CommandTree):
             )
             return
         await interaction.response.defer(ephemeral=True)
-        import json as _json
         data = paper_trading._load()
         closed = list(reversed(data.get("closed_trades", [])))[:10]
         if not closed:
