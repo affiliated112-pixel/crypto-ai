@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import bot
 import coins_config
+import signal_engine
 
 try:
     from ta.trend import IchimokuIndicator
