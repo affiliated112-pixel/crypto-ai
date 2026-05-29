@@ -1,5 +1,6 @@
 """bot_extended.py — Railway entrypoint that wraps bot.py.
 Optimized + does NOT clobber bot.py's on_ready.
+Beginner explainer DISABLED (user request).
 """
 import asyncio
 import discord
@@ -7,7 +8,6 @@ import bot
 import commands_ext
 import commands_ext2
 import commands_stats
-import signal_explainer
 import pro_embeds
 import smart_filter
 import tracker
@@ -74,18 +74,13 @@ commands_ext.register(bot.tree, bot.client)
 commands_ext2.register(bot.tree, bot.client)
 commands_stats.register(bot.tree, bot.client)
 
-# ---- 4. Install beginner-friendly signal explainer ----
-signal_explainer.install(bot.client)
+# ---- 4. Beginner explainer DISABLED ----
+print("[explainer] DISABLED (user request)", flush=True)
 
-# ---- 5. Start background tasks WITHOUT clobbering bot.py's on_ready ----
-# CRITICAL: @bot.client.event on_ready would REPLACE the original on_ready
-# in bot.py that starts signal_loop, syncs slash commands, and fetches
-# channels. Instead we add a one-shot startup task that waits for the bot
-# to be ready, then kicks off OUR background loops alongside bot.py's.
+# ---- 5. Background tasks via setup_hook ----
 async def _startup_extras():
     await bot.client.wait_until_ready()
     print(f"[bot_extended] Extras starting (alongside bot.py loops)", flush=True)
-    # Warm caches so first signal has data
     symbols = getattr(bot, "SYMBOLS", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"])
     try:
         tasks = [smart_filter._cached_fear_greed(), smart_filter._cached_sentiment()]
@@ -95,15 +90,11 @@ async def _startup_extras():
         print("[smart_filter] cache warmed up", flush=True)
     except Exception as e:
         print(f"[smart_filter] warm error: {e}", flush=True)
-    # Now schedule the ongoing background loops
     bot.client.loop.create_task(tracker.poll_loop())
     bot.client.loop.create_task(smart_filter.background_refresh_loop(symbols, interval=120))
     print("[bot_extended] tracker + smart_filter refresh loops started", flush=True)
 
 
-# Hook into bot.main() by scheduling _startup_extras as a setup_hook.
-# discord.Client supports `setup_hook` which fires BEFORE on_ready and is
-# the correct place to schedule background tasks without overriding events.
 _orig_setup_hook = bot.client.setup_hook
 
 async def _patched_setup_hook():
@@ -115,7 +106,7 @@ async def _patched_setup_hook():
     bot.client.loop.create_task(_startup_extras())
 
 bot.client.setup_hook = _patched_setup_hook  # type: ignore[assignment]
-print("[bot_extended] setup_hook installed (extras will run after bot.py on_ready)", flush=True)
+print("[bot_extended] setup_hook installed", flush=True)
 
 
 if __name__ == "__main__":
