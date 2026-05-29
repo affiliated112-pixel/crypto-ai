@@ -1,7 +1,12 @@
-"""Extended slash commands added on top of bot.py — all use free APIs."""
+"""Extended slash commands added on top of bot.py — all use free APIs.
+Safely removes any existing same-name commands first so we never crash on
+CommandAlreadyRegistered when bot.py defines the same name.
+"""
 import discord
 from discord import app_commands
 import feeds
+
+OWN_COMMANDS = ["fear", "trending", "tvl", "dominance", "coin"]
 
 
 def _emoji_for_fg(v):
@@ -13,7 +18,19 @@ def _emoji_for_fg(v):
 
 
 def register(tree, client):
-    """Register all extended slash commands on the given CommandTree."""
+    """Register all extended slash commands on the given CommandTree.
+    Removes any existing same-name commands so our richer versions win."""
+
+    removed = []
+    for name in OWN_COMMANDS:
+        try:
+            old = tree.remove_command(name)
+            if old is not None:
+                removed.append(name)
+        except Exception:
+            pass
+    if removed:
+        print(f"[ext] Replaced existing commands: {', '.join(removed)}", flush=True)
 
     @tree.command(name="fear", description="📊 Crypto Fear & Greed Index — market sentiment 0-100")
     async def slash_fear(interaction: discord.Interaction):

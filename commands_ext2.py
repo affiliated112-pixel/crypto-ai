@@ -1,5 +1,5 @@
 """Second batch of extended commands: news, sentiment, multi-exchange, whales.
-All free APIs, no keys.
+All free APIs, no keys. Safely removes any existing same-name commands first.
 """
 import discord
 from discord import app_commands
@@ -7,8 +7,20 @@ import news
 import exchanges
 import whales
 
+OWN_COMMANDS = ["news", "sentiment", "compare", "arbitrage", "whales", "stables"]
+
 
 def register(tree, client):
+    removed = []
+    for name in OWN_COMMANDS:
+        try:
+            old = tree.remove_command(name)
+            if old is not None:
+                removed.append(name)
+        except Exception:
+            pass
+    if removed:
+        print(f"[ext2] Replaced existing commands: {', '.join(removed)}", flush=True)
 
     @tree.command(name="news", description="📰 Latest crypto news + sentiment (CryptoPanic free)")
     async def slash_news(interaction: discord.Interaction):
