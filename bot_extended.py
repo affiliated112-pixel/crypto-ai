@@ -28,6 +28,8 @@ import alert_messages
 import real_loops
 import vip_analysis
 import coins_config
+import coin_ticket
+import clean_signals
 import paper_trading
 import commands_paper
 import paper_interactive
@@ -212,12 +214,26 @@ def _patch_signal_loop_for_demo():
                         # Demo button on both channels
                         demo_view = paper_interactive.TryDemoButton(symbol, sig, price)
 
+                        # Build clean professional embeds
+                        f_embed_clean = clean_signals.build_free_signal(
+                            symbol, sig, price, rsi, conf,
+                            atr=ind.get('atr') if ind else None
+                        )
+                        v_embed_clean = clean_signals.build_vip_signal(
+                            symbol, sig, price, rsi, conf,
+                            ai_text=ai_text, ind=ind,
+                            sector=getattr(vip_analysis, 'COIN_SECTORS', {}).get(symbol, 'Crypto'),
+                        )
                         if free_ch:
-                            await free_ch.send(embed=f_embed, view=demo_view)
+                            await free_ch.send(embed=f_embed_clean, view=demo_view)
                         if vip_ch:
-                            await vip_ch.send(embed=v_embed,
+                            await vip_ch.send(embed=v_embed_clean,
                                              file=_disc.File(chart),
                                              view=paper_interactive.TryDemoButton(symbol, sig, price))
+                        # Deliver to personal subscription channels
+                        bot.client.loop.create_task(
+                            coin_ticket.deliver_to_subscribers(bot.client, symbol, v_embed_clean)
+                        )
 
                 print(f'[SIGNAL LOOP] Done. Next check in {getattr(_bot,"SIGNAL_LOOP_SECONDS",900)//60} min.')
                 await asyncio.sleep(getattr(_bot, 'SIGNAL_LOOP_SECONDS', 900))
@@ -364,8 +380,13 @@ async def _startup_extras():
     bot.client.loop.create_task(real_loops.real_market_news_loop(bot, interval=1800))
     bot.client.loop.create_task(real_loops.real_announcement_loop(bot, interval=86400))
     # VIP DEEP ANALYSIS — 30 coins, 3-TF, Fibonacci, Ichimoku, Smart Score
-    # Interval 300s = same as signal loop; SmartScore filter removes weak signals
     bot.client.loop.create_task(vip_analysis.vip_analysis_loop(bot, interval=300))
+    # COIN TICKET — register /subscribe /mysignals /unsubscribe
+    try:
+        coin_ticket.register_commands(bot.tree)
+        print('[ticket] slash commands registered: /subscribe /mysignals /unsubscribe', flush=True)
+    except Exception as e:
+        print(f'[ticket] command register error: {e}', flush=True)
     # Paper trading slash commands
     try:
         commands_paper.register(bot.tree)
