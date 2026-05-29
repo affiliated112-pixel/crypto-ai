@@ -1,6 +1,7 @@
-"""Signal performance tracker.
-Logs every signal to JSON, polls Binance every few minutes to check
-if price hit SL or any TP, computes win rate.
+"""Signal performance tracker + automatic SL/TP alerts.
+Logs every signal to JSON, polls Binance every 2 min to check if price
+hit SL or any TP, computes win rate. Fires alert callbacks on status
+changes so the bot can post live updates to Discord.
 """
 import asyncio
 import json
@@ -15,6 +16,20 @@ POLL_SECONDS = 120
 SIGNAL_EXPIRY_HOURS = 48
 
 UA = {"User-Agent": "crypto-ai-bot/2026"}
+
+# Alert callback: called when a signal's status changes (TP hit, SL hit, expired).
+# Signature: async def callback(event_type, record, extra)
+#   event_type: "TP1" | "TP2" | "TP3" | "SL" | "EXPIRED"
+#   record: full signal dict
+#   extra: dict with extra info (e.g. current_price, pnl_pct)
+_alert_callback = None
+
+
+def set_alert_callback(callback):
+    """Register an async callback for status-change events."""
+    global _alert_callback
+    _alert_callback = callback
+    print("[tracker] alert callback registered", flush=True)
 
 
 def _load():
@@ -38,7 +53,7 @@ def _save(records):
 
 
 def record_signal(symbol, direction, entry, score=None, quality=None):
-    """Append a new signal to the log. Computes SL/TP from entry."""
+    """Append a new signal to the log."""
     records = _load()
     if direction == "BUY":
         sl, tp1, tp2, tp3 = entry * 0.98, entry * 1.02, entry * 1.04, entry * 1.07
@@ -49,17 +64,13 @@ def record_signal(symbol, direction, entry, score=None, quality=None):
         "symbol": symbol,
         "direction": direction,
         "entry": entry,
-        "sl": sl,
-        "tp1": tp1,
-        "tp2": tp2,
-        "tp3": tp3,
-        "score": score,
-        "quality": quality,
+        "sl": sl, "tp1": tp1, "tp2": tp2, "tp3": tp3,
+        "score": score, "quality": quality,
         "opened_at": datetime.now(timezone.utc).isoformat(),
         "status": "OPEN",
         "hit": [],
-        "max_favor": entry,
-        "max_against": entry,
+        "alerted": [],   # which events we've already fired alerts for
+        "max_favor": entry, "max_against": entry,
         "closed_at": None,
     }
     records.append(rec)
@@ -79,12 +90,23 @@ def _get_price(symbol):
         return None
 
 
-def _evaluate(rec, price):
-    """Update record in place. Returns True if status changed."""
+def _pnl(rec, price):
+    """Return P&L percentage from entry to current price."""
+    if not rec.get("entry"):
+        return 0
+    if rec["direction"] == "BUY":
+        return (price - rec["entry"]) / rec["entry"] * 100
+    return (rec["entry"] - price) / rec["entry"] * 100
+
+
+async def _evaluate_and_alert(rec, price):
+    """Update record in place. Fire alerts for new events. Returns True if changed."""
     if rec["status"] != "OPEN":
         return False
     is_buy = rec["direction"] == "BUY"
+    rec.setdefault("alerted", [])
     changed = False
+    events_to_fire = []
 
     if is_buy:
         rec["max_favor"] = max(rec.get("max_favor", price), price)
@@ -92,74 +114,148 @@ def _evaluate(rec, price):
         if price <= rec["sl"]:
             rec["status"] = "SL"
             rec["closed_at"] = datetime.now(timezone.utc).isoformat()
-            return True
-        for tp_key, tp_val in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
-            if price >= tp_val and tp_key not in rec["hit"]:
-                rec["hit"].append(tp_key); changed = True
-        if "tp3" in rec["hit"]:
-            rec["status"] = "TP3"
-            rec["closed_at"] = datetime.now(timezone.utc).isoformat()
-            return True
+            if "SL" not in rec["alerted"]:
+                events_to_fire.append("SL")
+                rec["alerted"].append("SL")
+            changed = True
+        else:
+            for tp_key, tp_val in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
+                if price >= tp_val and tp_key not in rec["hit"]:
+                    rec["hit"].append(tp_key)
+                    if tp_key.upper() not in rec["alerted"]:
+                        events_to_fire.append(tp_key.upper())
+                        rec["alerted"].append(tp_key.upper())
+                    changed = True
+            if "tp3" in rec["hit"]:
+                rec["status"] = "TP3"
+                rec["closed_at"] = datetime.now(timezone.utc).isoformat()
     else:  # SELL
         rec["max_favor"] = min(rec.get("max_favor", price), price)
         rec["max_against"] = max(rec.get("max_against", price), price)
         if price >= rec["sl"]:
             rec["status"] = "SL"
             rec["closed_at"] = datetime.now(timezone.utc).isoformat()
-            return True
-        for tp_key, tp_val in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
-            if price <= tp_val and tp_key not in rec["hit"]:
-                rec["hit"].append(tp_key); changed = True
-        if "tp3" in rec["hit"]:
-            rec["status"] = "TP3"
-            rec["closed_at"] = datetime.now(timezone.utc).isoformat()
-            return True
+            if "SL" not in rec["alerted"]:
+                events_to_fire.append("SL")
+                rec["alerted"].append("SL")
+            changed = True
+        else:
+            for tp_key, tp_val in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
+                if price <= tp_val and tp_key not in rec["hit"]:
+                    rec["hit"].append(tp_key)
+                    if tp_key.upper() not in rec["alerted"]:
+                        events_to_fire.append(tp_key.upper())
+                        rec["alerted"].append(tp_key.upper())
+                    changed = True
+            if "tp3" in rec["hit"]:
+                rec["status"] = "TP3"
+                rec["closed_at"] = datetime.now(timezone.utc).isoformat()
 
     # Expiry
     try:
         opened = datetime.fromisoformat(rec["opened_at"].replace("Z", "+00:00"))
-        if (datetime.now(timezone.utc) - opened).total_seconds() > SIGNAL_EXPIRY_HOURS * 3600:
+        if rec["status"] == "OPEN" and (datetime.now(timezone.utc) - opened).total_seconds() > SIGNAL_EXPIRY_HOURS * 3600:
             rec["status"] = "EXPIRED"
             rec["closed_at"] = datetime.now(timezone.utc).isoformat()
-            return True
+            if "EXPIRED" not in rec["alerted"]:
+                events_to_fire.append("EXPIRED")
+                rec["alerted"].append("EXPIRED")
+            changed = True
     except Exception:
         pass
+
+    # Fire alerts
+    if events_to_fire and _alert_callback:
+        pnl = _pnl(rec, price)
+        for ev in events_to_fire:
+            try:
+                await _alert_callback(ev, rec, {"current_price": price, "pnl_pct": pnl})
+            except Exception as e:
+                print(f"[tracker] alert callback error: {e}", flush=True)
 
     return changed
 
 
-def poll_once():
-    """Check all open signals once."""
+async def poll_once_async():
+    """Check all open signals once and fire alerts."""
     records = _load()
-    by_sym = {}
     open_recs = [r for r in records if r.get("status") == "OPEN"]
     if not open_recs:
         return
     symbols = list({r["symbol"] for r in open_recs})
-    for sym in symbols:
-        p = _get_price(sym)
-        if p is not None:
-            by_sym[sym] = p
+    # Fetch prices in parallel
+    loop = asyncio.get_event_loop()
+    price_tasks = [loop.run_in_executor(None, _get_price, s) for s in symbols]
+    prices = await asyncio.gather(*price_tasks)
+    by_sym = {s: p for s, p in zip(symbols, prices) if p is not None}
+
     for r in records:
         if r.get("status") == "OPEN":
             price = by_sym.get(r["symbol"])
             if price is not None:
-                _evaluate(r, price)
+                await _evaluate_and_alert(r, price)
     _save(records)
 
 
+# Keep sync poll_once for backward compatibility (no alerts fired)
+def poll_once():
+    records = _load()
+    open_recs = [r for r in records if r.get("status") == "OPEN"]
+    if not open_recs:
+        return
+    by_sym = {}
+    for sym in list({r["symbol"] for r in open_recs}):
+        p = _get_price(sym)
+        if p is not None:
+            by_sym[sym] = p
+    # Note: this sync version doesn't fire alerts (no event loop)
+    for r in records:
+        if r.get("status") == "OPEN":
+            price = by_sym.get(r["symbol"])
+            if price is not None:
+                # inline sync evaluation (no alerts)
+                _evaluate_sync(r, price)
+    _save(records)
+
+
+def _evaluate_sync(rec, price):
+    """Sync evaluate (no alerts) for back-compat."""
+    if rec["status"] != "OPEN":
+        return
+    is_buy = rec["direction"] == "BUY"
+    if is_buy:
+        rec["max_favor"] = max(rec.get("max_favor", price), price)
+        if price <= rec["sl"]:
+            rec["status"] = "SL"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            return
+        for k, v in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
+            if price >= v and k not in rec["hit"]:
+                rec["hit"].append(k)
+        if "tp3" in rec["hit"]:
+            rec["status"] = "TP3"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+    else:
+        rec["max_favor"] = min(rec.get("max_favor", price), price)
+        if price >= rec["sl"]:
+            rec["status"] = "SL"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            return
+        for k, v in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
+            if price <= v and k not in rec["hit"]:
+                rec["hit"].append(k)
+        if "tp3" in rec["hit"]:
+            rec["status"] = "TP3"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+
+
 async def poll_loop():
-    """Background loop: poll every POLL_SECONDS."""
+    """Background loop: poll every POLL_SECONDS and fire alerts."""
     while True:
         try:
-            poll_once()
+            await poll_once_async()
         except Exception as e:
             print(f"[tracker] poll error: {e}", flush=True)
         await asyncio.sleep(POLL_SECONDS)
 
 
 def compute_stats(symbol=None, days=None):
-    """Compute win rate over closed signals."""
     records = _load()
     if symbol:
         records = [r for r in records if r["symbol"] == symbol.upper()]
@@ -174,15 +270,12 @@ def compute_stats(symbol=None, days=None):
     tp1 = len([r for r in closed if "tp1" in r.get("hit", [])])
     tp2 = len([r for r in closed if "tp2" in r.get("hit", [])])
     tp3 = len([r for r in closed if "tp3" in r.get("hit", [])])
-    sl  = len([r for r in closed if r["status"] == "SL"])
+    sl = len([r for r in closed if r["status"] == "SL"])
     expired = len([r for r in closed if r["status"] == "EXPIRED"])
     wins = tp1
     losses = sl
     decided = wins + losses
     win_rate = (wins / decided * 100) if decided else 0
-
-    # Average return assuming exit at TP1 / SL with no scaling
-    # BUY: +2% if tp1 hit, -2% if SL. SELL: same magnitude.
     avg_pnl_per_decided = ((wins * 2) - (losses * 2)) / decided if decided else 0
 
     by_quality = {}
@@ -195,19 +288,14 @@ def compute_stats(symbol=None, days=None):
             by_quality[q]["l"] += 1
 
     return {
-        "total": len(records),
-        "closed": len(closed),
+        "total": len(records), "closed": len(closed),
         "open": len([r for r in records if r["status"] == "OPEN"]),
-        "tp1": tp1, "tp2": tp2, "tp3": tp3,
-        "sl": sl, "expired": expired,
+        "tp1": tp1, "tp2": tp2, "tp3": tp3, "sl": sl, "expired": expired,
         "wins": wins, "losses": losses,
-        "win_rate": win_rate,
-        "avg_pnl": avg_pnl_per_decided,
+        "win_rate": win_rate, "avg_pnl": avg_pnl_per_decided,
         "by_quality": by_quality,
     }
 
 
 def recent(limit=10):
-    """Return most recent signals."""
-    records = _load()
-    return records[-limit:][::-1]
+    return _load()[-limit:][::-1]

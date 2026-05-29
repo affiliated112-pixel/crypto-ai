@@ -1,4 +1,6 @@
-"""bot_extended.py — Railway entrypoint that wraps bot.py."""
+"""bot_extended.py — Railway entrypoint that wraps bot.py.
+Now with live SL/TP alerts posted to Discord.
+"""
 import asyncio
 import discord
 import bot
@@ -10,6 +12,7 @@ import commands_help
 import pro_embeds
 import smart_filter
 import tracker
+import alert_messages
 
 async def _noop_process_commands(*args, **kwargs):
     return None
@@ -73,6 +76,56 @@ commands_admin.register(bot.tree, bot.client)
 commands_help.register(bot.tree, bot.client)
 
 print("[explainer] DISABLED (user request)", flush=True)
+
+
+# ---- SL/TP alert pipeline ----
+async def _send_alert(event, record, extra):
+    """Called by tracker when a signal hits TP/SL/expires.
+    Posts a nice embed to the alerts channel (and signals channel for TP wins)."""
+    try:
+        embed = alert_messages.build_alert_embed(event, record, extra)
+    except Exception as e:
+        print(f"[alert] embed build error: {e}", flush=True)
+        return
+
+    # Get channel IDs from bot module
+    alerts_id = getattr(bot, "ALERTS_CHANNEL", None)
+    free_id = getattr(bot, "FREE_SIGNALS_CHANNEL", None)
+    vip_id = getattr(bot, "VIP_SIGNALS_CHANNEL", None)
+
+    # Always post to alerts channel
+    if alerts_id:
+        ch = bot.client.get_channel(alerts_id)
+        if ch is None:
+            try:
+                ch = await bot.client.fetch_channel(alerts_id)
+            except Exception:
+                ch = None
+        if ch:
+            try:
+                await ch.send(embed=embed)
+            except Exception as e:
+                print(f"[alert] send to alerts error: {e}", flush=True)
+
+    # Mirror TP hits to the free signals channel so userii văd direct "win-ul"
+    if event in ("TP1", "TP2", "TP3") and free_id:
+        ch = bot.client.get_channel(free_id)
+        if ch is None:
+            try:
+                ch = await bot.client.fetch_channel(free_id)
+            except Exception:
+                ch = None
+        if ch:
+            try:
+                await ch.send(embed=embed)
+            except Exception as e:
+                print(f"[alert] send to free error: {e}", flush=True)
+
+    print(f"[alert] {event} {record['symbol']} dispatched (P&L {extra.get('pnl_pct', 0):+.2f}%)", flush=True)
+
+
+tracker.set_alert_callback(_send_alert)
+
 
 async def _startup_extras():
     await bot.client.wait_until_ready()
