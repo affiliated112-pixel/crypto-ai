@@ -6,8 +6,14 @@ import asyncio
 import discord
 from datetime import datetime, timezone, timedelta
 import tracker
-import feeds
-import news as news_mod
+try:
+    import news as news_mod
+except ImportError:
+    news_mod = None
+try:
+    import feeds
+except ImportError:
+    feeds = None
 
 # Channels are read live from the bot module at runtime.
 
@@ -200,34 +206,38 @@ async def real_market_news_loop(bot, interval=1800):
         try:
             ch = await _get_channel(bot, "MARKET_NEWS_CHANNEL")
             if ch:
-                items = await asyncio.to_thread(news_mod.cryptopanic_news, limit=5)
-                if items and "error" in items[0]:
-                    print(f"[real_news] api error: {items[0]['error']}", flush=True)
+                if news_mod:
+                    items = await asyncio.to_thread(news_mod.fetch_news, 5)
                 else:
-                    # Pick first item we haven't posted recently
-                    fresh = [it for it in items if it.get("link") and it["link"] not in last_posted]
-                    if fresh:
-                        item = fresh[0]
-                        last_posted.add(item["link"])
-                        if len(last_posted) > 100:
-                            last_posted = set(list(last_posted)[-50:])
-                        mood_color = {
-                            "🟢": 0x00C896, "🔴": 0xE74C3C, "⚪": 0x95A5A6,
-                        }.get(item.get("mood", "⚪"), 0x3498DB)
-                        embed = discord.Embed(
-                            title=f"{item.get('mood', '📰')} {item['title'][:200]}",
-                            url=item["link"],
-                            description=(
-                                f"🔗 [Read full article]({item['link']})\n\n"
-                                f"🔍 **Source:** CryptoPanic API (free, real-time)"
-                            ),
-                            color=mood_color,
-                            timestamp=datetime.now(timezone.utc),
-                        )
-                        embed.set_footer(
-                            text="🟢 Bullish • 🔴 Bearish • ⚪ Neutral • 100% real news, no fake content"
-                        )
-                        await ch.send(embed=embed)
+                    items = []
+                fresh = [it for it in items if it.get("link") and it["link"] not in last_posted]
+                if fresh:
+                    item = fresh[0]
+                    last_posted.add(item["link"])
+                    if len(last_posted) > 100:
+                        last_posted = set(list(last_posted)[-50:])
+                    mood  = item.get("mood", "⚪")
+                    emoji = item.get("emoji", "📰")
+                    src   = item.get("source", "Multi-source RSS")
+                    mood_color = {
+                        "🟢": 0x00C896, "🔴": 0xE74C3C, "⚪": 0x95A5A6,
+                    }.get(mood, 0x3498DB)
+                    summary = item.get("summary", "")
+                    embed = discord.Embed(
+                        title=f"{emoji} {item['title'][:200]}",
+                        url=item["link"],
+                        description=(
+                            f"{mood} Sentiment | Source: **{src}**\n"
+                            + (f"\n{summary}\n" if summary else "")
+                            + f"\n🔗 [Read full article]({item['link']})"
+                        ),
+                        color=mood_color,
+                        timestamp=datetime.now(timezone.utc),
+                    )
+                    embed.set_footer(
+                        text="📡 CoinDesk · Decrypt · Bitcoin Magazine · CryptoSlate · CoinGecko — 100% real news"
+                    )
+                    await ch.send(embed=embed)
         except Exception as e:
             print(f"[real_news] error: {e}", flush=True)
         await asyncio.sleep(interval)
