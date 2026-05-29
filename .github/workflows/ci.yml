@@ -15,4 +15,4 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Syntax check
-        run: python -m py_compile bot.py db.py train_model.py || true
+        run: python -m py_compile bot.py db.py train_model.py

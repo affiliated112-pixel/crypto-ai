@@ -30,10 +30,38 @@ import threading
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+import db
+
+CONFIG_PATH = Path(__file__).with_name("config.json")
+CONFIG = {}
+
+
+def _load_config():
+    global CONFIG
+    if CONFIG_PATH.is_file():
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                CONFIG = json.load(f)
+        except Exception as e:
+            print(f"[config] Failed to read config.json: {e}", flush=True)
+    return CONFIG
+
+_load_config()
+
+
+def _config_value(name: str, default=None):
+    return CONFIG.get(name, default)
 
 
 def _env(name: str, default: str = "") -> str:
-    return (os.environ.get(name) or default).strip()
+    value = os.environ.get(name)
+    if value is not None and str(value).strip() != "":
+        return str(value).strip()
+    config_value = _config_value(name)
+    if config_value is not None and str(config_value).strip() != "":
+        return str(config_value).strip()
+    return default
 
 
 def _sanitize_discord_token(raw: str) -> str:
@@ -135,16 +163,30 @@ PERFORMANCE_CHANNEL   = _channel_id("PERFORMANCE_CHANNEL",   1509524196139466852
 
 SIGNAL_LOOP_SECONDS = _int_env("SIGNAL_LOOP_SECONDS", 300)
 SIGNAL_START_DELAY  = _int_env("SIGNAL_START_DELAY", 5)
-SYMBOLS_RAW         = _env("SYMBOLS", "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT")
-SYMBOLS             = [s.strip().upper() for s in SYMBOLS_RAW.split(",") if s.strip()]
-ALL_SYMBOLS_RAW = _env(
-    "ALL_SYMBOLS",
-    "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,AVAXUSDT,DOGEUSDT",
-)
-ALL_SYMBOLS   = [s.strip().upper() for s in ALL_SYMBOLS_RAW.split(",") if s.strip()]
+
+CONFIG_SYMBOLS = CONFIG.get("SYMBOLS")
+if isinstance(CONFIG_SYMBOLS, list):
+    SYMBOLS = [s.strip().upper() for s in CONFIG_SYMBOLS if str(s).strip()]
+else:
+    SYMBOLS_RAW = _env("SYMBOLS", "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT")
+    SYMBOLS = [s.strip().upper() for s in SYMBOLS_RAW.split(",") if s.strip()]
+
+CONFIG_ALL_SYMBOLS = CONFIG.get("ALL_SYMBOLS")
+if isinstance(CONFIG_ALL_SYMBOLS, list):
+    ALL_SYMBOLS = [s.strip().upper() for s in CONFIG_ALL_SYMBOLS if str(s).strip()]
+else:
+    ALL_SYMBOLS_RAW = _env(
+        "ALL_SYMBOLS",
+        "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,AVAXUSDT,DOGEUSDT",
+    )
+    ALL_SYMBOLS = [s.strip().upper() for s in ALL_SYMBOLS_RAW.split(",") if s.strip()]
+
 VIP_ROLE_NAME = _env("VIP_ROLE_NAME", "VIP")
 DISCLAIMER_EN = "Crypto Signals Bot | Not financial advice. Invest responsibly."
 DISCLAIMER_RO = "Crypto Signals Bot | Nu e sfat financiar. Investește responsabil."
+
+db.init_db()
+db.init_closed_table()
 
 LAST_SIGNAL      = {}
 SIGNAL_STATS     = {"BUY": 0, "SELL": 0, "total": 0}
