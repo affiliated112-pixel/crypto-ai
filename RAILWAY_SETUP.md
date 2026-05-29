@@ -1,71 +1,73 @@
-# Deploy pe Railway (copy-paste)
+# Crypto Signals Bot — Railway (ghid complet)
 
-## 1. GitHub — `requirements.txt`
+## 1. GitHub
 
-Asigură-te că pe repo ai:
+Repo: `affiliated112-pixel/crypto-ai` — branch `main`
 
-```txt
-discord.py
-requests
-pandas
-ta
-matplotlib
-```
+Fișiere importante:
+- `bot.py` — bot Discord
+- `requirements.txt` — dependențe Python
+- `railway.toml` — 1 replică, health check `/health`
+- `nixpacks.toml` — suport matplotlib
 
-## 2. Railway — variabile de mediu
+## 2. Railway — proiect nou sau existent
 
-**Project → serviciul botului → Variables → Raw Editor**
+1. https://railway.app → **New Project** → **Deploy from GitHub**
+2. Alege `affiliated112-pixel/crypto-ai`
+3. **Settings → Deploy:**
+   - Replicas: **1** (obligatoriu)
+   - Start Command: `python -u bot.py` (sau lasă `railway.toml`)
 
-Lipește (înlocuiește `PUNE_TOKENUL_AICI`):
+## 3. Variables (copy-paste)
 
-```env
-DISCORD_BOT_TOKEN=PUNE_TOKENUL_AICI
-```
-
-Opțional (AI):
+**Variables → Raw Editor** — lipește din `railway-variables.txt`:
 
 ```env
-GROQ_API_KEY=
-COHERE_API_KEY=
-OPENROUTER_API_KEY=
+DISCORD_BOT_TOKEN=tokenul_tau_de_la_discord
 ```
 
-**Important:** fără ghilimele, fără `Bot ` în fața tokenului.
+Fără ghilimele. Token din: Developer Portal → Bot → **Reset Token**.
 
-## 3. Discord Developer Portal
+## 4. Discord Developer Portal
 
-1. https://discord.com/developers/applications → aplicația ta → **Bot**
-2. **Reset Token** → copiază → lipește în `DISCORD_BOT_TOKEN` pe Railway
-3. **Privileged Gateway Intents** — activează:
-   - Server Members Intent
-   - Message Content Intent
-4. **OAuth2 → URL Generator** — bifează `bot` + `applications.commands` → generează link → invită botul pe server
+- **Bot** → Intents: **Server Members** + **Message Content**
+- **OAuth2** → `bot` + `applications.commands` → invită pe server
+- Rol bot: **Send Messages**, **Attach Files**, **Embed Links** în canalele de semnale
 
-## 4. Railway — deploy
+## 5. Redeploy
 
-- **Settings → Source:** repo `affiliated112-pixel/crypto-ai` (branch `main`)
-- **Settings → Deploy:** Start Command = `python bot.py` (sau lasă `railway.toml`)
-- **Settings → Deploy → Replicas:** trebuie să fie **1** (două instanțe = 401 / session invalidated)
-- După Variables → **Deploy** / **Redeploy**
+După orice schimbare la Variables → **Deployments → Redeploy**.
 
-### Discord — permisiuni bot
-
-Pe serverul tău, rolul botului trebuie să aibă în canalele de semnale:
-- View Channel
-- Send Messages
-- Attach Files (pentru grafice VIP)
-- Embed Links
-
-## 5. Loguri OK
+## 6. Loguri OK
 
 ```text
-Keep-alive server running on port ...
-Bot online: NumeleBot#1234
-Slash commands synced.
+[config] DISCORD_BOT_TOKEN set (72 chars)
+[config] Monitoring: BTCUSDT, ETHUSDT, ...
+Bot online: Crypto Signals#4211
+[config] #free-signals (FREE_SIGNALS) OK
+[SIGNAL LOOP] Done. Next check in 5 min.
 ```
 
-Dacă vezi mesajul `DISCORD TOKEN LIPSESTE` → variabila nu e setată sau serviciul nu a fost redeploy-at.
+## 7. Health check
 
-## 6. Canale Discord
+Railway poate folosi: `GET /health` → JSON `{"status":"ok","discord_ready":true}`
 
-ID-urile de canal din `bot.py` sunt pentru serverul tău. Dacă folosești alt server, actualizează liniile `WELCOME_CHANNEL`, `FREE_SIGNALS_CHANNEL`, etc. (click dreapta pe canal → Copy Channel ID, cu Developer Mode activat în Discord).
+Pagina web: URL-ul serviciului Railway (port public).
+
+## 8. Schimbare server Discord
+
+Activează **Developer Mode** în Discord → click dreapta pe canal → **Copy Channel ID** → setează în Railway:
+
+```env
+FREE_SIGNALS_CHANNEL=1234567890123456789
+VIP_SIGNALS_CHANNEL=...
+```
+
+## 9. Probleme frecvente
+
+| Eroare | Soluție |
+|--------|---------|
+| `401` / `LoginFailure` | Token greșit sau 2 replici — Replicas=1, token nou |
+| `session invalidated` | Două containere simultan — așteaptă deploy vechi să moară |
+| Nu postează în canal | Verifică ID canal + permisiuni bot |
+| `matplotlib` missing | `requirements.txt` pe GitHub + redeploy |

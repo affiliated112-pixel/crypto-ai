@@ -1,0 +1,6 @@
+# Railway / Nixpacks — matplotlib needs system fonts
+[phases.setup]
+nixPkgs = ["...", "freetype", "fontconfig", "libpng"]
+
+[variables]
+PYTHONUNBUFFERED = "1"

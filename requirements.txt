@@ -1,5 +1,5 @@
-discord.py
-requests
-pandas
-ta
-matplotlib
+discord.py>=2.3.2,<3
+requests>=2.31.0
+pandas>=2.1.0
+ta>=0.11.0
+matplotlib>=3.8.0

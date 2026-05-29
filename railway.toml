@@ -2,7 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python bot.py"
+startCommand = "python -u bot.py"
 numReplicas = 1
+healthcheckPath = "/health"
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10

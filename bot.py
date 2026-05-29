@@ -12,6 +12,7 @@ from ta.volatility import BollingerBands, AverageTrueRange
 from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
 import os
 import sys
+import json
 import random
 import warnings
 from datetime import datetime, timezone
@@ -74,35 +75,64 @@ def _print_token_help(reason: str) -> None:
 
 TOKEN = _require_discord_token()
 
-# AI API Keys (toate gratuite)
-GROQ_API_KEY        = os.environ.get("GROQ_API_KEY", "")
-COHERE_API_KEY      = os.environ.get("COHERE_API_KEY", "")
-OPENROUTER_API_KEY  = os.environ.get("OPENROUTER_API_KEY", "")
+# AI API Keys (opțional — Railway Variables)
+GROQ_API_KEY       = _env("GROQ_API_KEY")
+COHERE_API_KEY     = _env("COHERE_API_KEY")
+OPENROUTER_API_KEY = _env("OPENROUTER_API_KEY")
+
+
+def _channel_id(env_name: str, default: int) -> int:
+    """Channel ID din Railway Variables sau default din cod."""
+    raw = _env(env_name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(f"[config] Invalid {env_name}={raw!r}, using default {default}", flush=True)
+        return default
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = _env(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
 
 # =========================
-# CHANNEL IDs
+# CHANNEL IDs (override via Railway Variables)
 # =========================
 
-WELCOME_CHANNEL       = 1509522341074567208
-RULES_CHANNEL         = 1509522358812151938
-HOWTO_CHANNEL         = 1509522378072391801
-STATUS_CHANNEL        = 1509524579364638830
-ALERTS_CHANNEL        = 1509524631332196422
-ANNOUNCEMENTS_CHANNEL = 1509524177730666588
-FREE_SIGNALS_CHANNEL  = 1509522466106642442
-VIP_SIGNALS_CHANNEL   = 1509522877966319848
-MARKET_NEWS_CHANNEL   = 1509522484594999387
-GET_VIP_CHANNEL       = 1509524395746525284
-PERFORMANCE_CHANNEL   = 1509524196139466852
+WELCOME_CHANNEL       = _channel_id("WELCOME_CHANNEL",       1509522341074567208)
+RULES_CHANNEL         = _channel_id("RULES_CHANNEL",         1509522358812151938)
+HOWTO_CHANNEL         = _channel_id("HOWTO_CHANNEL",         1509522378072391801)
+STATUS_CHANNEL        = _channel_id("STATUS_CHANNEL",        1509524579364638830)
+ALERTS_CHANNEL        = _channel_id("ALERTS_CHANNEL",        1509524631332196422)
+ANNOUNCEMENTS_CHANNEL = _channel_id("ANNOUNCEMENTS_CHANNEL", 1509524177730666588)
+FREE_SIGNALS_CHANNEL  = _channel_id("FREE_SIGNALS_CHANNEL",  1509522466106642442)
+VIP_SIGNALS_CHANNEL   = _channel_id("VIP_SIGNALS_CHANNEL",   1509522877966319848)
+MARKET_NEWS_CHANNEL   = _channel_id("MARKET_NEWS_CHANNEL",   1509522484594999387)
+GET_VIP_CHANNEL       = _channel_id("GET_VIP_CHANNEL",       1509524395746525284)
+PERFORMANCE_CHANNEL   = _channel_id("PERFORMANCE_CHANNEL",   1509524196139466852)
 
 # =========================
-# CONFIG
+# CONFIG (Railway-friendly)
 # =========================
 
-SYMBOLS       = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
-ALL_SYMBOLS   = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT",
-                 "XRPUSDT", "ADAUSDT", "AVAXUSDT", "DOGEUSDT"]
-VIP_ROLE_NAME = "VIP"
+SIGNAL_LOOP_SECONDS = _int_env("SIGNAL_LOOP_SECONDS", 300)
+SIGNAL_START_DELAY  = _int_env("SIGNAL_START_DELAY", 5)
+SYMBOLS_RAW         = _env("SYMBOLS", "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT")
+SYMBOLS             = [s.strip().upper() for s in SYMBOLS_RAW.split(",") if s.strip()]
+ALL_SYMBOLS_RAW = _env(
+    "ALL_SYMBOLS",
+    "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,AVAXUSDT,DOGEUSDT",
+)
+ALL_SYMBOLS   = [s.strip().upper() for s in ALL_SYMBOLS_RAW.split(",") if s.strip()]
+VIP_ROLE_NAME = _env("VIP_ROLE_NAME", "VIP")
 DISCLAIMER_EN = "Crypto Signals Bot | Not financial advice. Invest responsibly."
 DISCLAIMER_RO = "Crypto Signals Bot | Nu e sfat financiar. Investește responsabil."
 
@@ -579,7 +609,7 @@ SIGNAL_COOLDOWN_HOURS = 4  # resend same direction after 4 hours
 def can_send_signal(symbol, signal):
     """Allow signal if: direction changed OR cooldown elapsed."""
     global LAST_SIGNAL, LAST_SIGNAL_TS
-    now = datetime.utcnow()
+    now = utcnow()
     last_sig = LAST_SIGNAL.get(symbol)
     last_ts  = LAST_SIGNAL_TS.get(symbol)
     direction_changed = last_sig != signal
@@ -810,7 +840,7 @@ def generate_chart(df, symbol, signal=None):
 
     sig_txt = "BUY" if signal == "BUY" else ("SELL" if signal == "SELL" else "MONITOR")
     ax1.set_title(
-        f"{symbol}   |   {sig_txt}   |   Price + VWAP + BB + EMA9/20/50   |   {datetime.utcnow().strftime('%d %b %Y  %H:%M UTC')}",
+        f"{symbol}   |   {sig_txt}   |   Price + VWAP + BB + EMA9/20/50   |   {utcnow().strftime('%d %b %Y  %H:%M UTC')}",
         color="white", fontsize=10, pad=6, fontweight="bold"
     )
     ax1.set_ylabel("Price (USDT)", color="#8b949e", fontsize=8)
@@ -922,7 +952,7 @@ def build_free_embed(symbol, signal, price, rsi, confidence):
             f"💰 **Price / Preț:** `${price:,.4f}`  |  🎯 **TP1:** `${tp1:,.4f}`  |  🛑 **SL:** `${sl:,.4f}`"
         ),
         color=color,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     if logo:
         embed.set_thumbnail(url=logo)
@@ -997,7 +1027,7 @@ def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_1
         title=f"💎 {sig_label} — {coin}",
         description=f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**\n{SEP}\n{mtf_badge}",
         color=color,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     if logo:
         embed.set_thumbnail(url=logo)
@@ -1071,7 +1101,7 @@ def build_price_embed(symbol):
         title=f"{emoji}  {COIN_NAMES_EN.get(symbol, symbol)}",
         description=f"{'📈' if is_up else '📉'} **Live Market Data**  •  Real-time via Binance\n{SEP}",
         color=color,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     if logo:
         embed.set_thumbnail(url=logo)
@@ -1196,7 +1226,7 @@ async def slash_chart(interaction: discord.Interaction, coin: str = "BTCUSDT", t
         title=f"📈 {COIN_NAMES_EN.get(coin, coin)} — {timeframe.upper()} Chart",
         description=f"🇬🇧 Price + RSI + MACD indicators\n🇷🇴 Grafic cu indicatori RSI și MACD",
         color=COIN_COLORS.get(coin, 0x58a6ff),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
     await interaction.followup.send(embed=embed, file=discord.File(chart))
@@ -1208,7 +1238,7 @@ async def slash_rsi(interaction: discord.Interaction):
         title="📊 Live RSI Dashboard",
         description="🇬🇧 Real-time RSI for all coins\n🇷🇴 RSI în timp real pentru toate monedele",
         color=discord.Color.blurple(),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     for sym in SYMBOLS:
         df  = get_data(sym)
@@ -1287,7 +1317,7 @@ async def slash_stats(interaction: discord.Interaction):
     embed = discord.Embed(
         title="📈 Bot Statistics",
         color=discord.Color.green(),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(name="🇬🇧 Total Signals", value=str(SIGNAL_STATS["total"]),    inline=True)
     embed.add_field(name="🟢 BUY",             value=str(SIGNAL_STATS["BUY"]),      inline=True)
@@ -1438,7 +1468,7 @@ async def slash_tip(interaction: discord.Interaction):
         title=f"🎓 Trading Tip / Sfat de Trading",
         description=f"**{title}**",
         color=discord.Color.teal(),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(name="\u200b", value=value, inline=False)
     embed.add_field(
@@ -1465,7 +1495,7 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
                 "🇬🇧 A **signal** is an automated recommendation generated by the bot using 5 technical indicators.\n"
                 f"{SEP}"
             ),
-            color=0x3b82f6, timestamp=datetime.utcnow()
+            color=0x3b82f6, timestamp=utcnow()
         ),
         2: discord.Embed(
             title="📊 Tutorial 2/5 — Ce înseamnă indicatorii / What do Indicators Mean?",
@@ -1474,7 +1504,7 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
                 "🇬🇧 The bot combines **5 indicators** for more accurate signals.\n"
                 f"{SEP}"
             ),
-            color=0x8b5cf6, timestamp=datetime.utcnow()
+            color=0x8b5cf6, timestamp=utcnow()
         ),
         3: discord.Embed(
             title="🚀 Tutorial 3/5 — Cum faci un trade / How to Make a Trade",
@@ -1483,7 +1513,7 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
                 "🇬🇧 **Concrete steps** on Binance after receiving a BUY signal:\n"
                 f"{SEP}"
             ),
-            color=0x10b981, timestamp=datetime.utcnow()
+            color=0x10b981, timestamp=utcnow()
         ),
         4: discord.Embed(
             title="⚠️ Tutorial 4/5 — Greșeli frecvente / Common Mistakes",
@@ -1492,7 +1522,7 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
                 "🇬🇧 **Avoid these mistakes** that cost money!\n"
                 f"{SEP}"
             ),
-            color=0xef4444, timestamp=datetime.utcnow()
+            color=0xef4444, timestamp=utcnow()
         ),
         5: discord.Embed(
             title="📚 Tutorial 5/5 — Termeni importanți / Key Terms",
@@ -1501,7 +1531,7 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
                 "🇬🇧 The most important terms you need to know:\n"
                 f"{SEP}"
             ),
-            color=0xf59e0b, timestamp=datetime.utcnow()
+            color=0xf59e0b, timestamp=utcnow()
         ),
     }
 
@@ -1744,7 +1774,7 @@ async def slash_glossary(interaction: discord.Interaction, category: str = "basi
             f"🇬🇧 Simple crypto dictionary for traders\n{SEP}"
         ),
         color=data["color"],
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.set_author(name="📚 Crypto Signals Bot — Glossary", icon_url=BOT_ICON)
     for name, value in data["fields"]:
@@ -1878,7 +1908,7 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
                 "🇬🇧 **Congratulations on being here!** Follow these 8 simple steps to your first profitable trade.\n"
                 f"{SEP}"
             ),
-            color=0x22c55e, timestamp=datetime.utcnow()
+            color=0x22c55e, timestamp=utcnow()
         )
         embed.set_author(name="🚀 Crypto Signals Bot — Beginner Guide", icon_url=BOT_ICON)
         embed.add_field(
@@ -2210,7 +2240,7 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
     embed = discord.Embed(
         title=data["title"],
         color=data["color"],
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.set_author(name="🚀 Crypto Signals Bot — First Trade Guide", icon_url=BOT_ICON)
     for name, value in data["fields"]:
@@ -2451,7 +2481,7 @@ async def slash_binance(interaction: discord.Interaction, topic: str = "overview
         title=data["title"],
         description=f"🇷🇴 Ghid Binance pentru începători  •  🇬🇧 Binance guide for beginners\n{SEP}",
         color=data["color"],
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.set_author(name="🟡 Crypto Signals Bot — Binance Guide", icon_url=BOT_ICON)
     embed.set_thumbnail(url="https://assets.coingecko.com/coins/images/825/small/bnb-icon2_2x.png")
@@ -2500,7 +2530,7 @@ async def slash_signals_explained(interaction: discord.Interaction):
             "🇬🇧 Here is **exactly** what you'll see in the signals channel and what each field means:\n"
             f"{SEP}"
         ),
-        color=0x00c853, timestamp=datetime.utcnow()
+        color=0x00c853, timestamp=utcnow()
     )
     embed.set_author(name="📨 Crypto Signals Bot — Signal Explained", icon_url=BOT_ICON)
 
@@ -2652,7 +2682,7 @@ async def slash_journal(
             "profit_usd": round(profit_usd, 2),
             "outcome":    "WIN" if profit_usd > 0 else "LOSS" if profit_usd < 0 else "BE",
             "note":       note,
-            "ts":         datetime.utcnow().strftime("%d.%m.%Y %H:%M")
+            "ts":         utcnow().strftime("%d.%m.%Y %H:%M")
         }
         if uid not in USER_JOURNAL:
             USER_JOURNAL[uid] = []
@@ -2661,7 +2691,7 @@ async def slash_journal(
         embed = discord.Embed(
             title=f"📓 Trade Adăugat / Trade Logged — {outcome}",
             color=0x22c55e if profit_usd > 0 else 0xef4444 if profit_usd < 0 else 0x94a3b8,
-            timestamp=datetime.utcnow()
+            timestamp=utcnow()
         )
         embed.set_author(name=f"📓 Jurnalul lui {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
         embed.add_field(name="🪙 Moneda",   value=f"`{trade['coin']}`",                      inline=True)
@@ -2689,7 +2719,7 @@ async def slash_journal(
 
         embed = discord.Embed(
             title=f"📓 Ultimele tranzactii / Last Trades — {interaction.user.display_name}",
-            color=0x6366f1, timestamp=datetime.utcnow()
+            color=0x6366f1, timestamp=utcnow()
         )
         embed.set_author(name=f"📓 Trading Journal", icon_url=interaction.user.display_avatar.url)
         for t in trades[-10:][::-1]:
@@ -2740,7 +2770,7 @@ async def slash_journal(
         pnl_color = 0x22c55e if total_pnl >= 0 else 0xef4444
         embed = discord.Embed(
             title=f"📊 Statistici Trading / Trading Stats — {interaction.user.display_name}",
-            color=pnl_color, timestamp=datetime.utcnow()
+            color=pnl_color, timestamp=utcnow()
         )
         embed.set_author(name="📊 Journal Statistics", icon_url=interaction.user.display_avatar.url)
         embed.add_field(name="📊 Total Trades",      value=f"`{total}`",                        inline=True)
@@ -2833,7 +2863,7 @@ async def slash_sentiment(interaction: discord.Interaction):
             f"🇷🇴 Vedere combinată: Fear & Greed + RSI + momentum preț"
         ),
         color=discord.Color.dark_blue(),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(
         name="😱 Fear & Greed Index",
@@ -2919,7 +2949,7 @@ async def slash_analysis(interaction: discord.Interaction, coin: str = "BTCUSDT"
             f"**Overall Bias:** {bias}  |  Score: {score_str}"
         ),
         color=color,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     if logo:
         embed.set_thumbnail(url=logo)
@@ -2993,7 +3023,7 @@ async def slash_history(interaction: discord.Interaction):
             "🇷🇴 Ultimele semnale înregistrate în această sesiune"
         ),
         color=discord.Color.dark_gold(),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     for s in reversed(SIGNAL_HISTORY[-10:]):
         ts = s["timestamp"].strftime("%d %b %H:%M UTC")
@@ -3041,13 +3071,13 @@ async def slash_portfolio(interaction: discord.Interaction,
             USER_PORTFOLIOS[uid] = []
         USER_PORTFOLIOS[uid].append({
             "symbol": sym, "entry": entry,
-            "amount": amount, "ts": datetime.utcnow()
+            "amount": amount, "ts": utcnow()
         })
         logo = COIN_LOGOS.get(sym)
         embed = discord.Embed(
             title="✅ Trade Added / Trade Adăugat",
             description=f"**{COIN_NAMES_EN.get(sym, sym)}** added to your portfolio!",
-            color=0x00c853, timestamp=datetime.utcnow()
+            color=0x00c853, timestamp=utcnow()
         )
         if logo: embed.set_thumbnail(url=logo)
         embed.add_field(name="📍 Entry Price", value=f"`${entry:,.4f}`", inline=True)
@@ -3065,7 +3095,7 @@ async def slash_portfolio(interaction: discord.Interaction,
                 ephemeral=True); return
         embed = discord.Embed(
             title="💼 Your Portfolio / Portofoliul Tău",
-            color=discord.Color.blurple(), timestamp=datetime.utcnow()
+            color=discord.Color.blurple(), timestamp=utcnow()
         )
         total_invested = sum(t["entry"] * t["amount"] for t in trades)
         for t in trades:
@@ -3088,7 +3118,7 @@ async def slash_portfolio(interaction: discord.Interaction,
         await interaction.response.defer(ephemeral=True)
         embed = discord.Embed(
             title="📊 Live P&L / Profit & Pierdere Live",
-            color=discord.Color.gold(), timestamp=datetime.utcnow()
+            color=discord.Color.gold(), timestamp=utcnow()
         )
         total_invested = 0; total_value = 0
         for t in trades:
@@ -3162,7 +3192,7 @@ async def slash_risk(interaction: discord.Interaction,
     embed = discord.Embed(
         title="🧮 Risk Calculator / Calculator Risc",
         description=f"{'🟢 LONG' if is_long else '🔴 SHORT'} position sizing for `${entry:,.4f}` entry",
-        color=color, timestamp=datetime.utcnow()
+        color=color, timestamp=utcnow()
     )
     embed.set_author(name="💼 Crypto Signals Bot — Risk Management", icon_url=BOT_ICON)
     embed.add_field(name="💰 Capital",          value=f"`${capital:,.2f}`",           inline=True)
@@ -3209,7 +3239,7 @@ async def slash_calculate(interaction: discord.Interaction,
     color = 0x00c853 if is_profit else 0xff1744
     embed = discord.Embed(
         title=f"{'🟢 PROFIT' if is_profit else '🔴 LOSS'} — Trade Calculator",
-        color=color, timestamp=datetime.utcnow()
+        color=color, timestamp=utcnow()
     )
     embed.set_author(name="💵 Crypto Signals Bot — P&L Calculator", icon_url=BOT_ICON)
     embed.add_field(name="📍 Entry Price",  value=f"`${entry:,.4f}`",      inline=True)
@@ -3296,7 +3326,7 @@ async def slash_multi(interaction: discord.Interaction, coin: str = "BTCUSDT"):
             f"**Overall Confluence: {overall}**  (`{buy_count}/4` TF bullish)"
         ),
         color=0x00c853 if "BUY" in overall else (0xff1744 if "SELL" in overall else 0xffa726),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     if logo: embed.set_thumbnail(url=logo)
     embed.set_author(name="📐 Multi-Timeframe Dashboard", icon_url=BOT_ICON)
@@ -3334,7 +3364,7 @@ async def slash_heatmap(interaction: discord.Interaction):
             "🇬🇧 Live overview of all tracked coins\n"
             f"🇷🇴 Vizualizare live toate monedele urmărite\n{SEP}"
         ),
-        color=0x1e293b, timestamp=datetime.utcnow()
+        color=0x1e293b, timestamp=utcnow()
     )
     embed.set_author(name="🌡️ Crypto Signals Bot — Market Heatmap", icon_url=BOT_ICON)
 
@@ -3426,7 +3456,7 @@ async def slash_compare(interaction: discord.Interaction,
 
     embed = discord.Embed(
         title=f"⚖️ Compare — {coin1.replace('USDT','')} vs {coin2.replace('USDT','')}",
-        color=0x6366f1, timestamp=datetime.utcnow()
+        color=0x6366f1, timestamp=utcnow()
     )
     embed.set_author(name="⚖️ Crypto Signals Bot — Coin Comparison", icon_url=BOT_ICON)
 
@@ -3514,7 +3544,7 @@ async def slash_dominance(interaction: discord.Interaction):
             f"🌍 **Total Market Cap:** `${total_mc/1e9:,.1f}B` (`{'+' if mc_chg>=0 else ''}{mc_chg}%` 24h)\n"
             f"📦 **24h Volume:** `${total_vol/1e9:,.1f}B`\n{SEP}"
         ),
-        color=0xF7931A, timestamp=datetime.utcnow()
+        color=0xF7931A, timestamp=utcnow()
     )
     embed.set_thumbnail(url=BOT_ICON)
     embed.set_author(name="👑 Crypto Signals Bot — Market Dominance", icon_url=BOT_ICON)
@@ -3646,7 +3676,7 @@ async def slash_predict(interaction: discord.Interaction, coin: str, direction: 
         "symbol":    coin,
         "direction": direction,
         "entry_price": info["price"],
-        "ts":        datetime.utcnow(),
+        "ts":        utcnow(),
         "username":  str(interaction.user)
     }
     if uid not in PRED_SCORES:
@@ -3662,7 +3692,7 @@ async def slash_predict(interaction: discord.Interaction, coin: str, direction: 
             f"🇷🇴 **{interaction.user.display_name}** prezice **{direction}** pentru **{COIN_NAMES_EN.get(coin,coin)}**"
         ),
         color=0x00c853 if direction == "UP" else 0xff1744,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     scores = PRED_SCORES[uid]
     acc = round(scores["correct"] / scores["total"] * 100, 1) if scores["total"] > 0 else 0
@@ -3686,7 +3716,7 @@ async def slash_leaderboard(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🏆 Prediction Leaderboard / Clasament Predicții",
         description="🇬🇧 Top predictors this session\n🇷🇴 Top predictori din această sesiune",
-        color=0xffd700, timestamp=datetime.utcnow()
+        color=0xffd700, timestamp=utcnow()
     )
     medals = ["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣","🔟"]
     for i, (uid, s) in enumerate(sorted_scores[:10]):
@@ -3745,7 +3775,7 @@ async def slash_fibonacci(interaction: discord.Interaction, coin: str = "BTCUSDT
             f"🇷🇴 Zone cheie de preț bazate pe ultimele 50 lumânări (1h) — traderii le folosesc ca suport/rezistență."
         ),
         color=0xf0b232,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(
         name="📊 Swing Analysis",
@@ -3894,7 +3924,7 @@ async def slash_smartmoney(interaction: discord.Interaction, coin: str = "BTCUSD
             f"🇷🇴 Analiza instituțională: unde banii mari cumpara/vand."
         ),
         color=0x6366f1,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(name="📊 Market Structure / Structura Pietei",
                     value=f"{structure}\n{struct_ro}", inline=False)
@@ -4001,7 +4031,7 @@ async def slash_ichimoku(interaction: discord.Interaction, coin: str = "BTCUSDT"
             f"🇷🇴 Sistemul japonez complet — 5 linii, o imagine clara."
         ),
         color=0x00c896 if "BULL" in signal else (0xff4d4d if "BEAR" in signal else 0x8b949e),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(
         name="📊 Ichimoku Lines",
@@ -4094,7 +4124,7 @@ async def slash_vwap(interaction: discord.Interaction, coin: str = "BTCUSDT"):
             f"🇷🇴 VWAP = Prețul mediu ponderat la volum — 'valoarea corecta' a sesiunii."
         ),
         color=0x38bdf8,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(
         name="📈 VWAP Levels",
@@ -4193,7 +4223,7 @@ async def slash_atr(interaction: discord.Interaction, coin: str = "BTCUSDT", cap
             f"🇷🇴 ATR = cât de mult se misca pretul per lumanare in medie."
         ),
         color=0xa78bfa,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(
         name="📊 Volatility Stats",
@@ -4317,7 +4347,7 @@ async def slash_backtest(interaction: discord.Interaction, coin: str = "BTCUSDT"
             f"📅 **Data:** Last ~{len(df)//6} days (4h candles)  •  **Window:** 52 candles"
         ),
         color=color,
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
     embed.add_field(
         name="📊 Backtest Results / Rezultate Backtest",
@@ -4438,7 +4468,7 @@ async def slash_advanced(interaction: discord.Interaction, coin: str = "BTCUSDT"
             f"**Overall Signal:** {overall}  `{bull_score}/14 bullish indicators`"
         ),
         color=0x00c896 if "BULL" in overall else (0xff4d4d if "BEAR" in overall else 0x8b949e),
-        timestamp=datetime.utcnow()
+        timestamp=utcnow()
     )
 
     # Momentum indicators
@@ -4516,7 +4546,7 @@ async def slash_advanced(interaction: discord.Interaction, coin: str = "BTCUSDT"
 @client.event
 async def on_member_join(member):
     # ── Welcome message in channel ──
-    ch = client.get_channel(WELCOME_CHANNEL)
+    ch = await fetch_message_channel(WELCOME_CHANNEL, "WELCOME")
     if ch:
         embed = discord.Embed(
             title=f"👋 Bun venit / Welcome, {member.display_name}!",
@@ -4533,7 +4563,7 @@ async def on_member_join(member):
                 f"💎 Get VIP → <#{GET_VIP_CHANNEL}>"
             ),
             color=discord.Color.gold(),
-            timestamp=datetime.utcnow()
+            timestamp=utcnow()
         )
         embed.set_thumbnail(url=member.display_avatar.url)
         embed.add_field(
@@ -4563,7 +4593,7 @@ async def on_member_join(member):
                 f"{SEP}"
             ),
             color=0x22c55e,
-            timestamp=datetime.utcnow()
+            timestamp=utcnow()
         )
         dm_embed.set_thumbnail(url=BOT_ICON)
         dm_embed.set_author(name="🤖 Crypto Signals Bot", icon_url=BOT_ICON)
@@ -4648,7 +4678,7 @@ async def on_ready():
                 "📋 Type `/help` to see all commands / pentru toate comenzile"
             ),
             color=discord.Color.green(),
-            timestamp=datetime.utcnow()
+            timestamp=utcnow()
         )
         await status_ch.send(embed=embed)
 
@@ -4947,7 +4977,7 @@ async def on_ready():
 
 async def signal_loop():
     await client.wait_until_ready()
-    await asyncio.sleep(5)  # avoid overlap with old container during Railway deploy
+    await asyncio.sleep(SIGNAL_START_DELAY)
 
     while True:
         free_ch   = await fetch_message_channel(FREE_SIGNALS_CHANNEL, "FREE_SIGNALS")
@@ -4994,7 +5024,7 @@ async def signal_loop():
                         "symbol": symbol, "signal": sig,
                         "price": price, "rsi": round(rsi, 2),
                         "confidence": conf,
-                        "timestamp": datetime.utcnow()
+                        "timestamp": utcnow()
                     })
                     if len(SIGNAL_HISTORY) > 500:
                         SIGNAL_HISTORY.pop(0)
@@ -5011,8 +5041,8 @@ async def signal_loop():
                 elif sig:
                     print(f"  [COOLDOWN] {sig} for {symbol} blocked — same direction, cooldown not elapsed")
 
-            print(f"[SIGNAL LOOP] Done. Next check in 5 min.")
-            await asyncio.sleep(300)
+            print(f"[SIGNAL LOOP] Done. Next check in {SIGNAL_LOOP_SECONDS // 60} min.")
+            await asyncio.sleep(SIGNAL_LOOP_SECONDS)
 
         except discord.HTTPException as e:
             print(f"[SIGNAL LOOP ERROR] HTTP {e.status}: {e}", flush=True)
@@ -5039,7 +5069,7 @@ async def signal_loop():
 
 async def fear_greed_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(MARKET_NEWS_CHANNEL)
+    channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
     while True:
         try:
             data  = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8).json()
@@ -5055,7 +5085,7 @@ async def fear_greed_loop():
                          else "Piața în echilibru. Urmărește semnalele tehnice.")
             embed = discord.Embed(
                 title=f"{emoji} Fear & Greed Index — {val}/100 ({label})",
-                color=color, timestamp=datetime.utcnow()
+                color=color, timestamp=utcnow()
             )
             embed.add_field(name="🇬🇧 Interpretation", value=interp_en, inline=False)
             embed.add_field(name="🇷🇴 Interpretare",   value=interp_ro, inline=False)
@@ -5072,7 +5102,7 @@ async def fear_greed_loop():
 
 async def top_movers_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(MARKET_NEWS_CHANNEL)
+    channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
     while True:
         await asyncio.sleep(86400)
         try:
@@ -5082,7 +5112,7 @@ async def top_movers_loop():
             losers, gainers = srt[:5], srt[-5:][::-1]
             embed = discord.Embed(
                 title="🏆 Top 5 Gainers & Losers — 24h",
-                color=discord.Color.gold(), timestamp=datetime.utcnow()
+                color=discord.Color.gold(), timestamp=utcnow()
             )
             embed.add_field(name="📈 Gainers",
                 value="\n".join(f"🟢 **{x['symbol'].replace('USDT','')}** `+{float(x['priceChangePercent']):.2f}%` — `${float(x['lastPrice']):,.4f}`" for x in gainers) or "—",
@@ -5131,7 +5161,7 @@ async def price_alert_checker():
                                     f"🇷🇴 **{sym.replace('USDT','')}** a atins `${price:,.2f}`\n"
                                     f"Ținta ta: {'≥' if direction=='above' else '≤'} `${target:,.2f}`"
                                 ),
-                                color=discord.Color.green(), timestamp=datetime.utcnow()
+                                color=discord.Color.green(), timestamp=utcnow()
                             )
                             embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
                             await user.send(embed=embed)
@@ -5149,7 +5179,7 @@ async def price_alert_checker():
 
 async def neutral_market_loop():
     await client.wait_until_ready()
-    free_ch = client.get_channel(FREE_SIGNALS_CHANNEL)
+    free_ch = await fetch_message_channel(FREE_SIGNALS_CHANNEL, "FREE_SIGNALS")
     while True:
         await asyncio.sleep(1800)
         try:
@@ -5172,7 +5202,7 @@ async def neutral_market_loop():
                         "🇷🇴 Niciun semnal activ momentan. Monitorizez continuu.\n\n"
                         + "\n".join(rows)
                     ),
-                    color=discord.Color.light_grey(), timestamp=datetime.utcnow()
+                    color=discord.Color.light_grey(), timestamp=utcnow()
                 )
                 embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
                 await free_ch.send(embed=embed)
@@ -5185,7 +5215,7 @@ async def neutral_market_loop():
 
 async def market_news_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(MARKET_NEWS_CHANNEL)
+    channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
     news = [
         ("🚨 High Volatility Alert / Alertă Volatilitate Ridicată",
          "🇬🇧 BTC volatility increasing! Monitor open positions.\n🇷🇴 Volatilitate BTC în creștere! Monitorizează pozițiile.", discord.Color.orange()),
@@ -5203,7 +5233,7 @@ async def market_news_loop():
     while True:
         if channel:
             title, desc, color = random.choice(news)
-            embed = discord.Embed(title=title, description=desc, color=color, timestamp=datetime.utcnow())
+            embed = discord.Embed(title=title, description=desc, color=color, timestamp=utcnow())
             embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             await channel.send(embed=embed)
         await asyncio.sleep(1800)
@@ -5214,7 +5244,7 @@ async def market_news_loop():
 
 async def announcement_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(ANNOUNCEMENTS_CHANNEL)
+    channel = await fetch_message_channel(ANNOUNCEMENTS_CHANNEL, "ANNOUNCEMENTS")
     items = [
         ("📢 VIP Signals Available! / Semnale VIP Disponibile!",
          "🇬🇧 Upgrade now for full premium access 💎\n🇷🇴 Upgrade acum pentru acces complet premium 💎"),
@@ -5229,7 +5259,7 @@ async def announcement_loop():
     while True:
         if channel:
             title, desc = items[i % len(items)]
-            embed = discord.Embed(title=title, description=desc, color=discord.Color.gold(), timestamp=datetime.utcnow())
+            embed = discord.Embed(title=title, description=desc, color=discord.Color.gold(), timestamp=utcnow())
             embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             await channel.send(embed=embed)
         i += 1
@@ -5241,12 +5271,12 @@ async def announcement_loop():
 
 async def performance_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(PERFORMANCE_CHANNEL)
+    channel = await fetch_message_channel(PERFORMANCE_CHANNEL, "PERFORMANCE")
     while True:
         if channel:
             embed = discord.Embed(
                 title="📊 Daily Performance / Performanță Zilnică",
-                color=discord.Color.green(), timestamp=datetime.utcnow()
+                color=discord.Color.green(), timestamp=utcnow()
             )
             embed.add_field(name="✅ BTC", value="+12%", inline=True)
             embed.add_field(name="✅ ETH", value="+8%",  inline=True)
@@ -5264,7 +5294,7 @@ async def performance_loop():
 
 async def crash_alert():
     await client.wait_until_ready()
-    channel = client.get_channel(ALERTS_CHANNEL)
+    channel = await fetch_message_channel(ALERTS_CHANNEL, "ALERTS")
     while True:
         try:
             df = get_data("BTCUSDT")
@@ -5281,7 +5311,7 @@ async def crash_alert():
                             f"Preț curent: `${round(df['close'].iloc[-1],2)}`\n"
                             f"⚠️ Verifică pozițiile deschise și SL-urile!"
                         ),
-                        color=discord.Color.red(), timestamp=datetime.utcnow()
+                        color=discord.Color.red(), timestamp=utcnow()
                     )
                     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
                     await channel.send(embed=embed)
@@ -5297,7 +5327,7 @@ LAST_PUMP = {}
 
 async def pump_alert_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(ALERTS_CHANNEL)
+    channel = await fetch_message_channel(ALERTS_CHANNEL, "ALERTS")
     while True:
         try:
             for symbol in SYMBOLS:
@@ -5306,7 +5336,7 @@ async def pump_alert_loop():
                     continue
                 pump_pct = (df["close"].iloc[-1] - df["close"].iloc[-10]) / df["close"].iloc[-10] * 100
                 coin = symbol.replace("USDT", "")
-                now  = datetime.utcnow()
+                now  = utcnow()
 
                 # PUMP: +3% in ~50 min
                 if pump_pct > 3:
@@ -5371,7 +5401,7 @@ async def pump_alert_loop():
 
 async def education_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(HOWTO_CHANNEL)
+    channel = await fetch_message_channel(HOWTO_CHANNEL, "HOWTO")
     index = 0
     while True:
         await asyncio.sleep(43200)  # every 12 hours
@@ -5382,7 +5412,7 @@ async def education_loop():
                     title="🎓 Sfat de Trading / Daily Trading Tip",
                     description=f"**{title}**",
                     color=discord.Color.teal(),
-                    timestamp=datetime.utcnow()
+                    timestamp=utcnow()
                 )
                 embed.set_author(name="🎓 Crypto Signals Bot — Education", icon_url=BOT_ICON)
                 embed.add_field(name="\u200b", value=value, inline=False)
@@ -5471,7 +5501,7 @@ async def on_message(message: discord.Message):
                         f"👤 Executat de / Executed by: {message.author.mention}"
                     ),
                     color=0xef4444,
-                    timestamp=datetime.utcnow()
+                    timestamp=utcnow()
                 )
             )
         else:
@@ -5492,7 +5522,7 @@ async def on_message(message: discord.Message):
                         "💡 `!sterge 50` → 50 mesaje  |  `!sterge all` → tot chatul"
                     ),
                     color=0xef4444,
-                    timestamp=datetime.utcnow()
+                    timestamp=utcnow()
                 )
             )
 
@@ -5508,7 +5538,7 @@ async def on_message(message: discord.Message):
     # ANTI-SPAM — auto-mute dacă >5 msg / 4 sec
     # ══════════════════════════════════════════
     uid = message.author.id
-    now_ts = datetime.utcnow().timestamp()
+    now_ts = utcnow().timestamp()
     if not message.author.guild_permissions.manage_messages:
         if uid not in SPAM_TRACKER:
             SPAM_TRACKER[uid] = []
@@ -5529,7 +5559,7 @@ async def on_message(message: discord.Message):
                             "🇬🇧 User was **auto-muted for 5 minutes** for spamming."
                         ),
                         color=0xef4444,
-                        timestamp=datetime.utcnow()
+                        timestamp=utcnow()
                     )
                 )
                 await asyncio.sleep(10)
@@ -5547,7 +5577,7 @@ async def on_message(message: discord.Message):
 
     async def _mod_log(guild, action, mod, target, reason="—"):
         """Post mod action to STATUS channel as a log embed."""
-        ch = client.get_channel(STATUS_CHANNEL)
+        ch = await fetch_message_channel(STATUS_CHANNEL, "STATUS")
         if not ch:
             return
         color = {"mute":0xfbbf24,"unmute":0x22c55e,"kick":0xf97316,"ban":0xef4444,
@@ -5555,7 +5585,7 @@ async def on_message(message: discord.Message):
         embed = discord.Embed(
             title=f"🔨 MOD LOG — {action.upper()}",
             color=color,
-            timestamp=datetime.utcnow()
+            timestamp=utcnow()
         )
         embed.add_field(name="👤 Utilizator / User", value=str(target), inline=True)
         embed.add_field(name="🛡️ Moderator",         value=str(mod),    inline=True)
@@ -5594,7 +5624,7 @@ async def on_message(message: discord.Message):
                         f"📝 Motiv: `{reason}`\n"
                         f"🛡️ Moderator: {message.author.mention}"
                     ),
-                    color=0xfbbf24, timestamp=datetime.utcnow()
+                    color=0xfbbf24, timestamp=utcnow()
                 )
             )
             await _mod_log(message.guild, "mute", message.author, target, f"{reason} ({minutes} min)")
@@ -5619,7 +5649,7 @@ async def on_message(message: discord.Message):
             confirm = await message.channel.send(
                 embed=discord.Embed(
                     description=f"🔊 **{target.mention}** a fost **unmutat** de {message.author.mention}",
-                    color=0x22c55e, timestamp=datetime.utcnow()
+                    color=0x22c55e, timestamp=utcnow()
                 )
             )
             await _mod_log(message.guild, "unmute", message.author, target)
@@ -5651,7 +5681,7 @@ async def on_message(message: discord.Message):
                         f"📝 Motiv: `{reason}`\n"
                         f"🛡️ Moderator: {message.author.mention}"
                     ),
-                    color=0xf97316, timestamp=datetime.utcnow()
+                    color=0xf97316, timestamp=utcnow()
                 )
             )
             await _mod_log(message.guild, "kick", message.author, target, reason)
@@ -5683,7 +5713,7 @@ async def on_message(message: discord.Message):
                         f"📝 Motiv: `{reason}`\n"
                         f"🛡️ Moderator: {message.author.mention}"
                     ),
-                    color=0xef4444, timestamp=datetime.utcnow()
+                    color=0xef4444, timestamp=utcnow()
                 )
             )
             await _mod_log(message.guild, "ban", message.author, target, reason)
@@ -5710,7 +5740,7 @@ async def on_message(message: discord.Message):
         USER_WARNINGS[tid].append({
             "reason": reason,
             "mod": str(message.author),
-            "ts": datetime.utcnow().strftime("%d.%m.%Y %H:%M")
+            "ts": utcnow().strftime("%d.%m.%Y %H:%M")
         })
         count = len(USER_WARNINGS[tid])
         await message.delete()
@@ -5723,7 +5753,7 @@ async def on_message(message: discord.Message):
                     f"🛡️ Moderator: {message.author.mention}\n\n"
                     f"{'🔴 **ATENTIE: 3+ avertismente! Considera mute/kick.**' if count >= 3 else ''}"
                 ),
-                color=0xa78bfa, timestamp=datetime.utcnow()
+                color=0xa78bfa, timestamp=utcnow()
             )
         )
         await _mod_log(message.guild, "warn", message.author, target, f"#{count}: {reason}")
@@ -5737,7 +5767,7 @@ async def on_message(message: discord.Message):
                     f"📊 Total avertismente: **{count}**\n\n"
                     "Respecta regulile serverului pentru a evita mute/kick."
                 ),
-                color=0xa78bfa, timestamp=datetime.utcnow()
+                color=0xa78bfa, timestamp=utcnow()
             )
             await target.send(embed=dm)
         except Exception:
@@ -5759,7 +5789,7 @@ async def on_message(message: discord.Message):
             await asyncio.sleep(6); await info.delete(); return
         embed = discord.Embed(
             title=f"⚠️ Avertismentele lui {target}",
-            color=0xa78bfa, timestamp=datetime.utcnow()
+            color=0xa78bfa, timestamp=utcnow()
         )
         for i, w in enumerate(warns[-10:], 1):
             embed.add_field(name=f"#{i} — {w['ts']}", value=f"📝 {w['reason']}\n🛡️ {w['mod']}", inline=False)
@@ -5784,7 +5814,7 @@ async def on_message(message: discord.Message):
         confirm = await message.channel.send(
             embed=discord.Embed(
                 description=f"✅ **{old}** avertismente sterse pentru **{target}** de {message.author.mention}",
-                color=0x6ee7b7, timestamp=datetime.utcnow()
+                color=0x6ee7b7, timestamp=utcnow()
             )
         )
         await _mod_log(message.guild, "clearwarn", message.author, target, f"{old} warns cleared")
@@ -5820,20 +5850,20 @@ async def on_message(message: discord.Message):
                 sig = "BUY" if ind["rsi"] < 50 else "SELL"
                 conf_display = "📊 FORTAT (test)"
             LAST_SIGNAL[sym]    = sig
-            LAST_SIGNAL_TS[sym] = datetime.utcnow()
+            LAST_SIGNAL_TS[sym] = utcnow()
             SIGNAL_STATS[sig]     += 1
             SIGNAL_STATS["total"] += 1
             SIGNAL_HISTORY.append({"symbol": sym, "signal": sig, "price": price,
                                     "rsi": round(rsi, 2), "confidence": conf_display,
-                                    "timestamp": datetime.utcnow()})
+                                    "timestamp": utcnow()})
             ai_text   = ai_analysis(sig, price, rsi, sym)
             tf15      = get_signal_15m(sym)
             confirmed = tf15 == sig
             chart     = generate_chart(df, sym, sig)
             f_embed   = build_free_embed(sym, sig, price, rsi, conf_display)
             v_embed   = build_vip_embed(sym, sig, price, rsi, conf_display, ai_text, confirmed, ind=ind)
-            free_ch   = client.get_channel(FREE_SIGNALS_CHANNEL)
-            vip_ch    = client.get_channel(VIP_SIGNALS_CHANNEL)
+            free_ch   = await fetch_message_channel(FREE_SIGNALS_CHANNEL, "FREE_SIGNALS")
+            vip_ch    = await fetch_message_channel(VIP_SIGNALS_CHANNEL, "VIP_SIGNALS")
             if free_ch:
                 await free_ch.send(embed=f_embed)
             if vip_ch:
@@ -5895,7 +5925,7 @@ async def on_message(message: discord.Message):
             embed = discord.Embed(
                 title=f"🔍 Indicatori Live — {sym.replace('USDT','')} / ${price_v:,.2f}",
                 color=0x22c55e if buy_score > sell_score else 0xef4444 if sell_score > buy_score else 0x94a3b8,
-                timestamp=datetime.utcnow()
+                timestamp=utcnow()
             )
             embed.add_field(name=f"🟢 BUY Score: {buy_score}/5",  value=f"```\n{buy_lines}\n```",  inline=False)
             embed.add_field(name=f"🔴 SELL Score: {sell_score}/5", value=f"```\n{sell_lines}\n```", inline=False)
@@ -5914,7 +5944,7 @@ async def on_message(message: discord.Message):
         await message.delete()
         embed = discord.Embed(
             title="🛡️ Comenzi Moderare / Moderation Commands",
-            color=0x6366f1, timestamp=datetime.utcnow()
+            color=0x6366f1, timestamp=utcnow()
         )
         embed.add_field(name="!mute @user [min] [motiv]",  value="🔇 Mute utilizator (default 10 min)", inline=False)
         embed.add_field(name="!unmute @user",               value="🔊 Unmute utilizator",               inline=False)
@@ -5937,10 +5967,10 @@ async def on_message(message: discord.Message):
 
 async def weekly_recap_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(PERFORMANCE_CHANNEL)
+    channel = await fetch_message_channel(PERFORMANCE_CHANNEL, "PERFORMANCE")
     while True:
         try:
-            now = datetime.utcnow()
+            now = utcnow()
             days_until_sunday = (6 - now.weekday()) % 7
             if days_until_sunday == 0 and now.hour == 20:
                 week_signals = [s for s in SIGNAL_HISTORY
@@ -6007,10 +6037,10 @@ async def weekly_recap_loop():
 
 async def daily_summary_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(MARKET_NEWS_CHANNEL)
+    channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
     while True:
         try:
-            now = datetime.utcnow()
+            now = utcnow()
             if now.hour == 8 and now.minute < 5:
                 fg_score, fg_class = get_fear_greed()
                 rows = []
@@ -6085,7 +6115,7 @@ async def daily_summary_loop():
 
 async def status_update_loop():
     await client.wait_until_ready()
-    channel = client.get_channel(STATUS_CHANNEL)
+    channel = await fetch_message_channel(STATUS_CHANNEL, "STATUS")
     while True:
         try:
             if channel:
@@ -6096,8 +6126,8 @@ async def status_update_loop():
                 eth_str = f"`${eth_info['price']:,.2f}` (`{eth_info['change']:+.2f}%`)" if eth_info else "N/A"
                 embed = discord.Embed(
                     title="🤖 Bot Status — Online & Monitoring",
-                    description=f"🟢 **All systems operational** | Updated: `{datetime.utcnow().strftime('%H:%M UTC')}`",
-                    color=0x22c55e, timestamp=datetime.utcnow()
+                    description=f"🟢 **All systems operational** | Updated: `{utcnow().strftime('%H:%M UTC')}`",
+                    color=0x22c55e, timestamp=utcnow()
                 )
                 embed.set_author(name="🤖 Crypto Signals Bot — Status", icon_url=BOT_ICON)
                 embed.add_field(name="₿ BTC",  value=btc_str, inline=True)
@@ -6140,7 +6170,7 @@ async def watchlist_notifier_loop():
                     if not sig or not price:
                         continue
                     key = f"{uid}_{sym}_{sig}"
-                    now = datetime.utcnow()
+                    now = utcnow()
                     last = WATCHLIST_NOTIF.get(key)
                     if last and (now - last).seconds < 3600:
                         continue
@@ -6184,7 +6214,7 @@ async def prediction_checker_loop():
     while True:
         await asyncio.sleep(3600)
         try:
-            now = datetime.utcnow()
+            now = utcnow()
             resolved = []
             for uid, pred in list(PREDICTIONS.items()):
                 age = (now - pred["ts"]).total_seconds()
@@ -6236,24 +6266,52 @@ async def prediction_checker_loop():
             print(f"Prediction checker error: {e}")
 
 # ══════════════════════════════════════════════
-#   KEEP-ALIVE SERVER (24/7 uptime on Replit)
+#   KEEP-ALIVE + HEALTH (Railway PORT)
 # ══════════════════════════════════════════════
 
 class _PingHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        path = (self.path or "/").split("?")[0]
+        if path in ("/health", "/healthz"):
+            payload = {
+                "status": "ok",
+                "discord_ready": client.is_ready(),
+                "bot": str(client.user) if client.user else None,
+                "signals": SIGNAL_STATS,
+                "utc": utcnow().isoformat(),
+            }
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         self.send_response(200)
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
         uptime_info = (
             f"<h2 style='color:#00c896;font-family:monospace'>🤖 Crypto Signals Bot — ONLINE</h2>"
-            f"<p>Signals generated: BUY <b>{SIGNAL_STATS['BUY']}</b> | SELL <b>{SIGNAL_STATS['SELL']}</b> | Total <b>{SIGNAL_STATS['total']}</b></p>"
-            f"<p>Active portfolios: <b>{len(USER_PORTFOLIOS)}</b> | Watchlists: <b>{len(USER_WATCHLISTS)}</b></p>"
-            f"<p style='color:#8b949e'>Last ping: {datetime.utcnow().strftime('%d %b %Y %H:%M:%S UTC')}</p>"
+            f"<p>Signals: BUY <b>{SIGNAL_STATS['BUY']}</b> | SELL <b>{SIGNAL_STATS['SELL']}</b> | Total <b>{SIGNAL_STATS['total']}</b></p>"
+            f"<p>Discord: <b>{'connected' if client.is_ready() else 'starting...'}</b></p>"
+            f"<p style='color:#8b949e'>Last ping: {utcnow().strftime('%d %b %Y %H:%M:%S UTC')}</p>"
+            f"<p><a href='/health'>/health</a> JSON</p>"
         )
         self.wfile.write(uptime_info.encode("utf-8"))
 
     def log_message(self, format, *args):
-        pass  # suppress HTTP request logs from console
+        pass
+
+
+def print_startup_config():
+    print("=" * 60, flush=True)
+    print("  Crypto Signals Bot — Railway", flush=True)
+    print("=" * 60, flush=True)
+    print(f"[config] Monitoring: {', '.join(SYMBOLS)}", flush=True)
+    print(f"[config] Signal loop: every {SIGNAL_LOOP_SECONDS}s (start delay {SIGNAL_START_DELAY}s)", flush=True)
+    print(f"[config] VIP role: {VIP_ROLE_NAME}", flush=True)
+    print("=" * 60, flush=True)
 
 
 def keep_alive():
@@ -6261,16 +6319,24 @@ def keep_alive():
     server = HTTPServer(("0.0.0.0", port), _PingHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
-    print(f"Keep-alive server running on port {port}")
+    print(f"[config] Health check: http://0.0.0.0:{port}/health", flush=True)
+    print(f"Keep-alive server running on port {port}", flush=True)
 
-# =========================
 
-keep_alive()
+def main():
+    print_startup_config()
+    keep_alive()
+    try:
+        client.run(TOKEN)
+    except discord.LoginFailure:
+        _print_token_help(
+            "RESPINS DE DISCORD (401) — token gresit sau resetat. Genereaza unul NOU in Portal."
+        )
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("[shutdown] Stopping bot.", flush=True)
+        sys.exit(0)
 
-try:
-    client.run(TOKEN)
-except discord.LoginFailure:
-    _print_token_help(
-        "RESPINS DE DISCORD (401) — token gresit sau resetat. Genereaza unul NOU in Portal."
-    )
-    sys.exit(1)
+
+if __name__ == "__main__":
+    main()
