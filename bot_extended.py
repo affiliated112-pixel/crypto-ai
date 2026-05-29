@@ -27,6 +27,7 @@ import tracker
 import alert_messages
 import real_loops
 import vip_analysis
+import coins_config
 import paper_trading
 import commands_paper
 import paper_interactive
@@ -156,7 +157,8 @@ def _patch_signal_loop_for_demo():
                 alerts_ch = _bot.client.get_channel(alerts_ch_id) if alerts_ch_id else None
 
                 import discord as _disc
-                for symbol in getattr(_bot, 'SYMBOLS', ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT']):
+                # FREE loop: use coins_config.FREE_SYMBOLS (6 major coins only)
+                for symbol in coins_config.FREE_SYMBOLS:
                     df  = _bot.get_data(symbol)
                     sig, price, rsi, conf = _bot.get_signal_v2(df)
                     ind = _bot.calc_indicators(df)
@@ -361,8 +363,9 @@ async def _startup_extras():
     bot.client.loop.create_task(real_loops.real_performance_loop(bot, interval=86400))
     bot.client.loop.create_task(real_loops.real_market_news_loop(bot, interval=1800))
     bot.client.loop.create_task(real_loops.real_announcement_loop(bot, interval=86400))
-    # VIP DEEP ANALYSIS
-    bot.client.loop.create_task(vip_analysis.vip_analysis_loop(bot, interval=1800))
+    # VIP DEEP ANALYSIS — 30 coins, 3-TF, Fibonacci, Ichimoku, Smart Score
+    # Interval 300s = same as signal loop; SmartScore filter removes weak signals
+    bot.client.loop.create_task(vip_analysis.vip_analysis_loop(bot, interval=300))
     # Paper trading slash commands
     try:
         commands_paper.register(bot.tree)
