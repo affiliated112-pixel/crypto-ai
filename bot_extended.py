@@ -38,6 +38,7 @@ import paper_trading
 import commands_paper
 import paper_interactive
 import demo_app
+import auto_trade_integration
 
 # ---- Patch signal loop to add Demo Button on every signal ----
 _orig_signal_loop_fn = getattr(bot, 'signal_loop', None)
@@ -401,6 +402,9 @@ async def _startup_extras():
     bot.client.loop.create_task(paper_interactive.demo_poll_loop())
     # LIVE DEMO APP — auto-creates channel + live portfolio in admin category
     bot.client.loop.create_task(demo_app.demo_app_loop(bot.client))
+    # AUTO-TRADER — canal privat in server cu butoane de confirmare
+    bot.client.loop.create_task(auto_trade_integration.setup(bot.client))
+    print('[auto_trade] loop started — canal privat #auto-trader cu butoane', flush=True)
     # Paper trading (admin only)
     paper_ch = PAPER_CHANNEL_ID or await _find_paper_channel()
     if paper_ch:
@@ -433,6 +437,10 @@ async def _startup_extras():
         print('[on_demand] slash commands registered: /signal /scan', flush=True)
     except Exception as e:
         print(f'[on_demand] command register error: {e}', flush=True)
+    try:
+        auto_trade_integration.register_commands(bot.tree)
+    except Exception as e:
+        print(f'[auto_trade] command register error: {e}', flush=True)
     # Paper trading slash commands
     try:
         commands_paper.register(bot.tree)
