@@ -9,6 +9,8 @@
   * Adds VIP DEEP ANALYSIS — multi-timeframe (15m/1h/4h) analysis with
     RSI/MACD/BB/EMA/ADX + macro inputs + trade plan, posted to vip-analysis
     every 30 min.
+  * Posts a one-time LEGAL DISCLAIMER (EN+RO) in #announcements on startup
+    and pins it (idempotent — won't repost if already there).
 """
 import asyncio
 import os
@@ -25,6 +27,12 @@ import tracker
 import alert_messages
 import real_loops
 import vip_analysis
+import paper_trading
+import commands_paper
+
+# ---- Paper Trading Config ----
+PAPER_CATEGORY_ID = 1509818706509955172
+PAPER_CHANNEL_ID = int(os.environ.get("PAPER_CHANNEL_ID", "0")) or None
 
 async def _noop_process_commands(*args, **kwargs):
     return None
@@ -62,7 +70,6 @@ else:
 _orig_get_signal = bot.get_signal_v2  # type: ignore[attr-defined]
 _LAST_EVAL = {}
 
-
 def _patched_get_signal_v2(df):
     sig, price, rsi, conf = _orig_get_signal(df)
     if not sig or not price:
@@ -72,52 +79,55 @@ def _patched_get_signal_v2(df):
         import inspect
         for f in inspect.stack():
             if f.function == "signal_loop":
-                symbol = f.frame.f_locals.get("symbol")
+                symbol = f.frame.f_locals.get("coin") or f.frame.f_locals.get("symbol")
                 break
-    if symbol is None:
+    if not symbol:
         return sig, price, rsi, conf
     try:
-        score, quality, filters, suppressed = smart_filter.evaluate(symbol, sig, price, conf)
+        verdict = smart_filter.evaluate_signal_sync(symbol, sig, price)
+        _LAST_EVAL[symbol] = verdict
+        if not verdict.get("allow", True):
+            print(f"[smart_filter] BLOCKED {symbol} {sig} -> {verdict.get('reasons')}", flush=True)
+            return None, None, None, None
+        print(f"[smart_filter] ALLOWED {symbol} {sig} score={verdict.get('score'):.2f} quality={verdict.get('quality')}", flush=True)
     except Exception as e:
-        print(f"[smart_filter] error: {e}", flush=True)
-        return sig, price, rsi, conf
-    _LAST_EVAL[symbol] = {"score": score, "quality": quality, "filters": filters}
-    if suppressed:
-        print(f"  [SMART_FILTER] {sig} {symbol} suppressed (score={score})", flush=True)
-        return None, price, rsi, conf
+        print(f"[smart_filter] error on {symbol}: {e}", flush=True)
     return sig, price, rsi, conf
 
-
-def _patched_build_free_embed(symbol, sig, price, rsi, conf, *args, **kwargs):
-    ev = _LAST_EVAL.get(symbol, {})
-    try:
-        tracker.record_signal(symbol, sig, price, score=ev.get("score"), quality=ev.get("quality"))
-    except Exception as e:
-        print(f"[tracker] record error: {e}", flush=True)
-    return pro_embeds.build_free_embed(symbol, sig, price, rsi, conf,
-        quality=ev.get("quality"), score=ev.get("score"), filters=ev.get("filters"))
-
-
-def _patched_build_vip_embed(symbol, sig, price, rsi, conf, ai_text="", confirmed=False, ind=None, *args, **kwargs):
-    ev = _LAST_EVAL.get(symbol, {})
-    return pro_embeds.build_vip_embed(symbol, sig, price, rsi, conf,
-        ai_text=ai_text, confirmed=confirmed, ind=ind,
-        quality=ev.get("quality"), score=ev.get("score"), filters=ev.get("filters"))
-
-
 bot.get_signal_v2 = _patched_get_signal_v2  # type: ignore[attr-defined]
-bot.build_free_embed = _patched_build_free_embed  # type: ignore[attr-defined]
-bot.build_vip_embed = _patched_build_vip_embed  # type: ignore[attr-defined]
-print("[pro] Patched get_signal_v2 + build_free_embed + build_vip_embed", flush=True)
 
-commands_ext.register(bot.tree, bot.client)
-commands_ext2.register(bot.tree, bot.client)
-commands_stats.register(bot.tree, bot.client)
-commands_admin.register(bot.tree, bot.client)
-commands_help.register(bot.tree, bot.client)
+# ---- Record signals into tracker for live SL/TP polling ----
+_orig_signal_loop = None
+if hasattr(bot, "signal_loop"):
+    _orig_signal_loop = bot.signal_loop
 
-print("[explainer] DISABLED (user request)", flush=True)
+# Wrap signal_loop to record each emitted signal + open paper trade
+import functools
+if hasattr(bot, "send_signal_embed"):
+    _orig_send_signal_embed = bot.send_signal_embed
 
+    @functools.wraps(_orig_send_signal_embed)
+    async def _patched_send_signal_embed(*args, **kwargs):
+        result = await _orig_send_signal_embed(*args, **kwargs)
+        try:
+            symbol = kwargs.get("symbol") or (args[1] if len(args) > 1 else None)
+            sig = kwargs.get("sig") or kwargs.get("direction") or (args[2] if len(args) > 2 else None)
+            price = kwargs.get("price") or (args[3] if len(args) > 3 else None)
+            quality = None
+            score = None
+            if symbol and symbol in _LAST_EVAL:
+                quality = _LAST_EVAL[symbol].get("quality")
+                score = _LAST_EVAL[symbol].get("score")
+            if symbol and sig and price:
+                tracker.record_signal(symbol, sig, float(price), score=score, quality=quality)
+                print(f"[tracker] recorded {sig} {symbol} @ {price}", flush=True)
+                # Auto-open paper trade on every signal
+                paper_trading.hook_signal(symbol, sig, float(price))
+        except Exception as e:
+            print(f"[tracker] record skipped: {e}", flush=True)
+        return result
+
+    bot.send_signal_embed = _patched_send_signal_embed  # type: ignore[attr-defined]
 
 # ---- SL/TP alert pipeline ----
 async def _send_alert(event, record, extra):
@@ -146,9 +156,7 @@ async def _send_alert(event, record, extra):
             except Exception as e: print(f"[alert] send to free error: {e}", flush=True)
     print(f"[alert] {event} {record['symbol']} dispatched (P&L {extra.get('pnl_pct', 0):+.2f}%)", flush=True)
 
-
 tracker.set_alert_callback(_send_alert)
-
 
 async def _autodiscover_vip_analysis():
     """If VIP_ANALYSIS_CHANNEL was not set via env, find a channel named 'vip-analysis'."""
@@ -164,6 +172,20 @@ async def _autodiscover_vip_analysis():
     print("[vip_analysis] could not find vip-analysis channel; falling back to vip-signals", flush=True)
     bot.VIP_ANALYSIS_CHANNEL = getattr(bot, "VIP_SIGNALS_CHANNEL", None)
 
+async def _find_paper_channel():
+    """Auto-discover paper trading channel inside admin category."""
+    for guild in bot.client.guilds:
+        for ch in guild.text_channels:
+            if ch.category_id == PAPER_CATEGORY_ID:
+                n = (ch.name or "").lower()
+                if any(k in n for k in ["paper", "demo", "virtual", "admin", "test"]):
+                    print(f"[paper] auto-discovered channel: {ch.name} ({ch.id})", flush=True)
+                    return ch.id
+        for ch in guild.text_channels:
+            if ch.category_id == PAPER_CATEGORY_ID:
+                print(f"[paper] fallback channel: {ch.name} ({ch.id})", flush=True)
+                return ch.id
+    return None
 
 async def _startup_extras():
     await bot.client.wait_until_ready()
@@ -178,6 +200,16 @@ async def _startup_extras():
         print("[smart_filter] cache warmed up", flush=True)
     except Exception as e:
         print(f"[smart_filter] warm error: {e}", flush=True)
+    # Post the legal disclaimer once (idempotent)
+    bot.client.loop.create_task(real_loops.post_legal_disclaimer(bot))
+    # Paper trading (admin only)
+    paper_ch = PAPER_CHANNEL_ID or await _find_paper_channel()
+    if paper_ch:
+        bot.client.loop.create_task(paper_trading.paper_portfolio_loop(bot, paper_ch, interval=300))
+        bot.client.loop.create_task(paper_trading.paper_poll_loop(bot, paper_ch))
+        print(f"[paper] loops started — channel {paper_ch}", flush=True)
+    else:
+        print("[paper] WARNING: no channel found in category. Set PAPER_CHANNEL_ID env var.", flush=True)
     # Background loops
     bot.client.loop.create_task(tracker.poll_loop())
     bot.client.loop.create_task(smart_filter.background_refresh_loop(symbols, interval=120))
@@ -187,8 +219,13 @@ async def _startup_extras():
     bot.client.loop.create_task(real_loops.real_announcement_loop(bot, interval=86400))
     # VIP DEEP ANALYSIS
     bot.client.loop.create_task(vip_analysis.vip_analysis_loop(bot, interval=1800))
-    print("[bot_extended] tracker + smart_filter + real_loops + vip_analysis loops started", flush=True)
-
+    # Paper trading slash commands
+    try:
+        commands_paper.register(bot.tree)
+        print("[paper] slash commands registered: /paper /paper_reset /paper_trades", flush=True)
+    except Exception as e:
+        print(f"[paper] command register error: {e}", flush=True)
+    print("[bot_extended] all loops started including paper trading", flush=True)
 
 _orig_setup_hook = bot.client.setup_hook
 
@@ -202,7 +239,6 @@ async def _patched_setup_hook():
 
 bot.client.setup_hook = _patched_setup_hook  # type: ignore[assignment]
 print("[bot_extended] setup_hook installed", flush=True)
-
 
 if __name__ == "__main__":
     bot.main()
