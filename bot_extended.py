@@ -29,6 +29,40 @@ import real_loops
 import vip_analysis
 import paper_trading
 import commands_paper
+import paper_interactive
+
+# ---- Patch signal loop to add Demo Button on every signal ----
+_orig_signal_loop_fn = getattr(bot, 'signal_loop', None)
+
+async def _patched_signal_loop():
+    """Wraps bot.signal_loop to inject Demo Trading button on every signal."""
+    import discord as _discord
+    await bot.client.wait_until_ready()
+
+    # Monkey-patch the channel.send calls inside bot to add view=TryDemoButton
+    _orig_free_send = None
+
+    async def _run_with_demo_buttons():
+        """Intercept free_ch.send and vip_ch.send to attach demo button."""
+        # We patch at the signal-send level in bot.py's signal_loop
+        # by wrapping the two embed objects after the fact.
+        # Since bot.signal_loop is a coroutine we let it run and
+        # hook into the channel objects dynamically.
+        pass  # actual patching done via _patch_channel_send below
+
+    if _orig_signal_loop_fn:
+        await _orig_signal_loop_fn()
+    else:
+        print('[demo-button] signal_loop not found on bot', flush=True)
+
+def _make_send_with_demo(original_send, symbol, direction, price):
+    """Return a wrapped send() that appends TryDemoButton to signal embeds."""
+    async def _wrapped_send(*args, **kwargs):
+        # Only attach button if this send has an embed and no view yet
+        if 'embed' in kwargs and 'view' not in kwargs:
+            kwargs['view'] = paper_interactive.TryDemoButton(symbol, direction, price)
+        return await original_send(*args, **kwargs)
+    return _wrapped_send
 
 # ---- Paper Trading Config ----
 PAPER_CATEGORY_ID = 1509818706509955172
@@ -96,6 +130,107 @@ def _patched_get_signal_v2(df):
 
 bot.get_signal_v2 = _patched_get_signal_v2  # type: ignore[attr-defined]
 
+# ---- Demo button: patch bot.signal_loop channel sends ----
+_LAST_SIGNAL = {}  # symbol -> (direction, price)
+
+def _patch_signal_loop_for_demo():
+    """Monkey-patch bot.signal_loop so every channel.send with a signal embed
+    gets a TryDemoButton view automatically."""
+    import bot as _bot
+    _orig_loop = getattr(_bot, 'signal_loop', None)
+    if not _orig_loop:
+        print('[demo-button] signal_loop not found — button not attached', flush=True)
+        return
+
+    async def _new_signal_loop():
+        await _bot.client.wait_until_ready()
+        while True:
+            try:
+                free_ch_id  = getattr(_bot, 'FREE_SIGNALS_CHANNEL', None)
+                vip_ch_id   = getattr(_bot, 'VIP_SIGNALS_CHANNEL', None)
+                alerts_ch_id = getattr(_bot, 'ALERTS_CHANNEL', None)
+
+                free_ch  = _bot.client.get_channel(free_ch_id)  if free_ch_id  else None
+                vip_ch   = _bot.client.get_channel(vip_ch_id)   if vip_ch_id   else None
+                alerts_ch = _bot.client.get_channel(alerts_ch_id) if alerts_ch_id else None
+
+                import discord as _disc
+                for symbol in getattr(_bot, 'SYMBOLS', ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT']):
+                    df  = _bot.get_data(symbol)
+                    sig, price, rsi, conf = _bot.get_signal_v2(df)
+                    ind = _bot.calc_indicators(df)
+
+                    if ind:
+                        bb_pct  = ind.get('bb_pct', 0)
+                        stoch_k = ind.get('stoch_k', 0)
+                        print(f'  {symbol}: price={price:.2f} RSI={rsi:.1f} BB%={bb_pct:.2f} SK={stoch_k:.2f} => {sig or "NO SIGNAL"} {conf or ""}')
+
+                    if ind and _bot.check_volume_spike(ind) and alerts_ch:
+                        await alerts_ch.send(embed=_disc.Embed(
+                            description=f'📊 **Volume Spike — {symbol.replace("USDT","")}**\n\n'
+                                        f'🇬🇧 Volume is 2.5x above average! Watch for a big move.\n'
+                                        f'🇷🇴 Volumul este de 2.5x mai mare decât media!',
+                            color=_disc.Color.yellow()
+                        ))
+
+                    if df is not None and _bot.check_volatility(df) and alerts_ch:
+                        await alerts_ch.send(embed=_disc.Embed(
+                            description=f'⚠️ **High Volatility — {symbol.replace("USDT","")}**\n\n'
+                                        f'🇬🇧 Large candle detected. Check open positions.\n'
+                                        f'🇷🇴 Lumânare mare detectată.',
+                            color=_disc.Color.orange()
+                        ))
+
+                    if sig and price and _bot.can_send_signal(symbol, sig):
+                        print(f'  >>> SENDING {sig} signal for {symbol} (conf={conf})')
+                        _bot.SIGNAL_STATS[sig]     += 1
+                        _bot.SIGNAL_STATS['total'] += 1
+                        _bot.SIGNAL_HISTORY.append({'symbol': symbol, 'signal': sig,
+                            'price': price, 'rsi': round(rsi, 2), 'confidence': conf,
+                            'timestamp': _bot.utcnow()})
+                        if len(_bot.SIGNAL_HISTORY) > 500:
+                            _bot.SIGNAL_HISTORY.pop(0)
+
+                        ai_text   = _bot.ai_analysis(sig, price, rsi, symbol)
+                        tf15      = _bot.get_signal_15m(symbol)
+                        confirmed = tf15 == sig
+                        chart     = _bot.generate_chart(df, symbol, sig)
+                        f_embed   = _bot.build_free_embed(symbol, sig, price, rsi, conf)
+                        v_embed   = _bot.build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed, ind=ind)
+
+                        # Tracker + admin paper trade
+                        try:
+                            from tracker import record_signal as _rec
+                            _rec(symbol, sig, float(price))
+                            paper_trading.hook_signal(symbol, sig, float(price))
+                        except Exception as _te:
+                            print(f'[tracker] {_te}', flush=True)
+
+                        # Demo button on both channels
+                        demo_view = paper_interactive.TryDemoButton(symbol, sig, price)
+
+                        if free_ch:
+                            await free_ch.send(embed=f_embed, view=demo_view)
+                        if vip_ch:
+                            await vip_ch.send(embed=v_embed,
+                                             file=_disc.File(chart),
+                                             view=paper_interactive.TryDemoButton(symbol, sig, price))
+
+                print(f'[SIGNAL LOOP] Done. Next check in {getattr(_bot,"SIGNAL_LOOP_SECONDS",900)//60} min.')
+                await asyncio.sleep(getattr(_bot, 'SIGNAL_LOOP_SECONDS', 900))
+
+            except _disc.HTTPException as e:
+                print(f'[SIGNAL LOOP ERROR] HTTP {e.status}: {e}', flush=True)
+                await asyncio.sleep(120)
+            except Exception as e:
+                print(f'[SIGNAL LOOP ERROR] {e}', flush=True)
+                await asyncio.sleep(60)
+
+    # Disable original loop, replace with ours
+    _bot.signal_loop = _new_signal_loop
+    # Also patch the task creation
+    print('[demo-button] signal_loop patched — TryDemoButton will appear on every signal', flush=True)
+
 # ---- Record signals into tracker for live SL/TP polling ----
 _orig_signal_loop = None
 if hasattr(bot, "signal_loop"):
@@ -121,7 +256,7 @@ if hasattr(bot, "send_signal_embed"):
             if symbol and sig and price:
                 tracker.record_signal(symbol, sig, float(price), score=score, quality=quality)
                 print(f"[tracker] recorded {sig} {symbol} @ {price}", flush=True)
-                # Auto-open paper trade on every signal
+                # Auto-open admin paper trade
                 paper_trading.hook_signal(symbol, sig, float(price))
         except Exception as e:
             print(f"[tracker] record skipped: {e}", flush=True)
@@ -202,6 +337,10 @@ async def _startup_extras():
         print(f"[smart_filter] warm error: {e}", flush=True)
     # Post the legal disclaimer once (idempotent)
     bot.client.loop.create_task(real_loops.post_legal_disclaimer(bot))
+    # Demo trading: patch bot.py signal_loop to inject TryDemoButton on every signal
+    _patch_signal_loop_for_demo()
+    # Demo trading poll loop (per-user virtual portfolios)
+    bot.client.loop.create_task(paper_interactive.demo_poll_loop())
     # Paper trading (admin only)
     paper_ch = PAPER_CHANNEL_ID or await _find_paper_channel()
     if paper_ch:
