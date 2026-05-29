@@ -527,6 +527,32 @@ def approve_and_record(candidate: dict) -> bool:
 
 # ─── QUALITY LABEL ────────────────────────────────────────────────────────────
 
+def should_send_free(symbol: str, signal: str, ind: dict, mtf: dict | None = None) -> bool:
+    """
+    Quick boolean gate used by bot.py signal_loop.
+    Returns True if a FREE signal qualifies to be sent right now.
+    Checks: active hours, cooldown, daily budget, score, R:R, BTC context.
+    """
+    if not signal or not ind:
+        return False
+    candidate = evaluate_candidate(symbol, signal, ind.get("price", 0), ind, mtf=None, tier="free")
+    if not candidate:
+        return False
+    return approve_and_record(candidate)
+
+def should_send_vip(symbol: str, signal: str, ind: dict, mtf: dict | None = None) -> bool:
+    """
+    Quick boolean gate used by vip_analysis signal loop.
+    Returns True if a VIP signal qualifies to be sent right now.
+    Checks: active hours, cooldown, daily budget, score >= 70, R:R >= 2.2, MTF.
+    """
+    if not signal or not ind:
+        return False
+    candidate = evaluate_candidate(symbol, signal, ind.get("price", 0), ind, mtf=mtf, tier="vip")
+    if not candidate:
+        return False
+    return approve_and_record(candidate)
+
 def quality_label(score: int) -> str:
     if score >= 88: return "🏆 ELITE"
     if score >= 75: return "🔥 EXCELLENT"
