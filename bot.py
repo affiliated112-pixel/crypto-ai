@@ -11,12 +11,44 @@ from ta.trend import MACD, EMAIndicator, ADXIndicator, IchimokuIndicator
 from ta.volatility import BollingerBands, AverageTrueRange
 from ta.volume import OnBalanceVolumeIndicator, ChaikinMoneyFlowIndicator
 import os
+import sys
 import random
 from datetime import datetime
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-TOKEN = os.environ.get("DISCORD_BOT_TOKEN", "YOUR_BOT_TOKEN")
+
+def _env(name: str, default: str = "") -> str:
+    return (os.environ.get(name) or default).strip()
+
+
+def _require_discord_token() -> str:
+    """Discord token from Railway/env (never hardcode)."""
+    token = (
+        _env("DISCORD_BOT_TOKEN")
+        or _env("DISCORD_TOKEN")
+        or _env("BOT_TOKEN")
+    )
+    if not token or token == "YOUR_BOT_TOKEN":
+        print(
+            "\n"
+            "============================================================\n"
+            "  DISCORD TOKEN LIPSESTE SAU E INVALID\n"
+            "============================================================\n"
+            "  Railway -> Project -> Variables -> New Variable:\n"
+            "    Name:  DISCORD_BOT_TOKEN\n"
+            "    Value: (token din Discord Developer Portal -> Bot)\n"
+            "\n"
+            "  Apoi: Redeploy serviciul.\n"
+            "  Portal: https://discord.com/developers/applications\n"
+            "============================================================\n",
+            flush=True,
+        )
+        sys.exit(1)
+    return token
+
+
+TOKEN = _require_discord_token()
 
 # AI API Keys (toate gratuite)
 GROQ_API_KEY        = os.environ.get("GROQ_API_KEY", "")
