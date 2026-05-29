@@ -41,6 +41,12 @@ try:
 except ImportError:
     _HAS_TRACKER = False
 
+try:
+    import signal_results
+    _HAS_RESULTS = True
+except ImportError:
+    _HAS_RESULTS = False
+
 SCAN_INTERVAL = 900   # 15 minutes — enough time for indicators to develop
 
 async def _get_ch(client, ch_id):
