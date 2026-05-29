@@ -1,402 +1,561 @@
-"""REAL VIP ANALYSIS — the wow-factor deep analysis posted every 30 minutes
-to #vip-analysis. Combines:
-  * Multi-timeframe candles (15m, 1h, 4h) from Binance.US
-  * RSI, MACD, Bollinger Bands, EMA20/50/200, VWAP, ADX, Stoch — all real
-  * Fear & Greed Index (live)
-  * Aggregated news + Reddit sentiment (live)
-  * Cross-exchange price validation (6 exchanges)
-  * Suggested ACTION (BUY/HOLD/WAIT/SELL) with full reasoning
-  * Holding period estimate (minutes/hours)
+"""vip_analysis.py — Enhanced VIP deep signal engine.
 
-ALL DATA IS REAL. ZERO HARDCODED NUMBERS.
+Differences vs FREE:
+  FREE  → 6 coins | 1 timeframe (5m) | TP1 only | no chart | no AI | no MTF
+  VIP   → 30 coins | 3 timeframes (5m+15m+1h) | TP1+TP2+TP3 | 4-panel chart |
+           AI analysis | Fibonacci | Ichimoku | Smart Score | Sector tag |
+           Entry strategy | Position sizing advice
+
+This module is imported by bot_extended.py and starts the VIP loop independently
+of bot.py's signal_loop (which handles FREE only).
 """
+
 import asyncio
-import requests
-import pandas as pd
-import numpy as np
 import discord
 from datetime import datetime, timezone
-import feeds
-import news as news_mod
-import exchanges
 
-UA = {"User-Agent": "crypto-ai-bot/2026"}
+import bot
+import coins_config
 
-COIN_ICONS = {
-    "BTC":  "https://assets.coingecko.com/coins/images/1/large/bitcoin.png",
-    "ETH":  "https://assets.coingecko.com/coins/images/279/large/ethereum.png",
-    "SOL":  "https://assets.coingecko.com/coins/images/4128/large/solana.png",
-    "BNB":  "https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png",
+try:
+    from ta.trend import IchimokuIndicator
+    _HAS_ICHIMOKU = True
+except ImportError:
+    _HAS_ICHIMOKU = False
+
+# ─── COIN SECTOR TAGS ─────────────────────────────────────────────────────────
+COIN_SECTORS: dict[str, str] = {
+    "BTCUSDT":   "Store of Value",
+    "ETHUSDT":   "Smart Contract L1",
+    "SOLUSDT":   "High-Speed L1",
+    "BNBUSDT":   "Exchange Token",
+    "XRPUSDT":   "Payments",
+    "DOGEUSDT":  "Meme Coin",
+    "ADAUSDT":   "Smart Contract L1",
+    "AVAXUSDT":  "Smart Contract L1",
+    "DOTUSDT":   "Interoperability",
+    "LINKUSDT":  "Oracle",
+    "LTCUSDT":   "Payments",
+    "MATICUSDT": "L2 Scaling",
+    "UNIUSDT":   "DEX / DeFi",
+    "ATOMUSDT":  "Interoperability",
+    "XLMUSDT":   "Payments",
+    "NEARUSDT":  "Smart Contract L1",
+    "FTMUSDT":   "Smart Contract L1",
+    "ALGOUSDT":  "Smart Contract L1",
+    "SANDUSDT":  "Metaverse / Gaming",
+    "MANAUSDT":  "Metaverse / Gaming",
+    "FILUSDT":   "Storage / Web3",
+    "TRXUSDT":   "Smart Contract L1",
+    "ETCUSDT":   "Smart Contract L1",
+    "AAVEUSDT":  "Lending / DeFi",
+    "GRTUSDT":   "Data / Indexing",
+    "SHIBUSDT":  "Meme Coin",
+    "OPUSDT":    "L2 Scaling",
+    "ARBUSDT":   "L2 Scaling",
+    "INJUSDT":   "DeFi / DEX",
+    "SUIUSDT":   "Smart Contract L1",
+    "APTUSDT":   "Smart Contract L1",
 }
 
+# ─── ENTRY STRATEGY ENGINE ────────────────────────────────────────────────────
 
-def _get_klines(symbol, interval="1h", limit=100):
-    try:
-        r = requests.get(
-            "https://api.binance.us/api/v3/klines",
-            params={"symbol": symbol, "interval": interval, "limit": limit},
-            headers=UA, timeout=8,
-        )
-        r.raise_for_status()
-        data = r.json()
-        df = pd.DataFrame(data, columns=[
-            "open_time", "open", "high", "low", "close", "volume",
-            "close_time", "qav", "trades", "taker_base", "taker_quote", "ignore",
-        ])
-        for c in ["open", "high", "low", "close", "volume"]:
-            df[c] = df[c].astype(float)
-        return df
-    except Exception as e:
-        print(f"[vip_analysis] klines error {symbol} {interval}: {e}", flush=True)
-        return None
+def _entry_strategy(signal: str, confidence: str, ind: dict, price: float) -> tuple[str, str]:
+    """
+    Returns (strategy_en, strategy_ro) based on confidence + indicators.
+    """
+    atr     = ind.get("atr", price * 0.02)
+    bb_pct  = ind.get("bb_pct", 0.5)
+    adx     = ind.get("adx", 20)
+    rsi     = ind.get("rsi", 50)
+    vol_surge = ind.get("vol_surge", False)
 
+    is_buy  = signal == "BUY"
 
-def _rsi(series, period=14):
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0)
-    loss = -delta.where(delta < 0, 0)
-    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
-    rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+    # Strong trend + volume surge → single entry
+    if adx > 28 and vol_surge and confidence in ("🌟 VERY HIGH", "🔥 HIGH"):
+        en = ("🎯 **Single Entry** — Strong trend with volume surge.\n"
+              "Enter 100% of your planned position NOW.\n"
+              f"• Entry: `${price:,.4f}`\n"
+              f"• Risk per trade: `1–2% of portfolio`")
+        ro = ("🎯 **Intrare unică** — Trend puternic cu volum ridicat.\n"
+              "Intră cu 100% din poziția planificată ACUM.\n"
+              f"• Entry: `${price:,.4f}`\n"
+              f"• Risc per trade: `1–2% din portofoliu`")
+    # Medium confidence → DCA in 2 tranches
+    elif confidence in ("🔥 HIGH", "⚡ MEDIUM"):
+        tp1_approx = round(price + 1.5 * atr, 4) if is_buy else round(price - 1.5 * atr, 4)
+        en = ("📊 **DCA (2 entries)** — Good signal, moderate confidence.\n"
+              f"• Entry 1 (now): `50% of position` at `${price:,.4f}`\n"
+              f"• Entry 2: `50% on pullback` near `${(price - 0.5 * atr):,.4f}`\n"
+              f"• Combined risk: `1–2% of portfolio`")
+        ro = ("📊 **DCA (2 intrări)** — Semnal bun, confidence moderat.\n"
+              f"• Intrarea 1 (acum): `50% din poziție` la `${price:,.4f}`\n"
+              f"• Intrarea 2: `50% pe corecție` la `${(price - 0.5 * atr):,.4f}`\n"
+              f"• Risc combinat: `1–2% din portofoliu`")
+    # Low confidence → wait or very small
+    else:
+        en = ("⏳ **Wait & Watch** — Low confidence signal.\n"
+              "Consider entering only 25–30% of position.\n"
+              "• Wait for confirmation on next candle\n"
+              "• Strict stop-loss mandatory")
+        ro = ("⏳ **Așteaptă și observă** — Semnal LOW confidence.\n"
+              "Ia maximum 25–30% din poziție dacă intri.\n"
+              "• Așteaptă confirmare pe lumânarea următoare\n"
+              "• Stop-loss strict obligatoriu")
+    return en, ro
 
+# ─── 3-TIMEFRAME MTF ANALYSIS ─────────────────────────────────────────────────
 
-def _macd(series, fast=12, slow=26, signal=9):
-    ema_fast = series.ewm(span=fast).mean()
-    ema_slow = series.ewm(span=slow).mean()
-    macd = ema_fast - ema_slow
-    sig = macd.ewm(span=signal).mean()
-    return macd, sig, macd - sig
+def get_3tf_analysis(symbol: str) -> dict:
+    """
+    Returns signals on 5m, 15m, and 1h timeframes.
+    Returns: {tf: {"signal": BUY/SELL/None, "rsi": float, "macd_bull": bool}}
+    """
+    result = {}
+    for tf in ("5m", "15m", "1h"):
+        df = bot.get_data(symbol, interval=tf)
+        if df is None:
+            result[tf] = {"signal": None, "rsi": 50.0, "macd_bull": False, "score": 0}
+            continue
+        sig, price, rsi, conf = bot.get_signal_v2(df)
+        ind = bot.calc_indicators(df)
+        macd_bull = bool(ind.get("macd_hist", 0) > 0) if ind else False
+        # Count how many of the 10 conditions are BUY
+        buy_score = 0
+        if ind:
+            rsi_v = ind.get("rsi", 50)
+            buy_score = sum([
+                rsi_v < 42,
+                ind.get("macd_hist", 0) > 0,
+                price > ind.get("ema50", price) * 0.985,
+                ind.get("bb_pct", 0.5) < 0.35,
+                ind.get("stoch_k", 0.5) < 0.35,
+                ind.get("willr", -50) < -65,
+                ind.get("obv_up", False),
+                price < ind.get("vwap", price) * 1.005,
+                ind.get("adx", 20) > 18 and ind.get("adx_pos", 10) > ind.get("adx_neg", 10),
+                ind.get("bull_div", False),
+            ])
+        result[tf] = {
+            "signal":    sig,
+            "rsi":       rsi or 50.0,
+            "macd_bull": macd_bull,
+            "score":     buy_score,
+        }
+    return result
 
+def _mtf_summary(mtf: dict, direction: str) -> tuple[str, int]:
+    """
+    Counts how many TFs agree with direction.
+    Returns (badge_text, aligned_count)
+    """
+    aligned = sum(1 for tf in ("5m", "15m", "1h") if mtf[tf]["signal"] == direction)
+    badges = {3: "✅✅✅ **ALL 3 TIMEFRAMES ALIGNED** — Maximum conviction!",
+              2: "✅✅⬜ **2/3 Timeframes aligned** — Strong confirmation",
+              1: "✅⬜⬜ **1/3 Timeframes aligned** — Weak confirmation",
+              0: "⬜⬜⬜ **No alignment** — Very risky"}
+    return badges.get(aligned, "—"), aligned
 
-def _bollinger(series, period=20, std=2):
-    mid = series.rolling(period).mean()
-    sd = series.rolling(period).std()
-    upper = mid + std * sd
-    lower = mid - std * sd
-    pct = (series - lower) / (upper - lower)
-    return upper, mid, lower, pct
+# ─── SMART SCORE ──────────────────────────────────────────────────────────────
 
-
-def _ema(series, period):
-    return series.ewm(span=period).mean()
-
-
-def _adx(df, period=14):
-    high, low, close = df["high"], df["low"], df["close"]
-    tr1 = high - low
-    tr2 = (high - close.shift()).abs()
-    tr3 = (low - close.shift()).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    plus_dm = (high - high.shift()).clip(lower=0)
-    minus_dm = (low.shift() - low).clip(lower=0)
-    atr = tr.rolling(period).mean()
-    plus_di = 100 * plus_dm.rolling(period).mean() / atr
-    minus_di = 100 * minus_dm.rolling(period).mean() / atr
-    dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di)
-    return dx.rolling(period).mean()
-
-
-def _analyze_timeframe(df):
-    if df is None or len(df) < 50:
-        return None
-    close = df["close"]
-    last = close.iloc[-1]
-    rsi = _rsi(close).iloc[-1]
-    macd, sig, hist = _macd(close)
-    upper, mid, lower, bb_pct = _bollinger(close)
-    ema20 = _ema(close, 20).iloc[-1]
-    ema50 = _ema(close, 50).iloc[-1]
-    ema200 = _ema(close, 200).iloc[-1] if len(close) >= 200 else None
-    adx = _adx(df).iloc[-1]
-    return {
-        "price": float(last),
-        "rsi": float(rsi),
-        "macd_hist": float(hist.iloc[-1]),
-        "bb_pct": float(bb_pct.iloc[-1]),
-        "ema20": float(ema20),
-        "ema50": float(ema50),
-        "ema200": float(ema200) if ema200 is not None else None,
-        "adx": float(adx) if pd.notna(adx) else 0,
-        "trend": "UP" if last > ema50 else "DOWN",
-    }
-
-
-def _decide(tf15, tf1h, tf4h, fg, sent):
-    """Combine all signals into a recommendation.
-    Returns (action, reasoning_lines, confidence_0_100, hold_period)."""
+def _smart_score(ind: dict, signal: str, mtf_aligned: int) -> int:
+    """
+    Composite 0–100 score for signal quality. Higher = stronger setup.
+    """
+    if ind is None:
+        return 0
     score = 0
-    reasons = []
+    is_buy = signal == "BUY"
 
-    # 4h trend (most important — long-term direction)
-    if tf4h:
-        if tf4h["trend"] == "UP" and tf4h["price"] > tf4h["ema50"]:
-            score += 25; reasons.append("✅ 4h trend UP — price above EMA50")
-        elif tf4h["trend"] == "DOWN":
-            score -= 25; reasons.append("❌ 4h trend DOWN — price below EMA50")
-        if tf4h.get("ema200") and tf4h["price"] > tf4h["ema200"]:
-            score += 10; reasons.append("✅ 4h price above EMA200 (major bullish)")
-
-    # 1h momentum
-    if tf1h:
-        if tf1h["macd_hist"] > 0:
-            score += 15; reasons.append(f"✅ 1h MACD bullish (`{tf1h['macd_hist']:+.4f}`)")
-        else:
-            score -= 15; reasons.append(f"⚠️ 1h MACD bearish (`{tf1h['macd_hist']:+.4f}`)")
-
-        rsi1h = tf1h["rsi"]
-        if rsi1h < 30:
-            score += 15; reasons.append(f"🟢 1h RSI oversold `{rsi1h:.1f}` — bounce likely")
-        elif rsi1h > 70:
-            score -= 15; reasons.append(f"🔴 1h RSI overbought `{rsi1h:.1f}` — correction likely")
-        else:
-            reasons.append(f"⚖️ 1h RSI neutral `{rsi1h:.1f}`")
-
-        if tf1h["adx"] > 25:
-            score += 10; reasons.append(f"💪 1h ADX strong `{tf1h['adx']:.1f}` — clear trend")
-        elif tf1h["adx"] < 15:
-            reasons.append(f"😴 1h ADX weak `{tf1h['adx']:.1f}` — ranging market")
-
-    # 15m entry timing
-    if tf15:
-        rsi15 = tf15["rsi"]
-        bb15 = tf15["bb_pct"]
-        if bb15 < 0.2:
-            score += 10; reasons.append(f"🎯 15m BB lower band `{bb15:.2f}` — great entry zone")
-        elif bb15 > 0.8:
-            score -= 10; reasons.append(f"⚠️ 15m BB upper band `{bb15:.2f}` — extended")
-
-    # Fear & Greed (macro sentiment)
-    if fg and isinstance(fg, dict) and "value" in fg:
-        v = fg["value"]
-        if v <= 25:
-            score += 15; reasons.append(f"😱 F&G `{v}` Extreme Fear — contrarian BUY signal")
-        elif v <= 45:
-            score += 5;  reasons.append(f"😟 F&G `{v}` Fear — mildly bullish")
-        elif v >= 75:
-            score -= 15; reasons.append(f"🤑 F&G `{v}` Extreme Greed — careful, top zone")
-        elif v >= 55:
-            reasons.append(f"😊 F&G `{v}` Greed — neutral-bullish")
-        else:
-            reasons.append(f"😐 F&G `{v}` Neutral")
-
-    # News sentiment
-    if sent and isinstance(sent, dict):
-        total = sent.get("total", 0)
-        label = sent.get("label", "Neutral")
-        if total >= 5:
-            score += 10; reasons.append(f"📰 News strongly bullish `{total:+d}` ({label})")
-        elif total <= -5:
-            score -= 10; reasons.append(f"📰 News strongly bearish `{total:+d}` ({label})")
-        else:
-            reasons.append(f"📰 News neutral `{total:+d}` ({label})")
-
-    # Clamp
-    score = max(-100, min(100, score))
-    abs_score = abs(score)
-
-    if score >= 40:
-        action = "🟢 STRONG BUY"
-        hold = "4-24 hours"
-    elif score >= 20:
-        action = "🟢 BUY"
-        hold = "2-8 hours"
-    elif score >= 5:
-        action = "🔵 WEAK BUY"
-        hold = "1-4 hours"
-    elif score >= -5:
-        action = "⚪ HOLD / WAIT"
-        hold = "wait for clearer signal"
-    elif score >= -20:
-        action = "🟡 WEAK SELL"
-        hold = "1-4 hours"
-    elif score >= -40:
-        action = "🔴 SELL"
-        hold = "2-8 hours"
+    # RSI (0-20 pts)
+    rsi = ind.get("rsi", 50)
+    if is_buy:
+        if rsi < 30: score += 20
+        elif rsi < 40: score += 14
+        elif rsi < 50: score += 7
     else:
-        action = "🔴 STRONG SELL"
-        hold = "4-24 hours"
+        if rsi > 70: score += 20
+        elif rsi > 60: score += 14
+        elif rsi > 50: score += 7
 
-    return action, reasons, abs_score, hold
+    # MACD (0-15 pts)
+    macd_h = ind.get("macd_hist", 0)
+    if (is_buy and macd_h > 0) or (not is_buy and macd_h < 0):
+        score += 15
 
+    # ADX — trend strength (0-15 pts)
+    adx = ind.get("adx", 20)
+    if adx > 35: score += 15
+    elif adx > 25: score += 10
+    elif adx > 18: score += 5
 
-async def _build_analysis(symbol):
-    """Build the full async analysis for one symbol."""
-    loop = asyncio.get_event_loop()
-    # Parallel fetch
-    tasks = [
-        loop.run_in_executor(None, _get_klines, symbol, "15m", 100),
-        loop.run_in_executor(None, _get_klines, symbol, "1h", 200),
-        loop.run_in_executor(None, _get_klines, symbol, "4h", 200),
-        loop.run_in_executor(None, feeds.fear_greed_index),
-        loop.run_in_executor(None, news_mod.aggregate_sentiment),
-        loop.run_in_executor(None, exchanges.arbitrage, symbol),
-    ]
-    df15, df1h, df4h, fg, sent, arb = await asyncio.gather(*tasks, return_exceptions=True)
+    # Volume (0-10 pts)
+    if ind.get("vol_surge", False): score += 10
+    elif ind.get("obv_up", False) == is_buy: score += 5
 
-    tf15 = _analyze_timeframe(df15) if not isinstance(df15, Exception) else None
-    tf1h = _analyze_timeframe(df1h) if not isinstance(df1h, Exception) else None
-    tf4h = _analyze_timeframe(df4h) if not isinstance(df4h, Exception) else None
-    if not tf1h:
-        return None
+    # MTF alignment (0-20 pts)
+    score += mtf_aligned * 6   # up to 18pts for 3/3
 
-    fg_val = fg if not isinstance(fg, Exception) else None
-    sent_val = sent if not isinstance(sent, Exception) else None
-    arb_val = arb if not isinstance(arb, Exception) else None
+    # Divergence (0-10 pts)
+    if is_buy and ind.get("bull_div", False): score += 10
+    elif not is_buy and ind.get("bear_div", False): score += 10
 
-    action, reasons, conf, hold = _decide(tf15, tf1h, tf4h, fg_val, sent_val)
-    return {
-        "symbol": symbol,
-        "tf15": tf15, "tf1h": tf1h, "tf4h": tf4h,
-        "fg": fg_val, "sent": sent_val, "arb": arb_val,
-        "action": action, "reasons": reasons, "confidence": conf, "hold": hold,
-    }
+    # Market structure (0-10 pts)
+    if is_buy and ind.get("struct_bull", False): score += 10
+    elif not is_buy and ind.get("struct_bear", False): score += 10
 
+    return min(score, 100)
 
-def _fmt_price(p):
-    if p is None: return "—"
-    if p >= 1000: return f"${p:,.2f}"
-    if p >= 1:    return f"${p:,.4f}"
-    return f"${p:,.8f}".rstrip("0").rstrip(".")
+def _smart_score_bar(score: int) -> str:
+    filled = round(score / 5)
+    bar = "█" * filled + "░" * (20 - filled)
+    grade = ("🏆 ELITE" if score >= 85
+             else "🔥 EXCELLENT" if score >= 70
+             else "⚡ GOOD" if score >= 55
+             else "📊 AVERAGE" if score >= 40
+             else "⚠️ WEAK")
+    return f"`{bar}` **{score}/100** — {grade}"
 
+# ─── ICHIMOKU ANALYSIS ────────────────────────────────────────────────────────
 
-def build_embed(analysis):
-    a = analysis
-    sym = a["symbol"]
-    coin = sym.replace("USDT", "").replace("USD", "")
-    tf1h = a["tf1h"]
-    tf4h = a["tf4h"]
-    tf15 = a["tf15"]
+def _ichimoku_signal(df, price: float) -> str:
+    """Returns a brief Ichimoku summary."""
+    if not _HAS_ICHIMOKU or df is None or len(df) < 53:
+        return "N/A (not enough data)"
+    try:
+        ich = IchimokuIndicator(high=df["high"], low=df["low"])
+        kijun  = ich.ichimoku_base_line().iloc[-1]
+        tenkan = ich.ichimoku_conversion_line().iloc[-1]
+        span_a = ich.ichimoku_a().iloc[-1]
+        span_b = ich.ichimoku_b().iloc[-1]
+        cloud_top = max(span_a, span_b)
+        cloud_bot = min(span_a, span_b)
 
-    if "STRONG BUY" in a["action"] or "BUY" in a["action"]:
-        color = 0x00D26A
-    elif "SELL" in a["action"]:
-        color = 0xED4245
-    else:
-        color = 0xF1C40F
+        if price > cloud_top:
+            cloud_pos = "🟢 **Above Kumo** (bullish zone)"
+        elif price < cloud_bot:
+            cloud_pos = "🔴 **Below Kumo** (bearish zone)"
+        else:
+            cloud_pos = "🟡 **Inside Kumo** (indecision)"
+
+        tk_cross = "🟢 TK Cross (bullish)" if tenkan > kijun else "🔴 TK Cross (bearish)"
+        return f"{cloud_pos}\n{tk_cross} | Tenkan: `${tenkan:,.4f}` | Kijun: `${kijun:,.4f}`"
+    except Exception as e:
+        return f"N/A ({e})"
+
+# ─── FIBONACCI DISPLAY ────────────────────────────────────────────────────────
+
+def _fib_display(ind: dict, price: float) -> str:
+    fib = ind.get("fib_levels", {})
+    if not fib:
+        return "N/A"
+    lines = []
+    for level, val in sorted(fib.items(), key=lambda x: float(x[0])):
+        marker = " ◀ PRICE" if abs(val - price) / price < 0.008 else ""
+        direction = "↑" if val > price else "↓"
+        lines.append(f"`Fib {level:<5}` ${val:>14,.4f} {direction}{marker}")
+    return "\n".join(lines)
+
+# ─── VIP DEEP EMBED BUILDER ───────────────────────────────────────────────────
+
+def build_vip_deep_embed(
+    symbol: str,
+    signal: str,
+    price: float,
+    rsi: float,
+    confidence: str,
+    ai_text: str,
+    ind: dict,
+    mtf: dict,
+    smart_score_val: int,
+    mtf_badge: str,
+    mtf_aligned: int,
+) -> discord.Embed:
+    """Build the enhanced VIP signal embed with all premium data."""
+    coin    = symbol.replace("USDT", "")
+    emoji   = coins_config.COIN_EMOJI.get(symbol, "🪙")
+    logo    = coins_config.COIN_LOGOS.get(symbol)
+    color   = coins_config.COIN_COLORS.get(symbol, 0x00c896)
+    sector  = COIN_SECTORS.get(symbol, "Crypto Asset")
+    is_buy  = signal == "BUY"
+
+    # ATR-based levels
+    atr = ind.get("atr", price * 0.02) if ind else price * 0.02
+    tp1 = round(price + 1.5 * atr, 4) if is_buy else round(price - 1.5 * atr, 4)
+    tp2 = round(price + 3.0 * atr, 4) if is_buy else round(price - 3.0 * atr, 4)
+    tp3 = round(price + 5.0 * atr, 4) if is_buy else round(price - 5.0 * atr, 4)
+    sl  = round(price - 1.2 * atr, 4) if is_buy else round(price + 1.2 * atr, 4)
+
+    pct1  = abs(tp1 - price) / price * 100
+    pct2  = abs(tp2 - price) / price * 100
+    pct3  = abs(tp3 - price) / price * 100
+    pct_sl = abs(sl  - price) / price * 100
+    rr_val = round(pct2 / pct_sl, 2) if pct_sl else 2.0
+
+    sig_label = "💎 VIP BUY" if is_buy else "💎 VIP SELL"
 
     embed = discord.Embed(
-        title=f"🔬 VIP DEEP ANALYSIS — {coin}/USDT",
+        title=f"{sig_label} — {emoji} {coin}  [{sector}]",
         description=(
-            f"```diff\n"
-            f"{'+ ' if 'BUY' in a['action'] else '- ' if 'SELL' in a['action'] else '! '}{a['action']}\n"
-            f"{'+ ' if 'BUY' in a['action'] else '- ' if 'SELL' in a['action'] else '! '}Confidence: {a['confidence']}/100\n"
-            f"{'+ ' if 'BUY' in a['action'] else '- ' if 'SELL' in a['action'] else '! '}Hold for: {a['hold']}\n"
-            f"```"
-            f"🔍 **100% real-time data** from Binance.US, CoinGecko, CryptoPanic, alternative.me, 6 exchanges."
+            f"**{coins_config.COIN_NAMES_EN.get(symbol, symbol)}**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{mtf_badge}"
         ),
         color=color,
         timestamp=datetime.now(timezone.utc),
     )
-    if coin in COIN_ICONS:
-        embed.set_thumbnail(url=COIN_ICONS[coin])
+    if logo:
+        embed.set_thumbnail(url=logo)
+    embed.set_author(name="💎 VIP Deep Analysis — 3-TF | Fibonacci | Ichimoku | Smart Score")
 
-    # Multi-timeframe price + RSI grid
+    # ── Smart Score ──────────────────────────────────────────────────────
     embed.add_field(
-        name="⏰ 15m Timeframe",
-        value=(
-            f"💰 `{_fmt_price(tf15['price'])}`\n"
-            f"📊 RSI `{tf15['rsi']:.1f}` • BB% `{tf15['bb_pct']:.2f}`\n"
-            f"📈 Trend: `{tf15['trend']}`"
-        ) if tf15 else "—",
-        inline=True,
+        name="🏆 Smart Score",
+        value=_smart_score_bar(smart_score_val),
+        inline=False,
     )
+
+    # ── ATR-based trade levels ────────────────────────────────────────────
     embed.add_field(
-        name="⏰ 1h Timeframe",
+        name="📍 Trade Levels (ATR-based)",
         value=(
-            f"💰 `{_fmt_price(tf1h['price'])}`\n"
-            f"📊 RSI `{tf1h['rsi']:.1f}` • ADX `{tf1h['adx']:.1f}`\n"
-            f"📈 MACD `{tf1h['macd_hist']:+.4f}`"
+            f"```\n"
+            f"{'Entry':<12} ${price:>15,.4f}\n"
+            f"{'TP1 +{:.1f}%'.format(pct1):<12} ${tp1:>15,.4f}  ◀ take 40%\n"
+            f"{'TP2 +{:.1f}%'.format(pct2):<12} ${tp2:>15,.4f}  ◀ take 40%\n"
+            f"{'TP3 +{:.1f}%'.format(pct3):<12} ${tp3:>15,.4f}  ◀ let ride\n"
+            f"{'SL -{:.1f}%'.format(pct_sl):<12} ${sl:>15,.4f}  ◀ HARD STOP\n"
+            f"{'ATR':<12} ${atr:>15,.4f}\n"
+            f"{'R:R Ratio':<12} {'{}:1'.format(rr_val):>15}\n"
+            f"```"
         ),
-        inline=True,
+        inline=False,
     )
+
+    # ── 3-TF MTF breakdown ────────────────────────────────────────────────
     embed.add_field(
-        name="⏰ 4h Timeframe",
+        name="⏱ Multi-Timeframe Analysis (5m | 15m | 1h)",
         value=(
-            f"💰 `{_fmt_price(tf4h['price'])}`\n"
-            f"📊 RSI `{tf4h['rsi']:.1f}` • Trend `{tf4h['trend']}`\n"
-            f"📍 EMA50 `{_fmt_price(tf4h['ema50'])}`"
-        ) if tf4h else "—",
-        inline=True,
+            f"```\n"
+            f"{'TF':<6} {'Signal':<7} {'RSI':<7} {'MACD'}\n"
+            f"{'─'*35}\n"
+            + "\n".join(
+                f"{'5m' if tf=='5m' else ('15m' if tf=='15m' else '1h'):<6} "
+                f"{(mtf[tf]['signal'] or 'NONE'):<7} "
+                f"{mtf[tf]['rsi']:<7.1f} "
+                f"{'Bull ▲' if mtf[tf]['macd_bull'] else 'Bear ▼'}"
+                for tf in ("5m", "15m", "1h")
+            )
+            + f"\n```"
+        ),
+        inline=False,
     )
 
-    # Macro inputs
-    macro_lines = []
-    if a["fg"] and isinstance(a["fg"], dict):
-        macro_lines.append(f"🧠 Fear & Greed: `{a['fg']['value']}/100` — *{a['fg']['classification']}*")
-    if a["sent"] and isinstance(a["sent"], dict):
-        macro_lines.append(f"📰 News + Reddit: `{a['sent']['total']:+d}` — *{a['sent']['label']}*")
-    if a["arb"] and isinstance(a["arb"], dict) and a["arb"].get("spread_pct") is not None:
-        macro_lines.append(
-            f"🔄 Cross-exchange spread: `{abs(a['arb']['spread_pct']):.3f}%` "
-            f"(low={a['arb']['low_exchange']}, high={a['arb']['high_exchange']})"
-        )
-    if macro_lines:
-        embed.add_field(name="🌍 Macro Signals", value="\n".join(macro_lines), inline=False)
+    # ── RSI + Confidence ─────────────────────────────────────────────────
+    embed.add_field(name="📊 RSI (14)", value=bot.rsi_bar(rsi), inline=False)
+    embed.add_field(name="⭐ Signal Quality", value=bot.conf_stars(confidence), inline=True)
+    embed.add_field(name="📐 Direction", value=f"`{'LONG 📈' if is_buy else 'SHORT 📉'}`", inline=True)
+    embed.add_field(name="\u200b", value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
 
-    # Reasoning — up to 8 lines so embed stays compact
-    if a["reasons"]:
-        embed.add_field(
-            name="🧩 Reasoning (how the bot reached this conclusion)",
-            value="\n".join(a["reasons"][:10]),
-            inline=False,
-        )
+    # ── Advanced indicator panel ──────────────────────────────────────────
+    if ind:
+        adx    = ind.get("adx", 0)
+        vwap   = ind.get("vwap", price)
+        cmf    = ind.get("cmf", 0)
+        willr  = ind.get("willr", -50)
+        ema200 = ind.get("ema200", price)
+        struct_bull = ind.get("struct_bull", False)
+        struct_bear = ind.get("struct_bear", False)
+        struct_str  = "Higher Highs / Higher Lows 📈" if struct_bull else ("Lower Highs / Lower Lows 📉" if struct_bear else "Ranging / Consolidation ↔️")
+        trend_ema   = "Above EMA200 🟢 (Bull)" if price > ema200 else "Below EMA200 🔴 (Bear)"
+        vwap_pos    = "Above VWAP 🔼" if price > vwap else "Below VWAP 🔽"
+        adx_str     = f"{adx:.1f} — " + ("Strong trend" if adx > 25 else ("Moderate" if adx > 18 else "Weak/Ranging"))
+        cmf_str     = f"{cmf:+.3f} — " + ("Bullish flow 🟢" if cmf > 0.05 else ("Bearish flow 🔴" if cmf < -0.05 else "Neutral ⚪"))
+        willr_str   = f"{willr:.0f} — " + ("Oversold 🟢" if willr < -80 else ("Overbought 🔴" if willr > -20 else "Neutral"))
 
-    # Concrete trade plan IF actionable
-    if "BUY" in a["action"] or "SELL" in a["action"]:
-        price = tf1h["price"]
-        is_buy = "BUY" in a["action"]
-        if is_buy:
-            sl = price * 0.98; tp1 = price * 1.02; tp2 = price * 1.04; tp3 = price * 1.07
-        else:
-            sl = price * 1.02; tp1 = price * 0.98; tp2 = price * 0.96; tp3 = price * 0.93
         embed.add_field(
-            name="🎯 Concrete Trade Plan",
+            name="🔬 Advanced Indicator Panel",
             value=(
-                f"💰 Entry: `{_fmt_price(price)}`\n"
-                f"🛑 Stop Loss: `{_fmt_price(sl)}`\n"
-                f"🎯 TP1 `{_fmt_price(tp1)}` • TP2 `{_fmt_price(tp2)}` • TP3 `{_fmt_price(tp3)}`\n"
-                f"⏱️ Suggested hold: **{a['hold']}**\n"
-                f"⚠️ Risk max 1-2% of portfolio per trade."
+                f"**ADX Trend Strength:** `{adx_str}`\n"
+                f"**Williams %R:** `{willr_str}`\n"
+                f"**Chaikin Money Flow:** `{cmf_str}`\n"
+                f"**VWAP Position:** `{vwap_pos}`\n"
+                f"**Market Structure:** `{struct_str}`\n"
+                f"**Long-term Trend:** `{trend_ema}`"
             ),
             inline=False,
         )
 
-    embed.set_footer(
-        text=(
-            "🔍 Real data only • NOT financial advice • DYOR • "
-            f"Next analysis in 30 min"
+    # ── Fibonacci levels ──────────────────────────────────────────────────
+    if ind:
+        df5 = bot.get_data(symbol, interval="5m")
+        embed.add_field(
+            name="📐 Fibonacci Retracement Levels",
+            value=_fib_display(ind, price) if ind.get("fib_levels") else "N/A",
+            inline=False,
         )
+
+    # ── Ichimoku ──────────────────────────────────────────────────────────
+    df5 = bot.get_data(symbol, interval="1h")
+    embed.add_field(
+        name="☁️ Ichimoku Cloud (1h)",
+        value=_ichimoku_signal(df5, price),
+        inline=False,
     )
+    embed.add_field(name="\u200b", value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+
+    # ── Entry strategy ────────────────────────────────────────────────────
+    if ind:
+        strat_en, strat_ro = _entry_strategy(signal, confidence, ind, price)
+        embed.add_field(name="🎯 Entry Strategy 🇬🇧", value=strat_en, inline=False)
+        embed.add_field(name="🎯 Strategie Intrare 🇷🇴", value=strat_ro, inline=False)
+        embed.add_field(name="\u200b", value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+
+    # ── AI Analysis ───────────────────────────────────────────────────────
+    embed.add_field(
+        name="🧠 AI Analysis",
+        value=ai_text or "_Analysis unavailable — all data shown above_",
+        inline=False,
+    )
+    embed.add_field(name="\u200b", value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
+
+    # ── Risk reminder ─────────────────────────────────────────────────────
+    embed.add_field(
+        name="⚠️ Risk Management",
+        value=(
+            "🇬🇧 `Max 10% capital/trade` • `Set SL immediately` • `Take TP1 first`\n"
+            "🇷🇴 `Max 10% capital/trade` • `Setează SL imediat` • `Ia TP1 primul`"
+        ),
+        inline=False,
+    )
+
+    embed.set_footer(text="💎 VIP Exclusive — 30 coins | 3-TF | Fibonacci | Ichimoku | Smart Score  •  Not financial advice")
     return embed
 
+# ─── VIP SIGNAL LOOP ─────────────────────────────────────────────────────────
 
-async def vip_analysis_loop(bot, interval=1800):
-    """Posts deep multi-source analysis to #vip-analysis every `interval` seconds."""
-    await bot.client.wait_until_ready()
-    await asyncio.sleep(45)
-    symbols = getattr(bot, "SYMBOLS", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"])
-    idx = 0
+async def vip_deep_signal_loop(client, vip_ch_id: int, free_ch_id: int, interval: int = 300):
+    """
+    Enhanced VIP loop — scans ALL 30 coins every `interval` seconds.
+    Sends to VIP channel only. FREE channel still gets basic signals from bot.signal_loop.
+    """
+    await client.wait_until_ready()
+    await asyncio.sleep(30)  # Let bot fully start
+
+    vip_last_signal: dict[str, str]            = {}
+    vip_last_ts:     dict[str, datetime]        = {}
+    COOLDOWN_H = 4
+
+    print(f"[VIP LOOP] Starting — scanning {len(coins_config.ALL_VIP_SYMBOLS)} coins every {interval//60} min", flush=True)
+
     while True:
+        vip_ch = client.get_channel(vip_ch_id)
+        if vip_ch is None:
+            try:
+                vip_ch = await client.fetch_channel(vip_ch_id)
+            except Exception:
+                vip_ch = None
+
         try:
-            # Pick symbol round-robin
-            symbol = symbols[idx % len(symbols)]
-            idx += 1
-            ch_id = getattr(bot, "VIP_ANALYSIS_CHANNEL", None) or getattr(bot, "VIP_SIGNALS_CHANNEL", None)
-            ch = None
-            if ch_id:
-                ch = bot.client.get_channel(ch_id)
-                if ch is None:
+            now = datetime.now(timezone.utc)
+            print(f"[VIP LOOP] Scanning {len(coins_config.ALL_VIP_SYMBOLS)} coins at {now.strftime('%H:%M:%S')}", flush=True)
+
+            for symbol in coins_config.ALL_VIP_SYMBOLS:
+                try:
+                    # ── Get main data + signal ──────────────────────────
+                    df5m = bot.get_data(symbol, interval="5m")
+                    if df5m is None:
+                        continue
+
+                    sig, price, rsi, conf = bot.get_signal_v2(df5m)
+                    if not sig or not price:
+                        continue
+
+                    ind = bot.calc_indicators(df5m)
+                    if ind is None:
+                        continue
+
+                    # ── Cooldown check ───────────────────────────────────
+                    last_sig  = vip_last_signal.get(symbol)
+                    last_ts   = vip_last_ts.get(symbol)
+                    dir_changed  = last_sig != sig
+                    time_ok   = last_ts is None or (now - last_ts).total_seconds() >= COOLDOWN_H * 3600
+
+                    if not (dir_changed or time_ok):
+                        continue
+
+                    vip_last_signal[symbol] = sig
+                    vip_last_ts[symbol]     = now
+
+                    # ── 3-TF MTF ─────────────────────────────────────────
+                    mtf         = get_3tf_analysis(symbol)
+                    mtf_badge, mtf_aligned = _mtf_summary(mtf, sig)
+
+                    # ── Smart Score ───────────────────────────────────────
+                    smart_val   = _smart_score(ind, sig, mtf_aligned)
+
+                    # Skip very weak signals (Smart Score < 35)
+                    if smart_val < 35:
+                        print(f"  [VIP] {symbol}: SKIP (SmartScore={smart_val} < 35)", flush=True)
+                        continue
+
+                    # ── AI Analysis ───────────────────────────────────────
+                    ai_text = bot.ai_analysis(sig, price, rsi, symbol)
+
+                    # ── Chart ─────────────────────────────────────────────
                     try:
-                        ch = await bot.client.fetch_channel(ch_id)
+                        chart_file = bot.generate_chart(df5m, symbol, sig)
                     except Exception:
-                        ch = None
-            if ch:
-                analysis = await _build_analysis(symbol)
-                if analysis:
-                    embed = build_embed(analysis)
-                    await ch.send(embed=embed)
-                    print(f"[vip_analysis] posted {symbol} — {analysis['action']} (conf {analysis['confidence']})", flush=True)
-        except Exception as e:
-            print(f"[vip_analysis] loop error: {e}", flush=True)
+                        chart_file = None
+
+                    # ── Build enhanced embed ──────────────────────────────
+                    embed = build_vip_deep_embed(
+                        symbol, sig, price, rsi, conf, ai_text,
+                        ind, mtf, smart_val, mtf_badge, mtf_aligned
+                    )
+
+                    print(f"  [VIP] SENDING {sig} {symbol} | Score={smart_val} | MTF={mtf_aligned}/3", flush=True)
+
+                    if vip_ch:
+                        if chart_file:
+                            await vip_ch.send(embed=embed, file=discord.File(chart_file))
+                        else:
+                            await vip_ch.send(embed=embed)
+
+                    # Track in bot's global stats too
+                    bot.SIGNAL_STATS[sig]     = bot.SIGNAL_STATS.get(sig, 0) + 1
+                    bot.SIGNAL_STATS["total"] = bot.SIGNAL_STATS.get("total", 0) + 1
+
+                    await asyncio.sleep(2)  # Small delay between sends
+
+                except Exception as coin_err:
+                    print(f"  [VIP] Error on {symbol}: {coin_err}", flush=True)
+                    continue
+
+            print(f"[VIP LOOP] Done. Next in {interval//60} min.", flush=True)
+
+        except Exception as loop_err:
+            print(f"[VIP LOOP ERROR] {loop_err}", flush=True)
+
         await asyncio.sleep(interval)
+
+def start_vip_loop(client, vip_ch_id: int, free_ch_id: int, interval: int = 300):
+    """Called from bot_extended.py to kick off the VIP loop as a background task."""
+    client.loop.create_task(
+        vip_deep_signal_loop(client, vip_ch_id, free_ch_id, interval)
+    )
+    print(f"[VIP LOOP] Task registered — {len(coins_config.ALL_VIP_SYMBOLS)} coins, every {interval//60} min", flush=True)
+
+async def vip_analysis_loop(bot_module, interval: int = 1800):
+    """
+    Compatibility wrapper called by bot_extended.py:
+        bot.client.loop.create_task(vip_analysis.vip_analysis_loop(bot, interval=1800))
+
+    Reads VIP_SIGNALS_CHANNEL + FREE_SIGNALS_CHANNEL from bot_module
+    and delegates to the full vip_deep_signal_loop.
+    """
+    client     = bot_module.client
+    vip_ch_id  = getattr(bot_module, "VIP_SIGNALS_CHANNEL",  0) or 0
+    free_ch_id = getattr(bot_module, "FREE_SIGNALS_CHANNEL", 0) or 0
+    await vip_deep_signal_loop(client, vip_ch_id, free_ch_id, interval=interval)
