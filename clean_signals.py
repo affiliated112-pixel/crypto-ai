@@ -63,6 +63,7 @@ def build_free_signal(
     rsi:        float,
     confidence: str,
     atr:        float | None = None,
+    score:      int = 0,
 ) -> discord.Embed:
     """
     Clean FREE signal embed.
@@ -108,10 +109,19 @@ def build_free_signal(
     embed.add_field(name="Quality",    value=_conf_badge(confidence),   inline=True)
     embed.add_field(name="Direction",  value=f"`{'LONG 📈' if is_buy else 'SHORT 📉'}`", inline=True)
 
+    # ── Quality score (honest) ───────────────────────────────────────────
+    if score > 0:
+        from signal_engine import quality_label as _ql
+        embed.add_field(
+            name="🎯 Signal Quality",
+            value=f"`{score}/100` — {_ql(score)}",
+            inline=True,
+        )
+
     # ── VIP upsell (1 line only) ─────────────────────────────────────────
     embed.add_field(
         name="💎 VIP",
-        value="TP2 · TP3 · AI Analysis · 3-TF · Smart Score · 30 coins → `/getvip`",
+        value="TP2 · TP3 · AI Analysis · 3-TF · 30 coins → `/getvip`",
         inline=False,
     )
 
