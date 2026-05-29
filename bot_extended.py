@@ -1,12 +1,10 @@
 """bot_extended.py — Railway entrypoint that wraps bot.py.
 
-Layers added on top of bot.py without modifying it:
-  1. Bug fix: client.process_commands AttributeError
-  2. New free-API slash commands (11 total)
-  3. Beginner-friendly signal explainer
-  4. PRO embeds (modern Discord design)
-  5. Smart signal filter (Fear&Greed + News + Cross-exchange)
-  6. Performance tracker (win rate, history)
+Optimized version:
+  * Smart filter uses CACHED values only in the hot path (zero blocking HTTP)
+  * A background task refreshes the cache every 2 min in parallel
+  * Cross-exchange calls now run in a thread pool (6x parallel)
+  * Tighter timeouts so one slow exchange can't stall the bot
 """
 import asyncio
 import discord
@@ -25,15 +23,7 @@ async def _noop_process_commands(*args, **kwargs):
 bot.client.process_commands = _noop_process_commands  # type: ignore[attr-defined]
 
 # ---- 2. Replace embed builders with PRO versions + smart-filter wrap ----
-# We monkey-patch bot.build_free_embed / bot.build_vip_embed so the existing
-# bot.signal_loop() calls our new pro embeds automatically. We also wrap
-# bot.get_signal_v2 to score every signal and suppress weak ones.
 _orig_get_signal = bot.get_signal_v2  # type: ignore[attr-defined]
-_orig_build_free = getattr(bot, "build_free_embed", None)
-_orig_build_vip = getattr(bot, "build_vip_embed", None)
-
-# We need to pass the filter context from get_signal_v2 → build_*_embed.
-# Use a tiny per-symbol cache populated in our wrapper.
 _LAST_EVAL = {}
 
 
@@ -41,7 +31,7 @@ def _patched_get_signal_v2(df):
     sig, price, rsi, conf = _orig_get_signal(df)
     if not sig or not price:
         return sig, price, rsi, conf
-    # Detect the symbol from the DataFrame attrs or fall back to caller frame
+    # Find the symbol from the caller frame
     symbol = getattr(df, "_symbol_hint", None)
     if symbol is None:
         import inspect
@@ -52,6 +42,7 @@ def _patched_get_signal_v2(df):
     if symbol is None:
         return sig, price, rsi, conf
     try:
+        # SYNC evaluate — uses cache only, NEVER blocks on HTTP
         score, quality, filters, suppressed = smart_filter.evaluate(symbol, sig, price, conf)
     except Exception as e:
         print(f"[smart_filter] error: {e}", flush=True)
@@ -60,14 +51,11 @@ def _patched_get_signal_v2(df):
     if suppressed:
         print(f"  [SMART_FILTER] {sig} {symbol} suppressed (score={score})", flush=True)
         return None, price, rsi, conf
-    # Record this signal for the tracker (called BEFORE bot.py decides cooldown).
-    # Cooldown handling stays in bot.py — we only log when the signal will be sent.
     return sig, price, rsi, conf
 
 
 def _patched_build_free_embed(symbol, sig, price, rsi, conf, *args, **kwargs):
     ev = _LAST_EVAL.get(symbol, {})
-    # Track every signal that reaches build_free_embed (it always does when sent).
     try:
         tracker.record_signal(
             symbol, sig, price,
@@ -107,11 +95,29 @@ commands_stats.register(bot.tree, bot.client)
 # ---- 4. Install beginner-friendly signal explainer ----
 signal_explainer.install(bot.client)
 
-# ---- 5. Start performance tracker background task ----
+# ---- 5. Start background tasks ----
 @bot.client.event
 async def on_ready():
-    print(f"[bot_extended] Bot ready as {bot.client.user} — starting tracker poll loop", flush=True)
+    print(f"[bot_extended] Bot ready as {bot.client.user}", flush=True)
+    # Tracker poll loop
     bot.client.loop.create_task(tracker.poll_loop())
+    # Smart filter cache refresher — keeps Fear&Greed, News, Arb fresh
+    symbols = getattr(bot, "SYMBOLS", ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"])
+    bot.client.loop.create_task(smart_filter.background_refresh_loop(symbols, interval=120))
+    # Warm the cache immediately so the first signal isn't unfiltered
+    bot.client.loop.create_task(_warm_cache(symbols))
+
+
+async def _warm_cache(symbols):
+    """Fire one refresh right after startup so the first signals have data."""
+    try:
+        tasks = [smart_filter._cached_fear_greed(), smart_filter._cached_sentiment()]
+        for s in symbols:
+            tasks.append(smart_filter._cached_arbitrage(s))
+        await asyncio.gather(*tasks, return_exceptions=True)
+        print("[smart_filter] cache warmed up", flush=True)
+    except Exception as e:
+        print(f"[smart_filter] warm error: {e}", flush=True)
 
 
 if __name__ == "__main__":
