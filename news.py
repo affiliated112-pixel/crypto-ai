@@ -140,7 +140,7 @@ def _parse_rss(source: dict, timeout: int = 8) -> list[dict]:
 def _coingecko_news(limit: int = 10) -> list[dict]:
     """
     Fetches news from CoinGecko public API.
-    Free, no API key, no rate limit issues for low frequency.
+    Free/public endpoint; failures are handled as empty results.
     """
     try:
         import json
@@ -235,10 +235,105 @@ def fetch_news(limit: int = 5, source_idx: int | None = None) -> list[dict]:
 
     return fresh
 
-# ─── COMPATIBILITATE cu real_loops.py (inlocuieste cryptopanic_news) ─────────
+# ─── COMPATIBILITATE cu real_loops.py ───────────────────────────────────────
 def cryptopanic_news(limit: int = 5) -> list[dict]:
-    """
-    Drop-in replacement pentru vechea functie cryptopanic_news().
-    Foloseste acum RSS multi-source in loc de CryptoPanic.
+    """Compatibility wrapper for older callers.
+    Uses current public RSS/CoinGecko sources, not CryptoPanic.
     """
     return fetch_news(limit=limit)
+
+# ─── AGREGARE SENTIMENT pentru smart_filter/commands_ext2 ───────────────────
+def _sentiment_score_text(text: str) -> int:
+    t = (text or "").lower()
+    bull = sum(1 for w in _BULL_WORDS if w in t)
+    bear = sum(1 for w in _BEAR_WORDS if w in t)
+    return bull - bear
+
+
+def _fetch_reddit_titles(limit: int = 15) -> list[str]:
+    """Best-effort public Reddit JSON fetch. Returns [] when unavailable."""
+    try:
+        import json
+        req = Request(
+            f"https://www.reddit.com/r/CryptoCurrency/hot.json?limit={max(1, min(limit, 50))}",
+            headers={"User-Agent": "crypto-ai-discord-bot/2.0 sentiment check", "Accept": "application/json"},
+        )
+        with urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read())
+        posts = []
+        for child in data.get("data", {}).get("children", []):
+            d = child.get("data", {}) or {}
+            title = d.get("title") or ""
+            body = d.get("selftext") or ""
+            if title:
+                posts.append((title + " " + body).strip())
+        return posts[:limit]
+    except Exception as e:
+        log.debug(f"[news] Reddit sentiment unavailable: {e}")
+        return []
+
+
+def _fresh_news_for_sentiment(limit: int) -> list[dict]:
+    """Fetch headlines for sentiment without consuming the repost cache."""
+    items: list[dict] = []
+    for src in RSS_SOURCES:
+        items.extend(_parse_rss(src))
+        if len(items) >= limit:
+            break
+    if not items:
+        items = _coingecko_news(limit)
+    for item in items:
+        item["mood"] = _detect_mood(item.get("title", ""))
+    return items[:limit]
+
+
+def aggregate_sentiment(limit: int = 12, reddit_limit: int = 15) -> dict:
+    """Return a transparent real sentiment snapshot from live headlines/posts.
+
+    No generated counts and no AI summaries: only fetched RSS/CoinGecko headlines
+    plus Reddit public JSON posts when Reddit responds.
+    """
+    try:
+        items = _fresh_news_for_sentiment(limit)
+    except Exception:
+        items = []
+    try:
+        reddit_posts = _fetch_reddit_titles(reddit_limit)
+    except Exception:
+        reddit_posts = []
+
+    news_score = 0
+    bullish = bearish = neutral = 0
+    for item in items:
+        score = _sentiment_score_text((item.get("title") or "") + " " + (item.get("summary") or ""))
+        if score > 0:
+            news_score += 1
+            bullish += 1
+        elif score < 0:
+            news_score -= 1
+            bearish += 1
+        else:
+            neutral += 1
+
+    reddit_score = sum(_sentiment_score_text(p) for p in reddit_posts)
+    total = news_score + reddit_score
+    if total > 1:
+        label, emoji = "Bullish", "🟢"
+    elif total < -1:
+        label, emoji = "Bearish", "🔴"
+    else:
+        label, emoji = "Neutral", "⚪"
+
+    return {
+        "total": int(total),
+        "label": label,
+        "emoji": emoji,
+        "news_score": int(news_score),
+        "reddit_score": int(reddit_score),
+        "news_count": len(items),
+        "reddit_count": len(reddit_posts),
+        "bullish": bullish,
+        "bearish": bearish,
+        "neutral": neutral,
+        "source": "multi-source RSS/CoinGecko + Reddit public JSON",
+    }

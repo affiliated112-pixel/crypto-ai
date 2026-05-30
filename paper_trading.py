@@ -1,6 +1,6 @@
 """paper_trading.py — Admin-only Paper Trading Engine.
 Simulates real trades based on bot signals using virtual money.
-100% real-time prices from Binance. Zero real money involved.
+Uses live public exchange prices when APIs are available. Zero real money involved.
 Only the admin can see the results (private channel).
 
 Category ID: 1509818706509955172
@@ -9,6 +9,7 @@ import asyncio
 import json
 import os
 import requests
+import market_data
 from datetime import datetime, timezone
 
 PAPER_FILE = os.environ.get("PAPER_TRADING_FILE", "paper_trading.json")
@@ -48,14 +49,7 @@ def _save(data):
         print(f"[paper] save error: {e}", flush=True)
 
 def _get_price(symbol):
-    try:
-        r = requests.get(
-            f"https://api.binance.us/api/v3/ticker/price?symbol={symbol}",
-            headers=UA, timeout=6,
-        )
-        return float(r.json()["price"])
-    except Exception:
-        return None
+    return market_data.get_current_price(symbol)
 
 def open_trade(symbol, direction, entry_price):
     """Open a new paper trade based on a bot signal."""
@@ -220,7 +214,7 @@ def build_portfolio_embed(stats):
     embed = discord.Embed(
         title="💼 PAPER TRADING — LIVE PORTFOLIO",
         description=(
-            f"**Admin-only demo** — 100% real prices, zero real money\n"
+            f"**Admin-only demo** — real public market prices, zero real money\n"
             f"Started: <t:{int(datetime.fromisoformat(stats['started_at'].replace('Z','+00:00')).timestamp())}:R>"
         ),
         color=color,
@@ -290,7 +284,7 @@ def build_portfolio_embed(stats):
             inline=False,
         )
 
-    embed.set_footer(text="📊 100% real Binance prices • Paper money only • Not financial advice")
+    embed.set_footer(text="📊 Real public market prices • Paper money only • Not financial advice")
     return embed
 
 async def paper_portfolio_loop(bot, channel_id, interval=300):

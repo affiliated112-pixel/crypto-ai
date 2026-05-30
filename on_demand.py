@@ -157,6 +157,12 @@ def _no_signal_embed(symbol: str, price: float, rsi: float, ind: dict | None) ->
 # ─── MAIN COMMAND BUILDER ─────────────────────────────────────────────────────
 
 def register_commands(tree: app_commands.CommandTree):
+    # Replace bot.py's older /signal command with the richer on-demand version.
+    for _name in ("signal", "scan"):
+        try:
+            tree.remove_command(_name)
+        except Exception:
+            pass
 
     @tree.command(
         name="signal",
@@ -220,8 +226,8 @@ def register_commands(tree: app_commands.CommandTree):
             if symbol != "BTCUSDT" and btc_signal is None:
                 df_btc = bot.get_data("BTCUSDT", interval="5m")
                 if df_btc is not None:
-                    btc_sig_raw, _, _, _ = bot.get_signal_v2(df_btc)
-                    signal_engine.cache_btc_signal(btc_sig_raw)
+                    btc_sig_raw, btc_price_raw, _, _ = bot.get_signal_v2(df_btc)
+                    signal_engine.cache_btc_signal(btc_sig_raw, price=btc_price_raw)
                     btc_signal = btc_sig_raw
 
             # ── No signal case ────────────────────────────────────────
@@ -231,16 +237,16 @@ def register_commands(tree: app_commands.CommandTree):
                 return
 
             # ── Quality gate ──────────────────────────────────────────
+            # On-demand checks must NOT consume the auto-signal daily budget.
             if is_vip:
-                # VIP: run 3-TF MTF
                 mtf = _vip.get_3tf_analysis(symbol) if _HAS_VIP else None
-                allow, score, reason = signal_engine.should_send_vip(
-                    symbol, sig, price, ind or {}, mtf=mtf, btc_signal=btc_signal
+                allow, score, reason, _candidate = signal_engine.check_signal_quality(
+                    symbol, sig, price, ind or {}, mtf=mtf, tier="vip", consume=False
                 )
             else:
-                mtf    = None
-                allow, score, reason = signal_engine.should_send_free(
-                    symbol, sig, price, ind or {}, btc_signal
+                mtf = None
+                allow, score, reason, _candidate = signal_engine.check_signal_quality(
+                    symbol, sig, price, ind or {}, mtf=None, tier="free", consume=False
                 )
 
             # ── Not enough quality ────────────────────────────────────
@@ -250,7 +256,7 @@ def register_commands(tree: app_commands.CommandTree):
                     description=(
                         f"There is a **{sig}** signal forming, but it doesn't meet our quality threshold.\n"
                         f"**Reason:** `{reason}`\n"
-                        f"**Quality Score:** `{score}/100` (min {'65' if is_vip else '45'} required)\n\n"
+                        f"**Quality Score:** `{score}/100` (min {signal_engine.VIP_MIN_SCORE if is_vip else signal_engine.FREE_MIN_SCORE} required)\n\n"
                         f"Trading a low-quality setup means lower probability of profit.\n"
                         f"**Recommendation: Wait.**"
                     ),

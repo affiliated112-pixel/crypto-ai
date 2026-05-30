@@ -3,18 +3,19 @@
 On startup:
   1. Finds or creates a channel named "🎮・demo-trading" in category 1509818706509955172
   2. Clears old messages and posts the LIVE APP embed (pinned)
-  3. Updates the embed every 30 seconds with real Binance prices
+  3. Updates the embed every 30 seconds with real public market prices
   4. Users click "🚀 Start Demo cu $5" → bot auto-trades for them
   5. Bot opens/closes trades automatically based on real signals
   6. Each user sees their own live P&L in real-time
 
-ZERO real money. 100% Binance live prices.
+ZERO real money. Uses live public exchange prices when APIs are available.
 """
 import asyncio
 import json
 import os
 import time
 import requests
+import market_data
 import discord
 from discord import ui
 from datetime import datetime, timezone
@@ -74,24 +75,19 @@ def get_price(symbol: str) -> float | None:
     if symbol in _price_cache and now - _price_ts.get(symbol, 0) < 15:
         return _price_cache[symbol]
     try:
-        r = requests.get(
-            f"https://api.binance.us/api/v3/ticker/price?symbol={symbol}",
-            headers=UA, timeout=5,
-        )
-        price = float(r.json()["price"])
-        _price_cache[symbol] = price
-        _price_ts[symbol]    = now
-        return price
+        price = market_data.get_current_price(symbol)
+        if price:
+            _price_cache[symbol] = float(price)
+            _price_ts[symbol]    = now
+            return float(price)
     except Exception:
-        return _price_cache.get(symbol)
+        pass
+    return _price_cache.get(symbol)
 
 def get_24h_change(symbol: str) -> float:
     try:
-        r = requests.get(
-            f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}",
-            headers=UA, timeout=5,
-        )
-        return float(r.json()["priceChangePercent"])
+        info = market_data.get_price_info(symbol)
+        return float((info or {}).get("change") or 0.0)
     except Exception:
         return 0.0
 
@@ -200,7 +196,7 @@ def build_main_embed(data: dict) -> discord.Embed:
         title="🎮 DEMO TRADING — LIVE APP",
         description=(
             "**Investește virtual și urmărește ce fac banii tăi în timp real!**\n"
-            "✅ Bani demo • ✅ Prețuri reale Binance • ✅ Bot tranzacționează automat\n"
+            "✅ Bani demo • ✅ Prețuri reale din API-uri publice • ✅ Bot tranzacționează automat\n"
             f"{'━' * 38}"
         ),
         color=0x00C896,
@@ -264,7 +260,7 @@ def build_main_embed(data: dict) -> discord.Embed:
         inline=False,
     )
 
-    embed.set_footer(text="🔄 Se actualizează la 30s • 100% prețuri reale • Bani virtuali • Nu e sfat financiar")
+    embed.set_footer(text="🔄 Se actualizează la 30s • prețuri reale • Bani virtuali • Nu e sfat financiar")
     return embed
 
 def build_user_embed(user: dict) -> discord.Embed:
@@ -296,7 +292,7 @@ def build_user_embed(user: dict) -> discord.Embed:
 
     embed = discord.Embed(
         title=f"💼 Portofelul tău Demo — {user['name']}",
-        description=f"**Bani virtuali • Prețuri reale Binance • Bot tranzacționează automat**",
+        description=f"**Bani virtuali • Prețuri reale din API-uri publice • Bot tranzacționează automat**",
         color=color,
         timestamp=datetime.now(timezone.utc),
     )
@@ -469,7 +465,7 @@ class MainAppView(ui.View):
             color=0xF39C12,
             timestamp=datetime.now(timezone.utc),
         )
-        embed.set_footer(text="Demo Trading • Bani virtuali • Prețuri reale Binance")
+        embed.set_footer(text="Demo Trading • Bani virtuali • Prețuri reale din API-uri publice")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 class UserPortfolioView(ui.View):
@@ -566,7 +562,7 @@ async def setup_demo_channel(client: discord.Client) -> discord.TextChannel | No
             ch = await guild.create_text_channel(
                 name=CHANNEL_NAME,
                 category=category,
-                topic="🎮 Demo Trading Live — Investește virtual, prețuri reale Binance, zero risc",
+                topic="🎮 Demo Trading Live — virtual, fără bani reali, prețuri publice live",
             )
             print(f"[demo_app] created channel: {ch.name} ({ch.id})", flush=True)
             return ch
@@ -601,7 +597,7 @@ async def post_or_update_main_embed(ch: discord.TextChannel, client: discord.Cli
     await ch.send(
         "# 🎮 DEMO TRADING LIVE\n"
         "> Investește **virtual** și urmărește în **timp real** ce fac banii tăi!\n"
-        "> ✅ Bani demo • ✅ Prețuri reale Binance • ✅ Bot tranzacționează automat • ✅ Zero risc real\n"
+        "> ✅ Bani demo • ✅ Prețuri reale din API-uri publice • ✅ Bot tranzacționează automat • ✅ Zero risc real\n"
         f"> 🔄 *Se actualizează la fiecare 30 secunde*"
     )
 

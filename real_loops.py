@@ -190,7 +190,7 @@ async def real_performance_loop(bot, interval=86400):
                         embed.add_field(name="⭐ By Quality", value="\n".join(lines), inline=False)
 
                 embed.set_footer(
-                    text="🔍 100% real tracker data • Use /stats and /history for live numbers • Not financial advice"
+                    text="🔍 Live tracker data • Use /stats and /history for live numbers • Not financial advice"
                 )
                 await ch.send(embed=embed)
         except Exception as e:
@@ -198,7 +198,7 @@ async def real_performance_loop(bot, interval=86400):
         await asyncio.sleep(interval)
 
 async def real_market_news_loop(bot, interval=1800):
-    """Posts REAL crypto news from CryptoPanic — NOT random hardcoded text."""
+    """Posts REAL crypto news from public RSS/CoinGecko sources — NOT random hardcoded text."""
     await bot.client.wait_until_ready()
     await asyncio.sleep(60)
     last_posted = set()
@@ -235,7 +235,7 @@ async def real_market_news_loop(bot, interval=1800):
                         timestamp=datetime.now(timezone.utc),
                     )
                     embed.set_footer(
-                        text="📡 CoinDesk · Decrypt · Bitcoin Magazine · CryptoSlate · CoinGecko — 100% real news"
+                        text="📡 CoinDesk · Decrypt · Bitcoin Magazine · CryptoSlate · CoinGecko — public news feeds"
                     )
                     await ch.send(embed=embed)
         except Exception as e:
@@ -268,7 +268,7 @@ async def real_announcement_loop(bot, interval=86400):
             "ÎNTOTDEAUNA pune Stop Loss înainte de intrare. Maxim 1–2% portofoliu per trade."
         ),
         (
-            "🔍 100% real data — no fake stats / Date 100% reale",
+            "🔍 Live public data — no fake stats / Date live publice, fără statistici inventate",
             "🇬🇧 All signals are calculated from live Binance candles using RSI, MACD, "
             "Bollinger Bands, EMA, VWAP, ADX, Stochastic. Smart filter uses Fear & Greed, "
             "real news sentiment, cross-exchange validation. Use `/stats` to see real win rate.\n\n"
@@ -293,7 +293,7 @@ async def real_announcement_loop(bot, interval=86400):
                     color=0x3498DB,
                     timestamp=datetime.now(timezone.utc),
                 )
-                embed.set_footer(text="📚 Educational only • 100% real data • DYOR • Not financial advice")
+                embed.set_footer(text="📚 Educational only • Live public data • DYOR • Not financial advice")
                 await ch.send(embed=embed)
             i += 1
         except Exception as e:

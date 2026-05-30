@@ -9,6 +9,7 @@ import os
 import time
 from datetime import datetime, timezone
 import requests
+import market_data
 
 DATA_FILE = os.environ.get("SIGNAL_TRACKER_FILE", "signal_tracker.json")
 MAX_RECORDS = 500
@@ -52,10 +53,17 @@ def _save(records):
         print(f"[tracker] save error: {e}", flush=True)
 
 
-def record_signal(symbol, direction, entry, score=None, quality=None):
-    """Append a new signal to the log."""
+def record_signal(symbol, direction, entry, score=None, quality=None, levels=None):
+    """Append a new signal to the log using real signal levels.
+
+    levels may contain ATR-based `sl`, `tp1`, `tp2`, `tp3`. If omitted, the
+    legacy percentage fallback is kept for backward compatibility.
+    """
     records = _load()
-    if direction == "BUY":
+    if levels and all(k in levels for k in ("sl", "tp1", "tp2", "tp3")):
+        sl, tp1, tp2, tp3 = (float(levels["sl"]), float(levels["tp1"]),
+                             float(levels["tp2"]), float(levels["tp3"]))
+    elif direction == "BUY":
         sl, tp1, tp2, tp3 = entry * 0.98, entry * 1.02, entry * 1.04, entry * 1.07
     else:
         sl, tp1, tp2, tp3 = entry * 1.02, entry * 0.98, entry * 0.96, entry * 0.93
@@ -63,9 +71,10 @@ def record_signal(symbol, direction, entry, score=None, quality=None):
         "id": int(time.time() * 1000),
         "symbol": symbol,
         "direction": direction,
-        "entry": entry,
+        "entry": float(entry),
         "sl": sl, "tp1": tp1, "tp2": tp2, "tp3": tp3,
         "score": score, "quality": quality,
+        "level_source": "ATR" if levels else "legacy_pct",
         "opened_at": datetime.now(timezone.utc).isoformat(),
         "status": "OPEN",
         "hit": [],
@@ -79,15 +88,7 @@ def record_signal(symbol, direction, entry, score=None, quality=None):
 
 
 def _get_price(symbol):
-    try:
-        r = requests.get(
-            f"https://api.binance.us/api/v3/ticker/price?symbol={symbol}",
-            headers=UA, timeout=8,
-        )
-        r.raise_for_status()
-        return float(r.json()["price"])
-    except Exception:
-        return None
+    return market_data.get_current_price(symbol)
 
 
 def _pnl(rec, price):
@@ -97,6 +98,13 @@ def _pnl(rec, price):
     if rec["direction"] == "BUY":
         return (price - rec["entry"]) / rec["entry"] * 100
     return (rec["entry"] - price) / rec["entry"] * 100
+
+
+def _close_record(rec, status, price):
+    rec["status"] = status
+    rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+    rec["close_price"] = price
+    rec["pnl_pct"] = _pnl(rec, price)
 
 
 async def _evaluate_and_alert(rec, price):
@@ -112,8 +120,7 @@ async def _evaluate_and_alert(rec, price):
         rec["max_favor"] = max(rec.get("max_favor", price), price)
         rec["max_against"] = min(rec.get("max_against", price), price)
         if price <= rec["sl"]:
-            rec["status"] = "SL"
-            rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "SL", price)
             if "SL" not in rec["alerted"]:
                 events_to_fire.append("SL")
                 rec["alerted"].append("SL")
@@ -127,14 +134,12 @@ async def _evaluate_and_alert(rec, price):
                         rec["alerted"].append(tp_key.upper())
                     changed = True
             if "tp3" in rec["hit"]:
-                rec["status"] = "TP3"
-                rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+                _close_record(rec, "TP3", price)
     else:  # SELL
         rec["max_favor"] = min(rec.get("max_favor", price), price)
         rec["max_against"] = max(rec.get("max_against", price), price)
         if price >= rec["sl"]:
-            rec["status"] = "SL"
-            rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "SL", price)
             if "SL" not in rec["alerted"]:
                 events_to_fire.append("SL")
                 rec["alerted"].append("SL")
@@ -148,15 +153,13 @@ async def _evaluate_and_alert(rec, price):
                         rec["alerted"].append(tp_key.upper())
                     changed = True
             if "tp3" in rec["hit"]:
-                rec["status"] = "TP3"
-                rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+                _close_record(rec, "TP3", price)
 
     # Expiry
     try:
         opened = datetime.fromisoformat(rec["opened_at"].replace("Z", "+00:00"))
         if rec["status"] == "OPEN" and (datetime.now(timezone.utc) - opened).total_seconds() > SIGNAL_EXPIRY_HOURS * 3600:
-            rec["status"] = "EXPIRED"
-            rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "EXPIRED", price)
             if "EXPIRED" not in rec["alerted"]:
                 events_to_fire.append("EXPIRED")
                 rec["alerted"].append("EXPIRED")
@@ -226,23 +229,23 @@ def _evaluate_sync(rec, price):
     if is_buy:
         rec["max_favor"] = max(rec.get("max_favor", price), price)
         if price <= rec["sl"]:
-            rec["status"] = "SL"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "SL", price)
             return
         for k, v in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
             if price >= v and k not in rec["hit"]:
                 rec["hit"].append(k)
         if "tp3" in rec["hit"]:
-            rec["status"] = "TP3"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "TP3", price)
     else:
         rec["max_favor"] = min(rec.get("max_favor", price), price)
         if price >= rec["sl"]:
-            rec["status"] = "SL"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "SL", price)
             return
         for k, v in (("tp1", rec["tp1"]), ("tp2", rec["tp2"]), ("tp3", rec["tp3"])):
             if price <= v and k not in rec["hit"]:
                 rec["hit"].append(k)
         if "tp3" in rec["hit"]:
-            rec["status"] = "TP3"; rec["closed_at"] = datetime.now(timezone.utc).isoformat()
+            _close_record(rec, "TP3", price)
 
 
 async def poll_loop():
@@ -255,44 +258,79 @@ async def poll_loop():
         await asyncio.sleep(POLL_SECONDS)
 
 
+def _closed_exit_price(rec):
+    """Best known exit/decision price for a closed record, based on real SL/TP levels."""
+    status = (rec.get("status") or "").upper()
+    if status == "SL":
+        return rec.get("sl")
+    hits = rec.get("hit", []) or []
+    for key in ("tp3", "tp2", "tp1"):
+        if key in hits or status == key.upper():
+            return rec.get(key)
+    return None
+
+
 def compute_stats(symbol=None, days=None):
     records = _load()
     if symbol:
-        records = [r for r in records if r["symbol"] == symbol.upper()]
+        records = [r for r in records if r.get("symbol") == symbol.upper()]
     if days:
         cutoff = time.time() - days * 86400
-        records = [r for r in records if r["id"] / 1000 >= cutoff]
+        records = [r for r in records if (r.get("id", 0) / 1000) >= cutoff]
 
-    closed = [r for r in records if r["status"] != "OPEN"]
-    if not closed:
-        return {"total": 0, "open": len([r for r in records if r["status"] == "OPEN"])}
+    open_count = len([r for r in records if r.get("status") == "OPEN"])
+    closed = [r for r in records if r.get("status") != "OPEN"]
 
     tp1 = len([r for r in closed if "tp1" in r.get("hit", [])])
     tp2 = len([r for r in closed if "tp2" in r.get("hit", [])])
-    tp3 = len([r for r in closed if "tp3" in r.get("hit", [])])
-    sl = len([r for r in closed if r["status"] == "SL"])
-    expired = len([r for r in closed if r["status"] == "EXPIRED"])
-    wins = tp1
+    tp3 = len([r for r in closed if "tp3" in r.get("hit", []) or r.get("status") == "TP3"])
+    sl = len([r for r in closed if r.get("status") == "SL"])
+    expired = len([r for r in closed if r.get("status") == "EXPIRED"])
+
+    # Win-rate uses only decided outcomes: at least TP1 hit vs SL hit.
+    # Expired signals are real outcomes too, but are reported separately.
+    wins = len([r for r in closed if "tp1" in r.get("hit", []) or str(r.get("status", "")).startswith("TP")])
     losses = sl
     decided = wins + losses
     win_rate = (wins / decided * 100) if decided else 0
-    avg_pnl_per_decided = ((wins * 2) - (losses * 2)) / decided if decided else 0
+
+    pnl_values = []
+    for r in closed:
+        # Prefer the actual price seen by the tracker when the signal closed.
+        # Older records may not have pnl_pct, so we fall back to the recorded
+        # SL/TP level rather than inventing a synthetic value.
+        try:
+            if r.get("pnl_pct") is not None:
+                pnl_values.append(float(r["pnl_pct"]))
+                continue
+        except Exception:
+            pass
+        exit_price = _closed_exit_price(r)
+        if exit_price is None:
+            continue
+        try:
+            pnl_values.append(_pnl(r, float(exit_price)))
+        except Exception:
+            continue
+    avg_pnl = (sum(pnl_values) / len(pnl_values)) if pnl_values else 0
 
     by_quality = {}
     for r in closed:
         q = r.get("quality") or "—"
         by_quality.setdefault(q, {"w": 0, "l": 0})
-        if "tp1" in r.get("hit", []):
+        if "tp1" in r.get("hit", []) or str(r.get("status", "")).startswith("TP"):
             by_quality[q]["w"] += 1
-        elif r["status"] == "SL":
+        elif r.get("status") == "SL":
             by_quality[q]["l"] += 1
 
     return {
-        "total": len(records), "closed": len(closed),
-        "open": len([r for r in records if r["status"] == "OPEN"]),
+        "total": len(records),
+        "closed": len(closed),
+        "open": open_count,
         "tp1": tp1, "tp2": tp2, "tp3": tp3, "sl": sl, "expired": expired,
         "wins": wins, "losses": losses,
-        "win_rate": win_rate, "avg_pnl": avg_pnl_per_decided,
+        "win_rate": win_rate,
+        "avg_pnl": avg_pnl,
         "by_quality": by_quality,
     }
 

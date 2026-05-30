@@ -5,7 +5,8 @@
 Repo: `affiliated112-pixel/crypto-ai` — branch `main`
 
 Fișiere importante:
-- `bot.py` — bot Discord
+- `bot_extended.py` — entrypoint recomandat Railway/Replit (păstrează modulele și pornește extensiile)
+- `bot.py` — bot Discord core
 - `requirements.txt` — dependențe Python
 - `railway.toml` — 1 replică, health check `/health`
 - `nixpacks.toml` — suport matplotlib
@@ -16,7 +17,7 @@ Fișiere importante:
 2. Alege `affiliated112-pixel/crypto-ai`
 3. **Settings → Deploy:**
    - Replicas: **1** (obligatoriu)
-   - Start Command: `python -u bot.py` (sau lasă `railway.toml`)
+   - Start Command: `python -u bot_extended.py` (sau lasă `railway.toml`)
 
 ## 3. Variables (copy-paste)
 
@@ -45,7 +46,7 @@ După orice schimbare la Variables → **Deployments → Redeploy**.
 [config] Monitoring: BTCUSDT, ETHUSDT, ...
 Bot online: Crypto Signals#4211
 [config] #free-signals (FREE_SIGNALS) OK
-[SIGNAL LOOP] Done. Next check in 5 min.
+[SIGNAL LOOP] Done. Next check in 15 min.
 ```
 
 ## 7. Health check
@@ -71,3 +72,11 @@ VIP_SIGNALS_CHANNEL=...
 | `session invalidated` | Două containere simultan — așteaptă deploy vechi să moară |
 | Nu postează în canal | Verifică ID canal + permisiuni bot |
 | `matplotlib` missing | `requirements.txt` pe GitHub + redeploy |
+
+
+## 10. Note real-data
+
+- Botul folosește `market_data.py`: Binance Global → Binance.US → CoinGecko fallback.
+- `/stats`, `/history` și performance-ul zilnic citesc din tracker-ul real TP/SL, nu din procente inventate.
+- `bot_extended.py` este recomandat pentru că păstrează modulele extra, dar nu dublează loop-urile de semnale.
+- Extra modulele demo/paper/auto-trade pornesc doar dacă setezi explicit `DEMO_APP_ENABLED=1`, `PAPER_TRADING_ENABLED=1` sau `AUTO_TRADE_ENABLED=1`.

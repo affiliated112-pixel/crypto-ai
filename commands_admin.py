@@ -1,14 +1,30 @@
 """Admin / owner-only commands.
 /clear deletes the last N messages in the current channel.
-Restricted to a hardcoded owner ID list.
+Owner IDs are read from OWNER_IDS env, with the original list as fallback.
 """
+import os
 import discord
 from discord import app_commands
 
-OWNER_IDS = {
+_DEFAULT_OWNER_IDS = {
     1426677891269267618,
     1463583046962909410,
 }
+
+def _load_owner_ids() -> set[int]:
+    raw = os.environ.get("OWNER_IDS", "").replace(";", ",")
+    ids = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.add(int(part))
+        except ValueError:
+            print(f"[admin-cmd] Ignored invalid OWNER_IDS entry: {part}", flush=True)
+    return ids or set(_DEFAULT_OWNER_IDS)
+
+OWNER_IDS = _load_owner_ids()
 
 OWN_COMMANDS = ["clear", "purge"]
 

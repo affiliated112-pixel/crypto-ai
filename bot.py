@@ -33,6 +33,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 import db
 import signal_engine
+import market_data
+try:
+    import coins_config as _coins_config
+except Exception:
+    _coins_config = None
+
+HTTP_HEADERS = {"User-Agent": "crypto-ai-bot/2026 (+https://discord.com)"}
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
 CONFIG = {}
@@ -63,6 +70,10 @@ def _env(name: str, default: str = "") -> str:
     if config_value is not None and str(config_value).strip() != "":
         return str(config_value).strip()
     return default
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return _env(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _sanitize_discord_token(raw: str) -> str:
@@ -162,7 +173,7 @@ PERFORMANCE_CHANNEL   = _channel_id("PERFORMANCE_CHANNEL",   1509524196139466852
 # CONFIG (Railway-friendly)
 # =========================
 
-SIGNAL_LOOP_SECONDS = _int_env("SIGNAL_LOOP_SECONDS", 300)
+SIGNAL_LOOP_SECONDS = _int_env("SIGNAL_LOOP_SECONDS", 900)
 SIGNAL_START_DELAY  = _int_env("SIGNAL_START_DELAY", 5)
 
 CONFIG_SYMBOLS = CONFIG.get("SYMBOLS")
@@ -249,10 +260,19 @@ def rsi_bar(rsi: float) -> str:
     return f"`{bar}` **{round(rsi, 1)}** {zone}"
 
 def conf_stars(confidence: str) -> str:
-    mapping = {"HIGH": "★★★★★", "MEDIUM": "★★★☆☆", "LOW": "★★☆☆☆"}
-    stars = mapping.get(confidence.upper(), "★★★☆☆")
-    color = {"HIGH": "🟢", "MEDIUM": "🟡", "LOW": "🔴"}.get(confidence.upper(), "⚪")
+    c = (confidence or "").upper()
+    if "VERY" in c:
+        stars, color = "★★★★★", "🟢"
+    elif "HIGH" in c:
+        stars, color = "★★★★☆", "🟢"
+    elif "MED" in c:
+        stars, color = "★★★☆☆", "🟡"
+    elif "LOW" in c:
+        stars, color = "★★☆☆☆", "🔴"
+    else:
+        stars, color = "★★★☆☆", "⚪"
     return f"{color} {stars}  `{confidence}`"
+
 
 intents = discord.Intents.default()
 intents.members = True
@@ -261,6 +281,8 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 tree   = app_commands.CommandTree(client)
 _background_tasks_started = False
+_extra_tasks_started = False
+_optional_commands_registered = False
 
 
 def utcnow():
@@ -309,113 +331,63 @@ async def verify_signal_channels():
 # MULTI-API DATA FETCH
 # =========================
 
-def get_data_binance(symbol, interval="5m", limit=150):
-    try:
-        url = f"https://api.binance.us/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        data = requests.get(url, timeout=10).json()
-        if not isinstance(data, list) or len(data) < 20:
-            return None
-        df = pd.DataFrame(data, columns=[
-            "time","open","high","low","close","volume",
-            "close_time","qav","trades","tbbav","tbqav","ignore"
-        ])
-        for col in ("open","high","low","close","volume"):
-            df[col] = df[col].astype(float)
-        return df
-    except Exception:
-        return None
+BINANCE_KLINE_ENDPOINTS = tuple(f"{host}/api/v3/klines" for host in market_data.BINANCE_HOSTS)
+BINANCE_TICKER_ENDPOINTS = tuple(f"{host}/api/v3/ticker/24hr" for host in market_data.BINANCE_HOSTS)
 
-def get_data_coingecko(symbol):
-    try:
-        coin_map = {"BTCUSDT":"bitcoin","ETHUSDT":"ethereum",
-                    "SOLUSDT":"solana","BNBUSDT":"binancecoin"}
-        coin = coin_map.get(symbol, symbol.replace("USDT","").lower())
-        url  = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart?vs_currency=usd&days=1&interval=5minutely"
-        data = requests.get(url, timeout=10).json()
-        prices = data.get("prices", [])
-        if len(prices) < 20:
-            return None
-        df = pd.DataFrame(prices, columns=["time","close"])
-        df["high"] = df["close"]; df["low"] = df["close"]
-        df["open"] = df["close"]; df["volume"] = 0.0
-        return df
-    except Exception:
+def _coingecko_slug(symbol: str) -> str:
+    """Return a CoinGecko id for a trading pair; uses coins_config when present."""
+    symbol = (symbol or "").upper().strip()
+    if _coins_config is not None:
+        slug_map = getattr(_coins_config, "COINGECKO_SLUG", {})
+        if symbol in slug_map:
+            return slug_map[symbol]
+    fallback = {
+        "BTCUSDT": "bitcoin", "ETHUSDT": "ethereum", "SOLUSDT": "solana",
+        "BNBUSDT": "binancecoin", "XRPUSDT": "ripple", "DOGEUSDT": "dogecoin",
+        "ADAUSDT": "cardano", "AVAXUSDT": "avalanche-2",
+    }
+    return fallback.get(symbol, symbol.replace("USDT", "").replace("USD", "").lower())
+
+def _parse_binance_klines(data):
+    if not isinstance(data, list) or len(data) < 20:
         return None
+    df = pd.DataFrame(data, columns=[
+        "time", "open", "high", "low", "close", "volume",
+        "close_time", "qav", "trades", "tbbav", "tbqav", "ignore"
+    ])
+    for col in ("open", "high", "low", "close", "volume"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["open", "high", "low", "close"]).reset_index(drop=True)
+    return df if len(df) >= 20 else None
+
+def get_data_binance(symbol, interval="5m", limit=150):
+    """Real OHLCV candles from Binance Global/US via market_data helper."""
+    return market_data.get_ohlcv_binance(symbol, interval=interval, limit=limit)
+
+
+def get_data_coingecko(symbol, interval="5m", limit=150):
+    """Real sampled CoinGecko market data fallback.
+
+    CoinGecko market_chart is not a native candle feed, so this is used only
+    when exchange candle APIs fail. Values still come from live public data.
+    """
+    return market_data.get_ohlcv_coingecko(symbol, interval=interval, limit=limit)
+
 
 def get_data(symbol, interval="5m"):
-    df = get_data_binance(symbol, interval)
+    df = market_data.get_ohlcv(symbol, interval=interval, limit=180)
     if df is not None and len(df) >= 30:
+        try:
+            df._symbol_hint = symbol.upper().strip()
+        except Exception:
+            pass
         return df
-    return get_data_coingecko(symbol)
+    return None
+
 
 def get_price_info(symbol):
-    """Returns 24h ticker info: price, change%, high, low, volume."""
-    try:
-        url  = f"https://api.binance.us/api/v3/ticker/24hr?symbol={symbol}"
-        data = requests.get(url, timeout=8).json()
-        return {
-            "price":    float(data["lastPrice"]),
-            "change":   float(data["priceChangePercent"]),
-            "high":     float(data["highPrice"]),
-            "low":      float(data["lowPrice"]),
-            "volume":   float(data["quoteVolume"]),
-        }
-    except Exception:
-        return None
-
-def get_fear_greed():
-    """Standalone Fear & Greed fetch — returns (score_int, label_str)."""
-    try:
-        data  = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8).json()
-        val   = int(data["data"][0]["value"])
-        label = data["data"][0]["value_classification"]
-        return val, label
-    except Exception:
-        return "N/A", "Unknown"
-
-def get_messari_metrics(symbol):
-    """
-    Messari free API — returns basic on-chain metrics.
-    No API key needed for basic data.
-    """
-    coin_map = {"BTCUSDT": "bitcoin", "ETHUSDT": "ethereum",
-                "SOLUSDT": "solana",  "BNBUSDT": "binance-coin"}
-    slug = coin_map.get(symbol, symbol.replace("USDT","").lower())
-    try:
-        url  = f"https://data.messari.io/api/v1/assets/{slug}/metrics"
-        data = requests.get(url, timeout=10).json().get("data", {})
-        mkt  = data.get("market_data", {})
-        roi  = data.get("roi_data", {})
-        sup  = data.get("supply", {})
-        return {
-            "price_usd":        mkt.get("price_usd"),
-            "volume_last_24h":  mkt.get("volume_last_24_hours"),
-            "percent_change_24h": mkt.get("percent_change_usd_last_24_hours"),
-            "market_cap":       mkt.get("real_volume_last_24_hours"),
-            "roi_1y":           roi.get("percent_change_last_1_year"),
-            "circulating_supply": sup.get("circulating"),
-        }
-    except Exception:
-        return None
-
-def get_coingecko_extra(symbol):
-    """CoinGecko extra metrics: market cap rank, ATH, community score."""
-    coin_map = {"BTCUSDT": "bitcoin", "ETHUSDT": "ethereum",
-                "SOLUSDT": "solana",  "BNBUSDT": "binancecoin"}
-    coin = coin_map.get(symbol, symbol.replace("USDT","").lower())
-    try:
-        url  = f"https://api.coingecko.com/api/v3/coins/{coin}?localization=false&tickers=false&community_data=true&developer_data=false"
-        data = requests.get(url, timeout=10).json()
-        mkt  = data.get("market_data", {})
-        return {
-            "market_cap_rank":  data.get("market_cap_rank"),
-            "ath":              mkt.get("ath", {}).get("usd"),
-            "ath_change_pct":   mkt.get("ath_change_percentage", {}).get("usd"),
-            "community_score":  data.get("community_score"),
-            "coingecko_score":  data.get("coingecko_score"),
-        }
-    except Exception:
-        return None
+    """Returns 24h ticker info: price, change%, high, low, volume, source."""
+    return market_data.get_price_info(symbol)
 
 # =========================
 # TECHNICAL ANALYSIS
@@ -737,13 +709,171 @@ def check_volume_spike(ind):
 def check_volatility(df):
     if df is None or len(df) < 2:
         return False
-    return abs(df["close"].iloc[-1] - df["close"].iloc[-2]) > 200
+    prev = float(df["close"].iloc[-2])
+    cur = float(df["close"].iloc[-1])
+    if prev <= 0:
+        return False
+    # Use percentage change so low-priced coins are not ignored and BTC is not
+    # over-alerted by an arbitrary $200 absolute move.
+    return abs(cur - prev) / prev >= 0.015
 
 def is_vip(member):
     return any(role.name == VIP_ROLE_NAME for role in member.roles)
 
+
 # =========================
-# AI ANALYSIS — 4 API-URI GRATUITE
+# OPTIONAL MODULES + REAL TRACKING
+# =========================
+
+def _register_optional_command_modules():
+    """Register extra command modules before tree.sync().
+
+    Modules are kept intact and loaded safely. If one module has a problem, the
+    core bot continues to run instead of crashing Discord startup.
+    """
+    global _optional_commands_registered
+    if _optional_commands_registered:
+        return
+    _optional_commands_registered = True
+
+    modules = [
+        ("commands_ext", "register", (tree, client)),
+        ("commands_ext2", "register", (tree, client)),
+        ("commands_stats", "register", (tree, client)),
+        ("commands_help", "register", (tree, client)),
+        ("commands_admin", "register", (tree, client)),
+        ("commands_paper", "register", (tree,)),
+        ("coin_ticket", "register_commands", (tree,)),
+        ("on_demand", "register_commands", (tree,)),
+        ("auto_trade_integration", "register_commands", (tree,)),
+    ]
+    for module_name, func_name, args in modules:
+        try:
+            mod = __import__(module_name)
+            func = getattr(mod, func_name)
+            func(*args)
+            print(f"[modules] loaded {module_name}.{func_name}", flush=True)
+        except Exception as e:
+            print(f"[modules] skipped {module_name}: {e}", flush=True)
+
+
+async def _send_tracker_alert(event, record, extra):
+    """Forward real TP/SL tracker events to Discord."""
+    try:
+        import alert_messages
+        embed = alert_messages.build_alert_embed(event, record, extra)
+    except Exception as e:
+        print(f"[tracker] alert embed error: {e}", flush=True)
+        return
+
+    targets = [ALERTS_CHANNEL]
+    if event in ("TP1", "TP2", "TP3"):
+        targets.append(FREE_SIGNALS_CHANNEL)
+    for channel_id in dict.fromkeys(targets):
+        ch = await fetch_message_channel(channel_id, f"TRACKER_{event}")
+        if ch:
+            try:
+                await ch.send(embed=embed)
+            except Exception as e:
+                print(f"[tracker] send alert error: {e}", flush=True)
+
+
+def _start_real_background_extras():
+    """Start real-data background helpers once; never posts fake stats."""
+    global _extra_tasks_started
+    if _extra_tasks_started:
+        return
+    _extra_tasks_started = True
+    try:
+        import tracker
+        tracker.set_alert_callback(_send_tracker_alert)
+        client.loop.create_task(tracker.poll_loop())
+        print("[tracker] real TP/SL polling started", flush=True)
+    except Exception as e:
+        print(f"[tracker] not started: {e}", flush=True)
+    try:
+        import smart_filter
+        client.loop.create_task(smart_filter.background_refresh_loop(ALL_SYMBOLS or SYMBOLS, interval=120))
+        print("[smart_filter] cache refresh started", flush=True)
+    except Exception as e:
+        print(f"[smart_filter] not started: {e}", flush=True)
+    try:
+        import signal_results
+        if _env("RESULTS_LOOP_ENABLED", "1") != "0":
+            client.loop.create_task(signal_results.results_loop(client))
+            print("[results] real results loop started", flush=True)
+    except Exception as e:
+        print(f"[results] not started: {e}", flush=True)
+
+
+def _signal_levels(price: float, signal: str, ind: dict | None = None) -> dict:
+    """One source of truth for TP/SL levels shown and tracked."""
+    atr = (ind or {}).get("atr") or price * 0.018
+    atr_pct = atr / price if price else 0.018
+    try:
+        return signal_engine.compute_levels(price, signal, atr, atr_pct)
+    except Exception:
+        return signal_engine.compute_levels(price, signal, price * 0.018, 0.018)
+
+
+def _record_real_signal(symbol: str, signal: str, price: float, rsi: float, confidence: str, ind: dict | None = None, tier: str = "free"):
+    """Persist a sent signal to SQLite + real outcome trackers."""
+    levels = _signal_levels(price, signal, ind)
+    try:
+        db.save_signal(symbol, signal, float(price), float(rsi), str(confidence))
+    except Exception as e:
+        print(f"[db] signal save error: {e}", flush=True)
+    try:
+        import smart_filter
+        score, quality, _filters, suppressed = smart_filter.evaluate(symbol, signal, price, confidence)
+        if suppressed and not quality:
+            quality = "LOW"
+    except Exception:
+        score, quality = None, confidence
+    try:
+        import tracker
+        tracker.record_signal(symbol, signal, float(price), score=score, quality=quality or confidence, levels=levels)
+    except Exception as e:
+        print(f"[tracker] record error: {e}", flush=True)
+    try:
+        import signal_results
+        atr = (ind or {}).get("atr") or price * 0.018
+        signal_results.register_signal(symbol, signal, float(price), float(atr), int(score or 0), tier=tier, levels=levels)
+    except Exception as e:
+        print(f"[results] register error: {e}", flush=True)
+
+    if _env_flag("PAPER_TRADING_ENABLED"):
+        try:
+            import paper_trading
+            paper_trading.hook_signal(symbol, signal, float(price))
+        except Exception as e:
+            print(f"[paper] hook error: {e}", flush=True)
+
+    if _env_flag("DEMO_APP_ENABLED"):
+        try:
+            import demo_app
+            demo_app.signal_received(symbol, signal, float(price))
+        except Exception as e:
+            print(f"[demo_app] signal hook error: {e}", flush=True)
+
+    if _env_flag("AUTO_TRADE_ENABLED"):
+        try:
+            import auto_trade_integration
+            payload = {
+                "symbol": symbol, "side": signal, "entry": float(price),
+                "tp1": levels.get("tp1", 0.0), "tp2": levels.get("tp2", 0.0),
+                "tp3": levels.get("tp3", 0.0), "sl": levels.get("sl", 0.0),
+                "source": tier.upper(), "confidence": str(confidence),
+                "rr": levels.get("rr2", 0.0),
+            }
+            client.loop.create_task(auto_trade_integration.handle_signal(payload, client))
+        except Exception as e:
+            print(f"[auto_trade] signal hook error: {e}", flush=True)
+
+    return levels
+
+# =========================
+# AI ANALYSIS — optional API providers + local fallback
 # =========================
 
 # AI Analysis — redirected to ai_analysis.py (unified engine)
@@ -913,52 +1043,68 @@ def generate_chart(df, symbol, signal=None):
 # EMBED BUILDERS
 # =========================
 
-def build_free_embed(symbol, signal, price, rsi, confidence):
+def build_free_embed(symbol, signal, price, rsi, confidence, ind=None):
     coin   = symbol.replace("USDT", "")
     emoji  = COIN_EMOJI.get(symbol, "🪙")
     logo   = COIN_LOGOS.get(symbol)
-    sl     = round(price * 0.97, 2)
-    tp1    = round(price * 1.02, 2)
+    levels = _signal_levels(price, signal, ind)
+    sl     = levels["sl"]
+    tp1    = levels["tp1"]
     is_buy = signal == "BUY"
+    source = market_data.last_source(symbol)
 
     color  = 0x00c853 if is_buy else 0xff1744
     banner = "🟢  B U Y   S I G N A L" if is_buy else "🔴  S E L L   S I G N A L"
     banner_ro = "🟢  S E M N A L   B U Y" if is_buy else "🔴  S E M N A L   S E L L"
-    action_en = ("📥 **ENTER NOW** — Signs of reversal detected.\n"
-                 f"▸ No position? Enter carefully with **max 5–10% capital**.\n"
-                 f"▸ Already in? **Hold** and watch TP1.") if is_buy else \
-                ("📤 **STAY OUT / SELL** — Bearish momentum active.\n"
-                 f"▸ Holding? Consider **taking profit or cutting losses**.\n"
-                 f"▸ No position? **Wait for 🟢 BUY signal**.")
-    action_ro = ("📥 **INTRĂ ACUM** — Semne de revenire detectate.\n"
-                 f"▸ Fără poziție? Intră cu atenție, **max 5–10% capital**.\n"
-                 f"▸ Ai deja? **Ține poziția**, urmărește TP1.") if is_buy else \
-                ("📤 **STAI PE MARGINE / VINDE** — Momentum bearish activ.\n"
-                 f"▸ Ai cumpărat? Consideră **să vinzi / protejezi capitalul**.\n"
-                 f"▸ Fără poziție? **Așteaptă semnalul 🟢 BUY**.")
-    steps_en = (f"① Open **Binance / Bybit**\n"
-                f"② SPOT → `{coin}` → **BUY**\n"
-                f"③ Max **5–10%** of portfolio\n"
-                f"④ Set Stop-Loss at `${sl:,}`") if is_buy else \
-               (f"① SPOT → `{coin}` → **SELL** (if holding)\n"
-                f"② Avoid SHORTING if beginner\n"
-                f"③ Wait for next 🟢 BUY signal\n"
-                f"④ **Capital protection first**")
-    steps_ro = (f"① Deschide **Binance / Bybit**\n"
-                f"② SPOT → `{coin}` → **BUY**\n"
-                f"③ Max **5–10%** din portofoliu\n"
-                f"④ Stop-Loss la `${sl:,}`") if is_buy else \
-               (f"① SPOT → `{coin}` → **SELL** (dacă ai)\n"
-                f"② Nu intra SHORT dacă ești la început\n"
-                f"③ Așteaptă semnalul 🟢 BUY\n"
-                f"④ **Protejează capitalul primul**")
+    action_en = (
+        "📥 **POSSIBLE LONG SETUP** — technical confluence detected.\n"
+        "▸ Confirm the setup on your exchange before entering.\n"
+        "▸ Use small size and respect the ATR-based Stop Loss."
+    ) if is_buy else (
+        "📤 **BEARISH SETUP / EXIT WARNING** — downside momentum detected.\n"
+        "▸ If holding spot, review risk and protection.\n"
+        "▸ Beginners should avoid leverage/shorting."
+    )
+    action_ro = (
+        "📥 **SETUP LONG POSIBIL** — indicatorii reali sunt aliniați.\n"
+        "▸ Confirmă pe exchange înainte să intri.\n"
+        "▸ Folosește mărime mică și respectă Stop Loss-ul ATR."
+    ) if is_buy else (
+        "📤 **SETUP BEARISH / AVERTIZARE IEȘIRE** — momentum descendent detectat.\n"
+        "▸ Dacă ai spot, verifică riscul și protecția.\n"
+        "▸ Începătorii ar trebui să evite leverage/short."
+    )
+    steps_en = (
+        f"① Check `{coin}/USDT` on your exchange\n"
+        f"② Wait for confirmation around entry `${market_data.format_price(price)}`\n"
+        f"③ Risk max **1–2%** of account per trade\n"
+        f"④ SL `${market_data.format_price(sl)}` · TP1 `${market_data.format_price(tp1)}`"
+    ) if is_buy else (
+        f"① Check `{coin}/USDT` risk before acting\n"
+        f"② Spot users: protect capital / reduce exposure if needed\n"
+        f"③ Do not chase; wait for a clean new setup\n"
+        f"④ Invalidates above SL `${market_data.format_price(sl)}`"
+    )
+    steps_ro = (
+        f"① Verifică `{coin}/USDT` pe exchange\n"
+        f"② Așteaptă confirmare lângă entry `${market_data.format_price(price)}`\n"
+        f"③ Riscă max **1–2%** din cont per trade\n"
+        f"④ SL `${market_data.format_price(sl)}` · TP1 `${market_data.format_price(tp1)}`"
+    ) if is_buy else (
+        f"① Verifică riscul pe `{coin}/USDT`\n"
+        f"② Dacă ai spot: protejează capitalul / redu expunerea dacă e cazul\n"
+        f"③ Nu alerga după mișcare; așteaptă setup curat\n"
+        f"④ Invalidare peste SL `${market_data.format_price(sl)}`"
+    )
 
     embed = discord.Embed(
         title=f"{banner}\n{banner_ro}",
         description=(
             f"{emoji} **{COIN_NAMES_EN.get(symbol, symbol)}**\n"
             f"{SEP}\n"
-            f"💰 **Price / Preț:** `${price:,.4f}`  |  🎯 **TP1:** `${tp1:,.4f}`  |  🛑 **SL:** `${sl:,.4f}`"
+            f"💰 **Entry / Preț:** `${market_data.format_price(price)}`  |  "
+            f"🎯 **TP1:** `${market_data.format_price(tp1)}`  |  "
+            f"🛑 **SL:** `${market_data.format_price(sl)}`"
         ),
         color=color,
         timestamp=utcnow()
@@ -969,6 +1115,7 @@ def build_free_embed(symbol, signal, price, rsi, confidence):
 
     embed.add_field(name="📊 RSI (14)", value=rsi_bar(rsi), inline=False)
     embed.add_field(name="⭐ Confidence / Calitate", value=conf_stars(confidence), inline=False)
+    embed.add_field(name="📡 Data Source / Sursă date", value=f"`{source}` · live public market data", inline=False)
     embed.add_field(name="\u200b", value=SEP, inline=False)
     embed.add_field(name="🇬🇧 Situation",  value=action_en, inline=False)
     embed.add_field(name="🇷🇴 Situație",   value=action_ro, inline=False)
@@ -976,11 +1123,11 @@ def build_free_embed(symbol, signal, price, rsi, confidence):
     embed.add_field(name="🇬🇧 Steps",      value=steps_en,  inline=True)
     embed.add_field(name="🇷🇴 Pași",       value=steps_ro,  inline=True)
     embed.add_field(
-        name="💎 Want TP2, TP3 & AI Analysis?",
-        value=f"🇬🇧 Upgrade to **VIP** for full signal details!\n🇷🇴 Fă upgrade la **VIP** pentru semnale complete!",
+        name="💎 VIP adds TP2/TP3 + deeper analysis",
+        value="🇬🇧 VIP gets full ATR levels, chart and AI explanation.\n🇷🇴 VIP primește niveluri ATR complete, grafic și explicație AI.",
         inline=False
     )
-    embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
+    embed.set_footer(text=f"Real market data only · No guaranteed profit · {DISCLAIMER_RO}")
     return embed
 
 def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_15m=False, ind=None):
@@ -990,19 +1137,14 @@ def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_1
     color  = COIN_COLORS.get(symbol, 0x00c896)
     is_buy = signal == "BUY"
 
-    # ── ATR-based dynamic TP/SL (much more accurate than fixed %) ──
+    # ── ATR-based dynamic TP/SL from the same real level engine used by tracking ──
     atr = ind["atr"] if ind and "atr" in ind else price * 0.02
     entry = price
-    if is_buy:
-        tp1 = round(entry + 1.5 * atr, 4)
-        tp2 = round(entry + 3.0 * atr, 4)
-        tp3 = round(entry + 5.0 * atr, 4)
-        sl  = round(entry - 1.2 * atr, 4)
-    else:
-        tp1 = round(entry - 1.5 * atr, 4)
-        tp2 = round(entry - 3.0 * atr, 4)
-        tp3 = round(entry - 5.0 * atr, 4)
-        sl  = round(entry + 1.2 * atr, 4)
+    levels = _signal_levels(price, signal, ind)
+    tp1 = levels["tp1"]
+    tp2 = levels["tp2"]
+    tp3 = levels["tp3"]
+    sl  = levels["sl"]
 
     pct1  = abs(tp1-entry)/entry*100
     pct2  = abs(tp2-entry)/entry*100
@@ -1094,7 +1236,7 @@ def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_1
         ),
         inline=False
     )
-    embed.set_footer(text=f"Crypto Signals Bot — VIP 2026  •  {DISCLAIMER_RO}")
+    embed.set_footer(text=f"Real market data only · No guaranteed profit · Crypto Signals Bot VIP  •  {DISCLAIMER_RO}")
     return embed
 
 def build_price_embed(symbol):
@@ -1349,9 +1491,9 @@ TRADING_TIPS = [
      "💡 Pe Binance: folosește **OCO Order** sau **Stop-Limit**."),
 
     ("💰 Cât investești per trade / Position Sizing",
-     "🇷🇴 Regula de aur: **max 5–10%** din capitalul total per trade. Dacă ai 500$, max 50$ per trade.\n"
-     "🇬🇧 Golden rule: **max 5–10%** of total capital per trade. With $500, max $50 per trade.\n"
-     "💡 Astfel, chiar dacă greșești de 5 ori, nu ești terminat."),
+     "🇷🇴 Regula de aur: calculează poziția din Stop Loss și riscă de obicei doar **1–2%** din cont.\n"
+     "🇬🇧 Golden rule: size from the Stop Loss and usually risk only **1–2%** of the account.\n"
+     "💡 Astfel, câteva trade-uri greșite nu îți distrug contul."),
 
     ("📊 Ce e RSI? / What is RSI?",
      "🇷🇴 RSI măsoară dacă o monedă e **prea ieftină** sau **prea scumpă** acum.\n"
@@ -1375,9 +1517,9 @@ TRADING_TIPS = [
     ("🎯 Cum iei profitul / How to Take Profit",
      "🇷🇴 **Strategia ideală:**\n"
      "1️⃣ La **TP1**: vinde 50% din poziție\n"
-     "2️⃣ Mută **SL la Entry** → nu mai poți pierde!\n"
+     "2️⃣ Mută **SL la Entry** → reduci riscul pe poziția rămasă, dar pot exista fee/slippage!\n"
      "3️⃣ La **TP2**: vinde restul\n"
-     "🇬🇧 At **TP1**: sell 50%. Move SL to entry. At **TP2**: sell the rest."),
+     "🇬🇧 At **TP1**: sell part of the position. Move SL near entry to reduce remaining risk. At **TP2**: consider selling the rest."),
 
     ("😱 FOMO = Cel mai mare dușman / Biggest Enemy",
      "🇷🇴 **FOMO** = cumperi dintr-o frică de a pierde oportunitatea. BTC a crescut 20%? Nu cumpăra acum!\n"
@@ -1597,14 +1739,14 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
             value="🇷🇴 Semnal BTC → caută `BTC/USDT`. Semnal ETH → `ETH/USDT`.\n"
                   "🇬🇧 BTC signal → search `BTC/USDT`. ETH signal → `ETH/USDT`.", inline=False)
         embed.add_field(name="3️⃣ Decide cât investești",
-            value="🇷🇴 **MAX 10%** din capitalul total! Cu 500$, max 50$ per trade.\n"
-                  "🇬🇧 **MAX 10%** of total capital! With $500, max $50 per trade.", inline=False)
+            value="🇷🇴 Decide suma după Stop Loss: riscă de obicei doar **1–2%** din cont per trade.\n"
+                  "🇬🇧 Size the position from the Stop Loss: usually risk only **1–2%** of the account per trade.", inline=False)
         embed.add_field(name="4️⃣ Setează un OCO Order",
             value="🇷🇴 OCO = setezi simultan **TP** (target profit) și **SL** (stop loss) → Binance execută automat.\n"
                   "🇬🇧 OCO = sets **TP** and **SL** at the same time → Binance executes automatically.", inline=False)
         embed.add_field(name="5️⃣ Ia profit la TP1",
-            value="🇷🇴 La TP1 vinde **50%**. Mută SL la Entry → profit asigurat, risc zero!\n"
-                  "🇬🇧 At TP1 sell **50%**. Move SL to Entry → profit secured, zero risk!", inline=False)
+            value="🇷🇴 La TP1 poți vinde **parțial**. Mută SL aproape de Entry → reduci riscul pe restul poziției.\n"
+                  "🇬🇧 At TP1 you can sell **part** of the position. Move SL near Entry → remaining risk is reduced, not eliminated.", inline=False)
 
     elif page == 4:
         embed.add_field(name="❌ Nu pune SL",
@@ -1620,8 +1762,8 @@ async def slash_tutorial(interaction: discord.Interaction, page: int = 1):
             value="🇷🇴 10x leverage + 10% scădere = pierzi **tot**. Începe cu SPOT mereu!\n"
                   "🇬🇧 10x leverage + 10% drop = lose **everything**. Always start with SPOT!", inline=False)
         embed.add_field(name="❌ Ignori Confidence-ul",
-            value="🇷🇴 Semnale cu `LOW` confidence = nesigure. Tranzacționează **doar** `HIGH` sau `VERY HIGH`!\n"
-                  "🇬🇧 `LOW` confidence signals = unreliable. Only trade `HIGH` or `VERY HIGH`!", inline=False)
+            value="🇷🇴 Semnalele cu `LOW` confidence au risc mai mare. Alege setup-uri confirmate și respectă SL-ul.\n"
+                  "🇬🇧 `LOW` confidence signals carry higher risk. Prefer confirmed setups and respect the Stop Loss.", inline=False)
 
     elif page == 5:
         embed.add_field(name="₿ BTC / Bitcoin",
@@ -1673,10 +1815,10 @@ async def slash_glossary(interaction: discord.Interaction, category: str = "basi
                  "🇷🇴 Monede crypto. BTC = Bitcoin, ETH = Ethereum, SOL = Solana, BNB = BNB Chain.\n"
                  "🇬🇧 Crypto coins. BTC = Bitcoin, ETH = Ethereum, SOL = Solana, BNB = BNB Chain."),
                 ("💵 USDT",
-                 "🇷🇴 Monedă stabilă = mereu ~1 dolar. Folosești USDT pentru a cumpăra crypto.\n"
-                 "🇬🇧 Stablecoin = always ~$1. You use USDT to buy crypto."),
+                 "🇷🇴 Monedă stabilă = proiectată să stea aproape de 1 dolar, dar poate exista depeg. Folosești USDT pentru a cumpăra crypto.\n"
+                 "🇬🇧 Stablecoin = designed to stay near $1, but depegs can happen. You use USDT to buy crypto."),
                 ("📦 SPOT",
-                 "🇷🇴 Cumperi moneda **reală**. Dacă cumperi 0.01 BTC, chiar îl deții. ✅ Sigur.\n"
+                 "🇷🇴 Cumperi moneda **reală**. Dacă cumperi 0.01 BTC, chiar îl deții. ✅ Mai simplu decât leverage, dar tot are risc de piață.\n"
                  "🇬🇧 You buy the **real** coin. You actually own it. ✅ Safe for beginners."),
                 ("⚡ FUTURES",
                  "🇷🇴 Tranzacționezi cu leverage (bani împrumutați). Risc mare de lichidare! ⚠️\n"
@@ -1877,7 +2019,7 @@ async def slash_help(interaction: discord.Interaction):
     embed.add_field(name="/tip",                 value="🇬🇧 Random trading tip (20+ tips)\n🇷🇴 Sfat aleatoriu de trading (20+ sfaturi)",                     inline=False)
     embed.add_field(name=SEP2, value="\u200b", inline=False)
     embed.add_field(name="🚀 BEGINNER GUIDE / GHID ÎNCEPĂTORI", value="\u200b", inline=False)
-    embed.add_field(name="/firsttrade",          value="🇬🇧 Complete beginner guide: from zero to first profitable trade\n🇷🇴 Ghid complet: de la zero la primul trade cu profit", inline=False)
+    embed.add_field(name="/firsttrade",          value="🇬🇧 Complete beginner guide: from zero to first planned trade\n🇷🇴 Ghid complet: de la zero la primul trade planificat", inline=False)
     embed.add_field(name="/binance",             value="🇬🇧 How to use Binance step by step\n🇷🇴 Cum folosești Binance pas cu pas",                                                inline=False)
     embed.add_field(name="/signals_explained",   value="🇬🇧 Real signal example with every field explained\n🇷🇴 Exemplu real de semnal cu explicații",                            inline=False)
     embed.add_field(name=SEP2, value="\u200b", inline=False)
@@ -1904,7 +2046,7 @@ async def slash_help(interaction: discord.Interaction):
 #   /FIRSTTRADE — Ghid complet primul trade
 # ══════════════════════════════════════════════
 
-@tree.command(name="firsttrade", description="🚀 Complete beginner guide: from zero to first profitable trade")
+@tree.command(name="firsttrade", description="🚀 Complete beginner guide: from zero to first planned trade")
 @app_commands.describe(step="Which step (1–8), or leave empty for full overview")
 async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
 
@@ -1913,8 +2055,8 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
         embed = discord.Embed(
             title="🚀 Primul Tău Trade / Your First Trade — Ghid Complet",
             description=(
-                "🇷🇴 **Felicitări că ai ajuns aici!** Urmează acești 8 pași simpli și vei face primul tău trade cu profit.\n"
-                "🇬🇧 **Congratulations on being here!** Follow these 8 simple steps to your first profitable trade.\n"
+                "🇷🇴 **Felicitări că ai ajuns aici!** Urmează acești 8 pași simpli pentru primul tău trade planificat.\n"
+                "🇬🇧 **Congratulations on being here!** Follow these 8 simple steps to your first structured trade plan.\n"
                 f"{SEP}"
             ),
             color=0x22c55e, timestamp=utcnow()
@@ -2021,7 +2163,7 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
                  "🇷🇴 **Spot** = cumperi moneda reală. Dacă cumperi 0.001 BTC, chiar deții acel Bitcoin.\n"
                  "Nu poți pierde mai mult decât ai investit. **Perfect pentru începători!**\n"
                  "🇬🇧 **Spot** = you buy the real coin. If you buy 0.001 BTC, you actually own it.\n"
-                 "Can't lose more than you invested. **Perfect for beginners!**"),
+                 "No leverage liquidation. Simpler for beginners, but the coin can still lose value."),
 
                 ("⚠️ Ce NU este Spot Trading",
                  "🇷🇴 Spot NU înseamnă Futures sau Margin. Evită acele secțiuni!\n"
@@ -2078,8 +2220,8 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
 
                 ("⭐ Confidence = Calitatea Semnalului",
                  "🇷🇴 `LOW` = 1-2 indicatori confirmă | `MEDIUM` = 3 | `HIGH` = 4 | `VERY HIGH` = toti 5\n"
-                 "**Tranzacționează doar `HIGH` sau `VERY HIGH`!** Celelalte sunt prea riscante.\n"
-                 "🇬🇧 Only trade `HIGH` or `VERY HIGH` confidence signals! Others are too risky."),
+                 "Preferă setup-uri `HIGH` sau `VERY HIGH`, dar verifică mereu riscul și SL-ul.\n"
+                 "🇬🇧 Prefer `HIGH` or `VERY HIGH` setups, but always check risk and Stop Loss."),
             ]
         },
         5: {
@@ -2146,16 +2288,16 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
                  "6. Click **Sell BTC → Confirm**"),
 
                 ("✅ Ce se întâmplă după / What happens next",
-                 "🇷🇴 Acum ești protejat! Dacă prețul crește → ia profit automat la TP1.\n"
-                 "Dacă prețul scade → iese automat la SL. **Nu mai trebuie să stai cu ochii pe ecran!**\n"
-                 "🇬🇧 Now you're protected! If price rises → auto-profit at TP1.\n"
-                 "If price falls → auto-exit at SL. **You don't need to watch the screen!**"),
+                 "🇷🇴 Ai un plan de ieșire. Dacă prețul crește → ordinul poate vinde la TP1.\n"
+                 "Dacă prețul scade → SL-ul încearcă să limiteze pierderea; pot exista fee/slippage.\n"
+                 "🇬🇧 You now have an exit plan. If price rises → the order can sell at TP1.\n"
+                 "If price falls → SL tries to limit the loss; fees/slippage can still happen."),
 
                 ("🔄 După TP1: Mută SL la Entry / After TP1: Move SL to Entry",
                  "🇷🇴 Când TP1 e atins: anulezi OCO-ul rămas → plasezi un nou Sell Limit la **TP2** și un **Stop Loss la Entry**.\n"
-                 "Acum ești fără risc! Chiar dacă prețul cade înapoi, nu pierzi nimic.\n"
+                 "Riscul rămas este redus, dar nu dispare complet: pot exista fee, slippage sau execuție imperfectă.\n"
                  "🇬🇧 When TP1 is hit: cancel remaining OCO → place new Sell Limit at **TP2** and **SL at Entry**.\n"
-                 "Now you're risk-free! Even if price falls back, you lose nothing."),
+                 "Remaining risk is reduced, not eliminated: fees, slippage, gaps or imperfect execution can still happen."),
             ]
         },
         7: {
@@ -2168,15 +2310,15 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
                  "🇬🇧 Once every 4–8 hours is enough if you have OCO set. Don't watch every minute!\n"
                  "**Watching every move** leads to emotional, wrong decisions."),
 
-                ("✅ Ieșire corectă cu profit / Correct profitable exit",
+                ("✅ Ieșire planificată / Planned exit",
                  "🇷🇴 **Scenariul ideal:**\n"
                  "• TP1 atins → 50% din poziție vândut automat cu profit ✅\n"
-                 "• Muti SL la Entry → risc zero pentru restul ✅\n"
+                 "• Muti SL aproape de Entry → risc redus pentru restul, dar nu zero ✅\n"
                  "• TP2 atins → restul vândut cu profit și mai mare ✅\n"
                  "🇬🇧 **Ideal scenario:**\n"
-                 "• TP1 hit → 50% sold automatically with profit ✅\n"
-                 "• SL moved to Entry → zero risk on remaining ✅\n"
-                 "• TP2 hit → rest sold with even more profit ✅"),
+                 "• TP1 hit → part of the position sold automatically ✅\n"
+                 "• SL moved near Entry → reduced remaining risk ✅\n"
+                 "• TP2 hit → remaining position managed by plan ✅"),
 
                 ("❌ Ieșire cu pierdere (e OK!) / Loss exit (it's OK!)",
                  "🇷🇴 SL-ul s-a activat? **E perfect normal.** Nu fiecare trade e câștigător.\n"
@@ -2209,10 +2351,10 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
                  "🇬🇧 Always risk the same % per trade: **1–2% of capital**.\n"
                  "Ex: $500 capital → max $5–10 risk per trade. Use `/risk` to calculate exactly."),
 
-                ("🥉 Regula #3 — Tranzacționează doar semnale HIGH",
-                 "🇷🇴 Botul trimite semnale de calitate diferită. Tranzacționează **DOAR** `HIGH` și `VERY HIGH`.\n"
+                ("🥉 Regula #3 — Preferă semnale bine confirmate",
+                 "🇷🇴 Botul trimite semnale de calitate diferită. Preferă `HIGH` și `VERY HIGH`, dar verifică mereu riscul.\n"
                  "Semnalele `LOW` și `MEDIUM` au mai puțini indicatori de confirmare — riscul e mai mare.\n"
-                 "🇬🇧 The bot sends different quality signals. Trade **ONLY** `HIGH` and `VERY HIGH`.\n"
+                 "🇬🇧 The bot sends different quality signals. Prefer `HIGH` and `VERY HIGH`, but always check risk.\n"
                  "`LOW` and `MEDIUM` signals have fewer confirmations — higher risk."),
 
                 ("🏅 Regula #4 — Jurnalul de trading",
@@ -2464,11 +2606,11 @@ async def slash_binance(interaction: discord.Interaction, topic: str = "overview
                  "🇷🇴 Acum ai două ordine active în **Open Orders**:\n"
                  "• Un ordin Limit la TP1 (vânzare cu profit)\n"
                  "• Un ordin Stop-Limit la SL (vânzare cu pierdere limitată)\n"
-                 "Ești protejat 100% automat!\n"
+                 "Ai ordine de protecție automate, dar execuția poate fi afectată de slippage/gap-uri.\n"
                  "🇬🇧 Now you have two orders in **Open Orders**:\n"
                  "• A Limit order at TP1 (profit sell)\n"
                  "• A Stop-Limit order at SL (limited loss sell)\n"
-                 "You're 100% automatically protected!"),
+                 "You have automated protection orders, but execution can still be affected by slippage/gaps."),
 
                 ("💡 Exemplu real / Real example",
                  "🇷🇴 Ai cumpărat BTC la $94,500. Semnalul bot spune:\n"
@@ -2614,9 +2756,9 @@ async def slash_signals_explained(interaction: discord.Interaction):
         name="⭐ Confidence = HIGH — Calitatea semnalului",
         value=(
             "🇷🇴 `HIGH` inseamna ca **4 din 5 indicatori** (RSI + MACD + BB + StochRSI + EMA) confirma semnalul.\n"
-            "Cu cat e mai mare, cu atat e mai sigur. **Tranzactioneaza DOAR `HIGH` sau `VERY HIGH`!**\n"
+            "Cu cât e mai mare, cu atât setup-ul are mai multă confirmare. **Preferă `HIGH` sau `VERY HIGH`, dar gestionează riscul mereu!**\n"
             "🇬🇧 `HIGH` means **4 out of 5 indicators** (RSI + MACD + BB + StochRSI + EMA) confirm the signal.\n"
-            "Higher = more reliable. **Only trade `HIGH` or `VERY HIGH`!**"
+            "Higher = more reliable, but never guaranteed. **Prefer `HIGH` or `VERY HIGH` and manage risk.**"
         ),
         inline=False
     )
@@ -4673,6 +4815,7 @@ async def on_member_join(member):
 async def on_ready():
     global _background_tasks_started
     print(f"Bot online: {client.user}")
+    _register_optional_command_modules()
     await tree.sync()
     print("Slash commands synced.")
     await verify_signal_channels()
@@ -4856,8 +4999,8 @@ async def on_ready():
     h3.add_field(
         name="Pasul 3️⃣ — Stabilește cât investești / Decide amount",
         value=(
-            "🇷🇴 **Regula de aur:** max **5–10%** din total. Ex: ai 1000$ → max 100$ per trade.\n"
-            "🇬🇧 **Golden rule:** max **5–10%** of your total. Ex: $1000 capital → max $100 per trade."
+            "🇷🇴 **Regula de aur:** calculează poziția din SL și riscă de obicei doar **1–2%** din cont.\n"
+            "🇬🇧 **Golden rule:** size from the SL and usually risk only **1–2%** of the account."
         ),
         inline=False
     )
@@ -4873,8 +5016,8 @@ async def on_ready():
     h3.add_field(
         name="Pasul 5️⃣ — Ia profit la TP1 mai întâi / Take profit at TP1 first",
         value=(
-            "🇷🇴 La **TP1**: vinde 50% din poziție. Mută SL la **Entry** → nu mai poți pierde!\n"
-            "🇬🇧 At **TP1**: sell 50% of position. Move SL to **Entry** → you can't lose anymore!\n"
+            "🇷🇴 La **TP1**: poți vinde parțial. Mută SL aproape de **Entry** → reduci riscul pe restul poziției!\n"
+            "🇬🇧 At **TP1**: consider selling part of the position. Move SL near **Entry** → remaining risk is reduced, not eliminated!\n"
             "La TP2: vinde restul. / At TP2: sell the rest."
         ),
         inline=False
@@ -4979,6 +5122,7 @@ async def on_ready():
     client.loop.create_task(status_update_loop())
     client.loop.create_task(watchlist_notifier_loop())
     client.loop.create_task(prediction_checker_loop())
+    _start_real_background_extras()
 
 # =========================
 # SIGNAL LOOP
@@ -5042,30 +5186,104 @@ async def signal_loop():
                         color=discord.Color.orange()
                     ))
 
-                if sig and price and can_send_signal(symbol, sig):
-                    print(f"  >>> SENDING {sig} signal for {symbol} (conf={conf})")
+                if sig and price and ind:
+                    # First: legacy same-direction cooldown, checked before any
+                    # daily budget is consumed.
+                    last_sig = LAST_SIGNAL.get(symbol)
+                    last_ts = LAST_SIGNAL_TS.get(symbol)
+                    cooldown_elapsed = last_ts is None or (utcnow() - last_ts).total_seconds() >= SIGNAL_COOLDOWN_HOURS * 3600
+                    if last_sig == sig and not cooldown_elapsed:
+                        print(f"  [COOLDOWN] {sig} for {symbol} blocked — same direction, cooldown not elapsed")
+                        continue
+
+                    # Second: honest quality gates. Loop checks use real indicators
+                    # only; budgets are consumed only after Discord send succeeds.
+                    mtf = {"5m": {"signal": sig}}
+                    for _tf in ("15m", "1h"):
+                        try:
+                            _df_tf = get_data(symbol, interval=_tf)
+                            _sig_tf, _, _, _ = get_signal_v2(_df_tf)
+                            mtf[_tf] = {"signal": _sig_tf}
+                        except Exception:
+                            mtf[_tf] = {"signal": None}
+                    confirmed = mtf.get("15m", {}).get("signal") == sig
+
+                    free_allow, free_score, free_reason, _ = signal_engine.check_signal_quality(
+                        symbol, sig, price, ind, mtf=None, tier="free", consume=False
+                    )
+                    vip_allow, vip_score, vip_reason, _ = signal_engine.check_signal_quality(
+                        symbol, sig, price, ind, mtf=mtf, tier="vip", consume=False
+                    )
+                    if free_allow and not signal_engine.free_budget_ok():
+                        free_allow, free_reason = False, f"FREE daily budget reached ({signal_engine.FREE_MAX_PER_DAY}/day)"
+                    if vip_allow and not signal_engine.vip_budget_ok():
+                        vip_allow, vip_reason = False, f"VIP daily budget reached ({signal_engine.VIP_MAX_PER_DAY}/day)"
+
+                    if not (free_allow or vip_allow):
+                        print(f"  [QUALITY] {symbol} {sig} blocked — FREE: {free_reason} | VIP: {vip_reason}", flush=True)
+                        continue
+                    if not ((free_ch and free_allow) or (vip_ch and vip_allow)):
+                        print(f"  [CHANNEL] {symbol} {sig} approved but no enabled Discord channel is available", flush=True)
+                        continue
+
+                    LAST_SIGNAL[symbol] = sig
+                    LAST_SIGNAL_TS[symbol] = utcnow()
+                    best_score = max(free_score if free_allow else 0, vip_score if vip_allow else 0)
+                    print(f"  >>> SENDING {sig} signal for {symbol} (conf={conf}, free_score={free_score}, vip_score={vip_score})")
                     SIGNAL_STATS[sig]     += 1
                     SIGNAL_STATS["total"] += 1
                     SIGNAL_HISTORY.append({
                         "symbol": symbol, "signal": sig,
                         "price": price, "rsi": round(rsi, 2),
                         "confidence": conf,
+                        "quality_score": best_score,
+                        "free_score": free_score,
+                        "vip_score": vip_score,
                         "timestamp": utcnow()
                     })
                     if len(SIGNAL_HISTORY) > 500:
                         SIGNAL_HISTORY.pop(0)
                     ai_text    = ai_analysis(sig, price, rsi, symbol)
-                    tf15       = get_signal_15m(symbol)
-                    confirmed  = tf15 == sig
-                    chart      = generate_chart(df, symbol, sig)
-                    f_embed    = build_free_embed(symbol, sig, price, rsi, conf)
+                    chart      = None
+                    f_embed    = build_free_embed(symbol, sig, price, rsi, conf, ind=ind)
                     v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed, ind=ind)
-                    if free_ch:
+                    sent_to_discord = False
+                    sent_tier = None
+                    if free_ch and free_allow:
                         await free_ch.send(embed=f_embed)
-                    if vip_ch:
-                        await vip_ch.send(embed=v_embed, file=discord.File(chart))
+                        sent_to_discord = True
+                        sent_tier = "free"
+                        try:
+                            signal_engine._consume_free()
+                        except Exception:
+                            pass
+                    if vip_ch and vip_allow:
+                        try:
+                            chart = generate_chart(df, symbol, sig)
+                            await vip_ch.send(embed=v_embed, file=discord.File(chart))
+                        except Exception as chart_err:
+                            print(f"[chart] failed for {symbol}: {chart_err}", flush=True)
+                            await vip_ch.send(embed=v_embed)
+                        sent_to_discord = True
+                        sent_tier = "vip"
+                        try:
+                            signal_engine._consume_vip()
+                        except Exception:
+                            pass
+                    if sent_to_discord:
+                        try:
+                            signal_engine._record_sent(symbol, sig)
+                        except Exception:
+                            pass
+                        _record_real_signal(symbol, sig, price, rsi, f"{conf} · score {best_score}/100", ind=ind, tier=sent_tier or "free")
+                    try:
+                        if chart and os.path.exists(chart):
+                            os.remove(chart)
+                    except Exception:
+                        pass
                 elif sig:
-                    print(f"  [COOLDOWN] {sig} for {symbol} blocked — same direction, cooldown not elapsed")
+                    print(f"  [DATA] {sig} for {symbol} blocked — missing price or indicator data")
+
 
             print(f"[SIGNAL LOOP] Done. Next check in {SIGNAL_LOOP_SECONDS // 60} min.")
             await asyncio.sleep(SIGNAL_LOOP_SECONDS)
@@ -5132,8 +5350,17 @@ async def top_movers_loop():
     while True:
         await asyncio.sleep(86400)
         try:
-            data  = requests.get("https://api.binance.us/api/v3/ticker/24hr", timeout=10).json()
-            usdt  = [x for x in data if x["symbol"].endswith("USDT") and float(x["quoteVolume"]) > 5_000_000]
+            data = None
+            for host in market_data.BINANCE_HOSTS:
+                try:
+                    data = requests.get(f"{host}/api/v3/ticker/24hr", timeout=10, headers=HTTP_HEADERS).json()
+                    if isinstance(data, list):
+                        break
+                except Exception:
+                    data = None
+            if not isinstance(data, list):
+                raise RuntimeError("no top movers feed available")
+            usdt  = [x for x in data if x.get("symbol", "").endswith("USDT") and float(x.get("quoteVolume") or 0) > 5_000_000]
             srt   = sorted(usdt, key=lambda x: float(x["priceChangePercent"]))
             losers, gainers = srt[:5], srt[-5:][::-1]
             embed = discord.Embed(
@@ -5240,7 +5467,7 @@ async def neutral_market_loop():
 # =========================
 
 async def market_news_loop():
-    """REAL news from CryptoPanic API — no hardcoded text."""
+    """REAL news from public RSS/CoinGecko sources — no hardcoded text."""
     await client.wait_until_ready()
     channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
     posted_links = set()
@@ -5295,8 +5522,8 @@ async def announcement_loop():
          "**Not financial advice.** You can lose money. Always use Stop Loss. Risk max 1-2% per trade."),
         ("💡 Cum funcționează semnalele / How signals work",
          "🇷🇴 Botul analizează **10 condiții tehnice** (RSI, MACD, EMA, BB, Stoch, ADX, VWAP, OBV, Williams %R, divergențe) "
-         "din date live Binance. Semnalul apare doar când minim 3 condiții se aliniază.\n\n"
-         "🇬🇧 The bot checks **10 real technical conditions** from live Binance data. A signal fires only when at least 3 align."),
+         "din date live de piață. Semnalul apare doar când trece filtrele de calitate și risc.\n\n"
+         "🇬🇧 The bot checks **10 real technical conditions** from live public market data. A signal fires only when quality and risk filters pass."),
         ("📊 Comenzi utile / Useful commands",
          "`/stats` — win rate real  |  `/history` — ultimele semnale\n"
          "`/fear` — Fear & Greed live  |  `/news` — știri reale\n"
@@ -5334,47 +5561,37 @@ async def performance_loop():
     while True:
         try:
             if channel:
-                # Fetch REAL 24h price changes from Binance
+                # Fetch REAL 24h price changes from public market APIs
                 real_changes = {}
                 for sym in SYMBOLS:
-                    try:
-                        r = requests.get(
-                            f"https://api.binance.us/api/v3/ticker/24hr?symbol={sym}",
-                            timeout=8
-                        )
-                        d = r.json()
-                        real_changes[sym] = {
-                            "change": float(d["priceChangePercent"]),
-                            "price":  float(d["lastPrice"]),
-                            "high":   float(d["highPrice"]),
-                            "low":    float(d["lowPrice"]),
-                        }
-                    except Exception:
-                        pass
+                    info = market_data.get_price_info(sym)
+                    if info:
+                        real_changes[sym] = info
 
-                # Real signal stats from tracker
+                # Real signal stats from tracker.py (same source as /stats)
                 wins = losses = total = 0
                 win_rate = 0.0
+                avg_pnl = 0.0
+                open_count = 0
                 try:
-                    import json as _json, os as _os
-                    tf = _os.environ.get("SIGNAL_TRACKER_FILE", "signal_tracker.json")
-                    if _os.path.isfile(tf):
-                        records = _json.load(open(tf))
-                        closed  = [r for r in records if r.get("status") in ("WIN", "LOSS")]
-                        wins    = sum(1 for r in closed if r["status"] == "WIN")
-                        losses  = sum(1 for r in closed if r["status"] == "LOSS")
-                        total   = wins + losses
-                        win_rate = (wins / total * 100) if total > 0 else 0.0
-                except Exception:
-                    pass
+                    import tracker
+                    st = tracker.compute_stats()
+                    wins = int(st.get("wins", 0))
+                    losses = int(st.get("losses", 0))
+                    total = wins + losses
+                    win_rate = float(st.get("win_rate", 0.0))
+                    avg_pnl = float(st.get("avg_pnl", 0.0))
+                    open_count = int(st.get("open", 0))
+                except Exception as e:
+                    print(f"[performance] tracker stats unavailable: {e}", flush=True)
 
                 color = discord.Color.green() if all(
                     v["change"] >= 0 for v in real_changes.values()
                 ) else discord.Color.orange()
 
                 embed = discord.Embed(
-                    title="📊 Performanță Zilnică — DATE REALE BINANCE",
-                    description="🔍 Toate datele de mai jos sunt preluate **live de pe Binance**. Zero cifre inventate.",
+                    title="📊 Performanță Zilnică — DATE REALE",
+                    description="🔍 Date live din API-uri publice de piață. Zero cifre inventate.",
                     color=color,
                     timestamp=utcnow()
                 )
@@ -5392,18 +5609,18 @@ async def performance_loop():
 
                 if total > 0:
                     embed.add_field(
-                        name="🎯 Win Rate Real Semnale",
-                        value=f"`{win_rate:.1f}%` ({wins}W / {losses}L din {total} trades)",
+                        name="🎯 Statistici reale semnale",
+                        value=f"Win rate: `{win_rate:.1f}%` ({wins}W / {losses}L) · Avg P&L: `{avg_pnl:+.2f}%` · Open: `{open_count}`",
                         inline=False
                     )
                 else:
                     embed.add_field(
-                        name="🎯 Win Rate Semnale",
-                        value="⏳ Se acumulează date reale... Revino mai târziu.",
+                        name="🎯 Statistici semnale",
+                        value=f"⏳ Nu există încă semnale închise real. Semnale deschise: `{open_count}`.",
                         inline=False
                     )
 
-                embed.set_footer(text=f"📡 Sursa: Binance.US API live  |  {DISCLAIMER_EN}")
+                embed.set_footer(text=f"📡 Surse: Binance Global/US + CoinGecko fallback  |  {DISCLAIMER_EN}")
                 await channel.send(embed=embed)
         except Exception as e:
             print(f"[performance] error: {e}", flush=True)
@@ -6312,10 +6529,11 @@ async def watchlist_notifier_loop():
                             timestamp=now
                         )
                         if logo: dm_embed.set_thumbnail(url=logo)
-                        tp1 = round(price * (1.02 if sig == "BUY" else 0.98), 4)
-                        sl  = round(price * (0.97 if sig == "BUY" else 1.03), 4)
-                        dm_embed.add_field(name="🎯 TP1", value=f"`${tp1:,.4f}`", inline=True)
-                        dm_embed.add_field(name="🛑 SL",  value=f"`${sl:,.4f}`",  inline=True)
+                        levels = _signal_levels(price, sig, ind)
+                        tp1 = levels["tp1"]
+                        sl  = levels["sl"]
+                        dm_embed.add_field(name="🎯 TP1", value=f"`${market_data.format_price(tp1)}`", inline=True)
+                        dm_embed.add_field(name="🛑 SL",  value=f"`${market_data.format_price(sl)}`",  inline=True)
                         dm_embed.add_field(name="📊 RSI", value=rsi_bar(rsi),     inline=False)
                         dm_embed.set_footer(text=f"You're watching {sym.replace('USDT','')} | Use /unwatch to stop  •  {DISCLAIMER_RO}")
                         await user.send(embed=dm_embed)
@@ -6399,6 +6617,9 @@ class _PingHandler(BaseHTTPRequestHandler):
                 "status": "ok" if ready else "degraded",
                 "discord_ready": ready,
                 "bot": str(client.user) if client.user else None,
+                "real_data_mode": True,
+                "symbols": SYMBOLS,
+                "data_sources": ["Binance Global/US", "CoinGecko fallback"],
                 "signals": SIGNAL_STATS,
                 "utc": utcnow().isoformat(),
             }

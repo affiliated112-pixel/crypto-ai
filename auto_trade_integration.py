@@ -31,6 +31,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
+import market_data
 import discord
 from discord import app_commands
 from discord.ext import tasks
@@ -54,8 +55,15 @@ RISK_PCT          = _env_float("AUTO_TRADE_RISK", 2.0)
 MAX_TRADES        = _env_int("AUTO_TRADE_MAX", 5)
 CONFIRM_TIMEOUT   = _env_int("AUTO_TRADE_TIMEOUT", 120)
 AUTO_CONFIRM      = _env("AUTO_TRADE_AUTO", "false").lower() == "true"
+ALLOW_LIVE_AUTO   = _env("AUTO_TRADE_ALLOW_LIVE_AUTO", "false").lower() == "true"
 BIN_KEY           = _env("BINANCE_API_KEY")
 BIN_SECRET        = _env("BINANCE_SECRET")
+
+if AUTO_CONFIRM and not TESTNET and not ALLOW_LIVE_AUTO:
+    # Safety guard: live trading still works, but manual confirmation is required
+    # unless AUTO_TRADE_ALLOW_LIVE_AUTO=true is set explicitly.
+    AUTO_CONFIRM = False
+    log.warning("AUTO_TRADE_AUTO ignored on LIVE. Set AUTO_TRADE_ALLOW_LIVE_AUTO=true only if you really want live auto-confirm.")
 
 # ─── BINANCE (optional) ───────────────────────────────────────────────────────
 try:
@@ -74,7 +82,7 @@ else:
     log.info(f"Auto-trader: Binance {mode_str} conectat")
 
 # ─── SIMULARE BALANTA PAPER ────────────────────────────────────────────────────
-_PAPER_BALANCE = 1000.0   # USDT simulat
+_PAPER_BALANCE = 1000.0   # USDT virtual pentru paper mode
 
 def _get_usdt_balance() -> float:
     if PAPER_MODE or not _binance:
@@ -82,23 +90,25 @@ def _get_usdt_balance() -> float:
     try:
         acc = _binance.get_account()
         return float(next(
-            (b["free"] for b in acc["balances"] if b["asset"] == "USDT"), "100"
+            (b["free"] for b in acc["balances"] if b["asset"] == "USDT"), "0"
         ))
-    except Exception:
-        return 100.0
+    except Exception as e:
+        log.error(f"[auto_trade] live balance unavailable: {e}")
+        return 0.0
 
 def _get_price(symbol: str) -> float:
-    if PAPER_MODE or not _binance:
-        return 0.0
+    """Real public market price used for PAPER, TESTNET and LIVE monitoring."""
     try:
-        return float(_binance.get_symbol_ticker(symbol=symbol)["price"])
+        px = market_data.get_current_price(symbol)
+        return float(px or 0.0)
     except Exception:
         return 0.0
 
 def _execute_binance(symbol: str, side: str, qty: float) -> tuple[bool, str, float]:
     """Returns (ok, message, actual_price)"""
     if PAPER_MODE or not _binance:
-        return True, "📝 PAPER TRADE simulat", 0.0
+        px = _get_price(symbol)
+        return True, "📝 PAPER TRADE (preț public live)", px
     try:
         if side == "BUY":
             order = _binance.order_market_buy(symbol=symbol, quantity=qty)
@@ -283,14 +293,16 @@ class ModifyTradeModal(discord.ui.Modal, title="Modifică parametrii"):
     async def on_submit(self, interaction: discord.Interaction):
         p = self.parent
         try:
+            risk_pct = float(p.signal.get("_risk_pct", _get_setting("risk_pct", str(RISK_PCT))))
             if self.risk.value:
-                new_r = float(self.risk.value)
-                p.qty = _calc_qty(p.signal["symbol"], p.signal["entry"], new_r)
-                p.signal["_risk_pct"] = new_r
+                risk_pct = float(self.risk.value)
+                p.signal["_risk_pct"] = risk_pct
             if self.new_sl.value:
                 p.signal["sl"] = float(self.new_sl.value.replace(",", ""))
             if self.new_tp.value:
                 p.signal["tp1"] = float(self.new_tp.value.replace(",", ""))
+            if self.risk.value or self.new_sl.value:
+                p.qty = _calc_qty(p.signal["symbol"], p.signal["entry"], risk_pct, p.signal.get("sl"))
         except ValueError:
             await interaction.response.send_message(
                 "❌ Valori invalide — verifică formatul (ex: 1.5, 62000)", ephemeral=True
@@ -333,10 +345,18 @@ class TradeStatusView(discord.ui.View):
 def _is_trader(user: discord.User | discord.Member) -> bool:
     return not TRADER_USER_ID or user.id == TRADER_USER_ID
 
-def _calc_qty(symbol: str, entry: float, risk_pct: float) -> float:
-    bal   = _get_usdt_balance()
-    usdt  = bal * (risk_pct / 100)
-    return round(usdt / entry, 6) if entry > 0 else 0.0
+def _calc_qty(symbol: str, entry: float, risk_pct: float, sl: float | None = None) -> float:
+    """Position size based on real risk to SL, capped by available balance."""
+    bal = _get_usdt_balance()
+    if entry <= 0 or bal <= 0:
+        return 0.0
+    risk_usdt = bal * (risk_pct / 100)
+    if sl and abs(entry - sl) > 0:
+        qty = risk_usdt / abs(entry - sl)
+    else:
+        qty = risk_usdt / entry
+    max_qty = bal / entry
+    return round(max(0.0, min(qty, max_qty)), 6)
 
 def _rr(entry: float, tp: float, sl: float) -> float:
     if abs(sl - entry) == 0:
@@ -356,7 +376,7 @@ def _build_confirm_embed(sig: dict, qty: float) -> discord.Embed:
     source  = sig.get("source", "VIP")
     rr_val  = _rr(entry, tp1, sl)
     risk_pct = sig.get("_risk_pct", float(_get_setting("risk_pct", str(RISK_PCT))))
-    usdt_risk = qty * entry * (risk_pct / 100)
+    usdt_risk = abs(entry - sl) * qty if sl and qty else qty * entry * (risk_pct / 100)
 
     conf_icons = {"VERY HIGH": "🌟", "HIGH": "🔥", "MEDIUM": "⚡", "LOW": "📊"}
     ci = conf_icons.get(conf, "⚡")
@@ -511,6 +531,15 @@ async def handle_signal(signal: dict, client: discord.Client):
     Apelat din smart_loop sau signal_loop când apare un semnal nou.
     Postează în #auto-trader cu butoane de confirmare.
     """
+    global _client
+    _client = client
+    try:
+        _init_db()
+        if not position_monitor.is_running():
+            position_monitor.start()
+    except Exception as e:
+        log.warning(f"[auto_trade] monitor/db init skipped: {e}")
+
     if _get_setting("active", "true") != "true":
         return
     if len(_open) >= int(_get_setting("max_trades", str(MAX_TRADES))):
@@ -523,7 +552,7 @@ async def handle_signal(signal: dict, client: discord.Client):
         return
 
     risk_pct = float(_get_setting("risk_pct", str(RISK_PCT)))
-    qty      = _calc_qty(signal["symbol"], signal["entry"], risk_pct)
+    qty      = _calc_qty(signal["symbol"], signal["entry"], risk_pct, signal.get("sl"))
     signal["_risk_pct"] = risk_pct
 
     if AUTO_CONFIRM:
@@ -568,7 +597,8 @@ async def _execute_signal(signal: dict, qty: float, ch: discord.TextChannel):
         await ch.send(f"⚠️ **Execuție eșuată:** {exec_msg}")
         return
     if actual_price > 0:
-        entry = actual_price   # prețul real de fill
+        entry = actual_price   # prețul real de fill / preț public live în PAPER
+        signal["entry"] = entry
 
     # Salvează în DB
     trade_id = _open_trade(
@@ -660,7 +690,7 @@ def register_commands(tree: app_commands.CommandTree):
         if _open:
             lines = []
             for tid, t in _open.items():
-                cur  = _get_price(t["symbol"])
+                cur  = _get_price(t["symbol"]) or t["entry"]
                 pnl  = (cur - t["entry"]) * t["qty"] if t["side"] == "BUY" \
                        else (t["entry"] - cur) * t["qty"]
                 ico  = "🟢" if pnl >= 0 else "🔴"

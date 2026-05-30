@@ -17,6 +17,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import coins_config
+import market_data
+import signal_engine
 
 RESULTS_CHANNEL_ID = 1509524216821579839
 POLL_INTERVAL      = 1800   # check every 30 min
@@ -54,13 +56,28 @@ def register_signal(
     atr:     float,
     score:   int,
     tier:    str = "free",
+    levels:  dict | None = None,
 ):
-    """Call this immediately after sending a signal."""
-    is_buy = signal == "BUY"
-    tp1 = round(price + 1.5 * atr, 6) if is_buy else round(price - 1.5 * atr, 6)
-    tp2 = round(price + 3.0 * atr, 6) if is_buy else round(price - 3.0 * atr, 6)
-    tp3 = round(price + 5.0 * atr, 6) if is_buy else round(price - 5.0 * atr, 6)
-    sl  = round(price - 1.2 * atr, 6) if is_buy else round(price + 1.2 * atr, 6)
+    """Call this immediately after sending a signal.
+
+    Uses the same ATR-based levels as the signal embed when provided, so result
+    tracking matches what users actually saw in Discord.
+    """
+    if levels and all(k in levels for k in ("sl", "tp1", "tp2", "tp3")):
+        sl  = float(levels["sl"])
+        tp1 = float(levels["tp1"])
+        tp2 = float(levels["tp2"])
+        tp3 = float(levels["tp3"])
+    else:
+        try:
+            levels = signal_engine.compute_levels(price, signal, atr, atr / price if price else None)
+            sl, tp1, tp2, tp3 = (float(levels["sl"]), float(levels["tp1"]), float(levels["tp2"]), float(levels["tp3"]))
+        except Exception:
+            is_buy = signal == "BUY"
+            tp1 = round(price + 1.5 * atr, 6) if is_buy else round(price - 1.5 * atr, 6)
+            tp2 = round(price + 3.0 * atr, 6) if is_buy else round(price - 3.0 * atr, 6)
+            tp3 = round(price + 5.0 * atr, 6) if is_buy else round(price - 5.0 * atr, 6)
+            sl  = round(price - 1.2 * atr, 6) if is_buy else round(price + 1.2 * atr, 6)
 
     trade_id = f"{symbol}_{int(datetime.now(timezone.utc).timestamp())}"
     _open_trades[trade_id] = {
@@ -91,12 +108,7 @@ def register_signal(
 # ─── PRICE FETCH ──────────────────────────────────────────────────────────────
 
 def _get_current_price(symbol: str) -> float | None:
-    try:
-        url  = f"https://api.binance.us/api/v3/ticker/price?symbol={symbol}"
-        data = requests.get(url, timeout=8).json()
-        return float(data["price"])
-    except Exception:
-        return None
+    return market_data.get_current_price(symbol)
 
 # ─── OUTCOME CHECK ────────────────────────────────────────────────────────────
 
@@ -154,7 +166,7 @@ def _result_embed(trade: dict, result: str, close_price: float) -> discord.Embed
         color = 0x2ECC71
         icon  = "🟢"
         headline = "TP1 HIT ✓"
-        verdict  = "First target reached. Partial profit secured."
+        verdict  = "First target reached based on tracked levels. Manage the remaining position by plan."
     elif result == "TP2":
         color = 0x00B894
         icon  = "🟢🟢"
@@ -164,7 +176,7 @@ def _result_embed(trade: dict, result: str, close_price: float) -> discord.Embed
         color = 0x00CEC9
         icon  = "🏆"
         headline = "TP3 HIT — FULL TARGET ✓✓✓"
-        verdict  = "Full target reached. Excellent trade."
+        verdict  = "Full target reached based on tracked levels."
     else:  # EXPIRED
         color = 0x636E72
         icon  = "⏳"

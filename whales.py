@@ -1,21 +1,31 @@
 """Whale activity tracker using free public APIs.
-- Binance.US 24h ticker for huge volume movers
+- Binance public 24h ticker for huge volume movers
 - DefiLlama stablecoin flows (free, no key)
 - Whale Alert public RSS feed mirror (best-effort, falls back gracefully)
 """
 import requests
+import market_data
 
 UA = {"User-Agent": "crypto-ai-bot/2026"}
 TIMEOUT = 10
 
 
 def top_volume_movers(min_quote_volume_usd=50_000_000, limit=10):
-    """Largest 24h volume movers on Binance.US — proxy for whale-driven action."""
+    """Largest 24h volume movers on public Binance APIs — volume proxy, not on-chain whale transfer detection."""
     try:
-        r = requests.get("https://api.binance.us/api/v3/ticker/24hr", headers=UA, timeout=TIMEOUT)
-        r.raise_for_status()
+        data = None
+        for host in market_data.BINANCE_HOSTS:
+            try:
+                r = requests.get(f"{host}/api/v3/ticker/24hr", headers=UA, timeout=TIMEOUT)
+                r.raise_for_status()
+                data = r.json()
+                break
+            except Exception:
+                continue
+        if not isinstance(data, list):
+            return []
         items = []
-        for t in r.json():
+        for t in data:
             sym = t.get("symbol", "")
             if not sym.endswith("USDT") and not sym.endswith("USD"):
                 continue

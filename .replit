@@ -25,7 +25,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python bot.py"
+args = "python bot_extended.py"
 
 [workflows.workflow.metadata]
 outputType = "console"

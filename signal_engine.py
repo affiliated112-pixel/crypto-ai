@@ -40,7 +40,7 @@ VIP_MAX_PER_DAY     = 5     # max 5 VIP signals per day total
 
 # ─── SCORE THRESHOLDS ────────────────────────────────────────────────────────
 FREE_MIN_SCORE      = 58    # raised from 45 — only clear setups
-VIP_MIN_SCORE       = 70    # raised from 65 — only high-probability setups
+VIP_MIN_SCORE       = 70    # raised from 65 — only clear, well-confirmed setups
 
 # ─── RISK:REWARD ─────────────────────────────────────────────────────────────
 FREE_MIN_RR         = 1.8   # at least 1.8:1 R:R
@@ -525,33 +525,252 @@ def approve_and_record(candidate: dict) -> bool:
 
     return True
 
+# ─── QUALITY CHECK API ────────────────────────────────────────────────────────
+
+def check_signal_quality(
+    symbol: str,
+    signal: str,
+    price: float,
+    ind: dict,
+    mtf: dict | None = None,
+    tier: str = "free",
+    consume: bool = False,
+) -> tuple[bool, int, str, dict | None]:
+    """
+    Honest signal gate used by Discord commands and loops.
+
+    Returns ``(allow, score, reason, candidate)``. When ``consume=True`` it also
+    records cooldown/correlation and consumes the daily budget. On-demand commands
+    should keep ``consume=False`` so checking a coin never uses up the auto-signal
+    daily budget.
+    """
+    tier = (tier or "free").lower()
+    if tier not in ("free", "vip"):
+        tier = "free"
+
+    if not signal:
+        return False, 0, "No BUY/SELL signal is active", None
+    if not price or price <= 0:
+        return False, 0, "Missing live price", None
+    if not ind:
+        return False, 0, "Not enough indicator data", None
+
+    min_score = FREE_MIN_SCORE if tier == "free" else VIP_MIN_SCORE
+    min_rr    = FREE_MIN_RR    if tier == "free" else VIP_MIN_RR
+    cool_h    = FREE_COOLDOWN_H if tier == "free" else VIP_COOLDOWN_H
+
+    if not is_active_hour():
+        return False, 0, f"Outside active signal hours ({ACTIVE_START_UTC}:00-{ACTIVE_END_UTC}:00 UTC)", None
+
+    if not _cooldown_ok(symbol, signal, cool_h):
+        return False, 0, f"Cooldown active for {symbol} {signal} ({cool_h}h)", None
+
+    score = compute_quality_score(ind, signal, mtf if tier == "vip" else None)
+    if score < min_score:
+        return False, score, f"Quality score {score}/100 below {min_score}/100", None
+
+    atr     = ind.get("atr", price * 0.018) if ind else price * 0.018
+    atr_pct = atr / price if price > 0 else 0.018
+    rr      = compute_rr(price, signal, atr, atr_pct)
+    if rr < min_rr:
+        return False, score, f"Risk:Reward {rr}:1 below required {min_rr}:1", None
+
+    mtf_aligned = 0
+    if mtf:
+        mtf_aligned = sum(
+            1 for tf in ("5m", "15m", "1h")
+            if mtf.get(tf, {}).get("signal") == signal
+        )
+    if tier == "vip" and mtf_aligned < 2:
+        return False, score, f"VIP requires 2/3 timeframe agreement; got {mtf_aligned}/3", None
+
+    btc_ok, btc_reason = _btc_context_ok(symbol, signal)
+    if not btc_ok:
+        return False, score, btc_reason or "BTC macro context blocks this setup", None
+
+    corr_ok, corr_reason = _correlation_ok(symbol, signal)
+    if not corr_ok:
+        return False, score, corr_reason or "Correlated signal sent recently", None
+
+    candidate = {
+        "symbol":      symbol,
+        "signal":      signal,
+        "price":       price,
+        "score":       score,
+        "rr":          rr,
+        "mtf_aligned": mtf_aligned,
+        "tier":        tier,
+        "ind":         ind,
+        "mtf":         mtf,
+        "ts":          time.time(),
+    }
+
+    if consume:
+        if tier == "free" and not free_budget_ok():
+            return False, score, f"FREE daily budget reached ({FREE_MAX_PER_DAY}/day)", candidate
+        if tier == "vip" and not vip_budget_ok():
+            return False, score, f"VIP daily budget reached ({VIP_MAX_PER_DAY}/day)", candidate
+        if not approve_and_record(candidate):
+            return False, score, "Blocked by final cooldown/correlation/budget check", candidate
+
+    return True, score, "OK", candidate
+
 # ─── QUALITY LABEL ────────────────────────────────────────────────────────────
 
-def should_send_free(symbol: str, signal: str, ind: dict, mtf: dict | None = None) -> bool:
-    """
-    Quick boolean gate used by bot.py signal_loop.
-    Returns True if a FREE signal qualifies to be sent right now.
-    Checks: active hours, cooldown, daily budget, score, R:R, BTC context.
-    """
-    if not signal or not ind:
-        return False
-    candidate = evaluate_candidate(symbol, signal, ind.get("price", 0), ind, mtf=None, tier="free")
-    if not candidate:
-        return False
-    return approve_and_record(candidate)
+def _normalise_gate_inputs(price_or_ind, ind: dict | None):
+    """Accept both old and new call styles.
 
-def should_send_vip(symbol: str, signal: str, ind: dict, mtf: dict | None = None) -> bool:
+    New style: should_send_free(symbol, signal, price, ind, ...)
+    Old style: should_send_free(symbol, signal, ind, mtf=None)
     """
-    Quick boolean gate used by vip_analysis signal loop.
-    Returns True if a VIP signal qualifies to be sent right now.
-    Checks: active hours, cooldown, daily budget, score >= 70, R:R >= 2.2, MTF.
+    if isinstance(price_or_ind, dict):
+        out = dict(price_or_ind)
+        price = float(out.get("price") or 0)
+    else:
+        price = float(price_or_ind or 0)
+        out = dict(ind or {})
+        if price > 0:
+            out.setdefault("price", price)
+    return price, out
+
+
+def _gate_decision(
+    symbol: str,
+    signal: str,
+    price: float,
+    ind: dict,
+    *,
+    tier: str,
+    mtf: dict | None = None,
+    btc_signal: str | None = None,
+    consume: bool = False,
+) -> tuple[bool, int, str]:
+    """Return (allow, score, reason) with honest, non-destructive checks.
+
+    consume=True is used only by automatic loops that are about to send a
+    signal, so daily budgets/cooldowns are recorded only when a signal is
+    actually approved. On-demand commands can inspect quality without burning
+    the daily allowance.
     """
-    if not signal or not ind:
-        return False
-    candidate = evaluate_candidate(symbol, signal, ind.get("price", 0), ind, mtf=mtf, tier="vip")
-    if not candidate:
-        return False
-    return approve_and_record(candidate)
+    symbol = (symbol or "").upper().strip()
+    signal = (signal or "").upper().strip()
+    tier = "vip" if tier == "vip" else "free"
+
+    if btc_signal:
+        cache_btc_signal(btc_signal)
+
+    if not symbol or signal not in {"BUY", "SELL"}:
+        return False, 0, "No valid BUY/SELL signal."
+    if not ind:
+        return False, 0, "Indicator data is missing."
+    if price <= 0:
+        price = float(ind.get("price") or 0)
+    if price <= 0:
+        return False, 0, "Live price is missing."
+    ind = dict(ind)
+    ind.setdefault("price", price)
+
+    min_score = FREE_MIN_SCORE if tier == "free" else VIP_MIN_SCORE
+    min_rr    = FREE_MIN_RR    if tier == "free" else VIP_MIN_RR
+    cool_h    = FREE_COOLDOWN_H if tier == "free" else VIP_COOLDOWN_H
+
+    if not is_active_hour():
+        return False, 0, f"Outside active hours ({ACTIVE_START_UTC}:00–{ACTIVE_END_UTC}:00 UTC)."
+
+    if consume:
+        if tier == "free" and not free_budget_ok():
+            return False, 0, f"Daily FREE budget used ({FREE_MAX_PER_DAY}/{FREE_MAX_PER_DAY})."
+        if tier == "vip" and not vip_budget_ok():
+            return False, 0, f"Daily VIP budget used ({VIP_MAX_PER_DAY}/{VIP_MAX_PER_DAY})."
+
+    if not _cooldown_ok(symbol, signal, cool_h):
+        return False, 0, f"Cooldown active for {symbol} {signal} ({cool_h}h)."
+
+    score = compute_quality_score(ind, signal, mtf if tier == "vip" else None)
+    if score < min_score:
+        return False, score, f"Quality score {score}/100 is below {min_score}/100 minimum."
+
+    atr = float(ind.get("atr", price * 0.018) or 0)
+    atr_pct = atr / price if price > 0 else 0.018
+    rr = compute_rr(price, signal, atr, atr_pct)
+    if rr < min_rr:
+        return False, score, f"Risk/reward {rr}:1 is below {min_rr}:1 minimum."
+
+    mtf_aligned = 0
+    if mtf:
+        mtf_aligned = sum(
+            1 for tf in ("5m", "15m", "1h")
+            if mtf.get(tf, {}).get("signal") == signal
+        )
+        if tier == "vip" and mtf_aligned < 2:
+            return False, score, f"VIP needs 2/3 timeframe alignment; current alignment is {mtf_aligned}/3."
+
+    btc_ok, btc_reason = _btc_context_ok(symbol, signal)
+    if not btc_ok:
+        return False, score, btc_reason or "BTC macro context blocks this signal."
+
+    corr_ok, corr_reason = _correlation_ok(symbol, signal)
+    if not corr_ok:
+        return False, score, corr_reason or "Correlation filter blocks this signal."
+
+    if not consume:
+        return True, score, f"Qualified: score {score}/100, R:R {rr}:1."
+
+    candidate = {
+        "symbol": symbol,
+        "signal": signal,
+        "price": price,
+        "score": score,
+        "rr": rr,
+        "mtf_aligned": mtf_aligned,
+        "tier": tier,
+        "ind": ind,
+        "mtf": mtf,
+        "ts": time.time(),
+    }
+    if approve_and_record(candidate):
+        return True, score, f"Approved: score {score}/100, R:R {rr}:1."
+    return False, score, "Budget/cooldown/correlation changed before send."
+
+
+def should_send_free(
+    symbol: str,
+    signal: str,
+    price_or_ind,
+    ind: dict | None = None,
+    btc_signal: str | None = None,
+    *,
+    mtf: dict | None = None,
+    consume: bool = False,
+) -> tuple[bool, int, str]:
+    """FREE gate returning (allow, score, reason).
+
+    Keeps backward compatibility with older callers while giving the UI an
+    honest reason instead of just True/False.
+    """
+    price, indicators = _normalise_gate_inputs(price_or_ind, ind)
+    return _gate_decision(
+        symbol, signal, price, indicators,
+        tier="free", mtf=None, btc_signal=btc_signal, consume=consume,
+    )
+
+
+def should_send_vip(
+    symbol: str,
+    signal: str,
+    price_or_ind,
+    ind: dict | None = None,
+    btc_signal: str | None = None,
+    *,
+    mtf: dict | None = None,
+    consume: bool = False,
+) -> tuple[bool, int, str]:
+    """VIP gate returning (allow, score, reason)."""
+    price, indicators = _normalise_gate_inputs(price_or_ind, ind)
+    return _gate_decision(
+        symbol, signal, price, indicators,
+        tier="vip", mtf=mtf, btc_signal=btc_signal, consume=consume,
+    )
 
 def quality_label(score: int) -> str:
     if score >= 88: return "🏆 ELITE"
@@ -566,5 +785,5 @@ def quality_explanation(score: int, rr: float, mtf_aligned: int) -> str:
     mtf_s = f"{mtf_aligned}/3 timeframes" if mtf_aligned else "1 timeframe"
     return (
         f"{grade} — Score `{score}/100` · R:R `{rr}:1` · {mtf_s} confirmed.\n"
-        f"{'High probability setup — indicators strongly aligned.' if score >= 75 else 'Solid setup — most indicators agree.' if score >= 62 else 'Acceptable setup — minimum criteria met.'}"
+        f"{'High-quality setup — indicators strongly aligned.' if score >= 75 else 'Solid setup — most indicators agree.' if score >= 62 else 'Acceptable setup — minimum criteria met.'}"
     )

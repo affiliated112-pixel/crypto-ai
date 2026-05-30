@@ -1,9 +1,10 @@
 """Multi-exchange price fetcher with parallel async execution.
 All public endpoints, no API keys.
-Supports: Binance.US, Bybit, OKX, KuCoin, Coinbase, Kraken.
+Supports: Binance Global/US, Bybit, OKX, KuCoin, Coinbase, Kraken.
 """
 import asyncio
 import requests
+import market_data
 
 UA = {"User-Agent": "crypto-ai-bot/2026"}
 TIMEOUT = 5  # tighter timeout so a slow exchange can't stall us
@@ -17,9 +18,7 @@ def _safe(fn, *a, **kw):
 
 
 def binance(symbol="BTCUSDT"):
-    r = requests.get(f"https://api.binance.us/api/v3/ticker/price?symbol={symbol}", headers=UA, timeout=TIMEOUT)
-    r.raise_for_status()
-    return float(r.json()["price"])
+    return market_data.get_current_price(symbol)
 
 
 def bybit(symbol="BTCUSDT"):
@@ -86,7 +85,7 @@ def all_prices(symbol="BTCUSDT"):
     # Use a small thread pool to fan out
     from concurrent.futures import ThreadPoolExecutor
     jobs = {
-        "Binance.US": (binance, (symbol,)),
+        "Binance":    (binance, (symbol,)),
         "Bybit":      (bybit,   (symbol,)),
         "OKX":        (okx,     (dash,)),
         "KuCoin":     (kucoin,  (dash,)),

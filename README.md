@@ -1,6 +1,8 @@
-# Crypto AI Bot
+# Crypto AI Discord Bot
 
-Discord bot for crypto signals, alerts, paper trading, and sentiment analysis.
+Discord bot pentru crypto signals, alerts, paper/demo trading, educație, news și sentiment analysis.
+
+Varianta asta rulează în **real-data mode**: prețurile vin din Binance Global/US cu fallback CoinGecko, news/sentiment vin din surse publice, iar performance-ul se calculează doar din semnalele urmărite în tracker. Nu sunt inventate win-rate-uri, PnL-uri, prețuri sau rezultate.
 
 ## Setup
 
@@ -8,22 +10,23 @@ Discord bot for crypto signals, alerts, paper trading, and sentiment analysis.
 python -m pip install -r requirements.txt
 ```
 
-Set your bot token in environment variables:
-
-- `DISCORD_BOT_TOKEN`
-- or `DISCORD_TOKEN`
-
-Then run:
+Setează tokenul Discord în environment variables:
 
 ```bash
-python bot.py
+DISCORD_BOT_TOKEN=tokenul_tau
 ```
 
-## Optional config
+Run recomandat:
 
-A local `config.json` can override channel IDs and symbol list if you prefer not to use env vars.
+```bash
+python -u bot_extended.py
+```
 
-Example `config.json`:
+`bot.py` rămâne modulul principal. `bot_extended.py` este entrypoint-ul sigur pentru Railway/Replit și pornește extra modulele doar când le activezi explicit.
+
+## Config opțional
+
+Poți folosi `config.json` pentru channel IDs și lista de simboluri, fără să modifici codul:
 
 ```json
 {
@@ -31,33 +34,46 @@ Example `config.json`:
   "VIP_SIGNALS_CHANNEL": 1509522877966319848,
   "ALERTS_CHANNEL": 1509524631332196422,
   "STATUS_CHANNEL": 1509524579364638830,
-  "SYMBOLS": ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT"]
+  "SYMBOLS": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
 }
 ```
 
-## Features
+## Extra module
 
-- Discord slash commands for crypto signals and trading education
-- SQLite persistence for alerts, signal history, and portfolios
-- AI-backed signal explanation support using Groq, Cohere, OpenRouter, or HuggingFace
-- Docker support and GitHub Actions CI
-- Training script for a simple signal classifier
-
-## Train the model
+Activează doar ce vrei să ruleze:
 
 ```bash
-python train_model.py
+DEMO_APP_ENABLED=1
+PAPER_TRADING_ENABLED=1
+AUTO_TRADE_ENABLED=1
 ```
 
-This script reads saved signals from `bot_data.db` and stores a model at `model.joblib`.
-
-## Docker
+Auto-trader-ul este manual by default. Pe LIVE, `AUTO_TRADE_AUTO=true` este ignorat dacă nu setezi explicit:
 
 ```bash
-docker build -t crypto-ai .
-docker run -e DISCORD_BOT_TOKEN="$TOKEN" crypto-ai
+AUTO_TRADE_ALLOW_LIVE_AUTO=true
 ```
 
-## CI
+Lasă-l pe manual/testnet până verifici totul în Discord.
 
-The workflow at `.github/workflows/ci.yml` installs dependencies and runs `python -m py_compile`.
+## Features reale
+
+- Slash commands pentru market data, semnale, scan, help, stats, admin, paper/demo și auto-trader.
+- Market data centralizat în `market_data.py`: Binance Global → Binance.US → CoinGecko fallback.
+- Quality gate înainte de semnale automate: scor, R:R, BTC macro context, cooldown, correlation și daily limits.
+- TP/SL din ATR, folosite la fel în embed-uri, tracker și rezultate.
+- Performance stats din `tracker.py` / `signal_results.py`, nu din valori hardcodate.
+- AI analysis doar dacă ai API key valid; fallback-ul local folosește indicatorii calculați.
+- Health endpoint Railway: `/health` și `/healthz`.
+
+## Verificare
+
+```bash
+python -m py_compile *.py
+```
+
+Am păstrat lista de coin-uri și modulele existente; modificările sunt pentru stabilitate, date reale, comandă/sync mai corect și wording mai honest.
+
+## Disclaimer
+
+Semnalele sunt educaționale, nu sfat financiar. Rezultatele trecute nu garantează rezultate viitoare.

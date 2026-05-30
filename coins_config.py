@@ -6,7 +6,7 @@ VIP tier scans:  ALL_VIP_SYMBOLS  (30 coins — majors + mid-caps + altcoins)
 To add a new coin:
   1. Add to COIN_META dict below
   2. Add to FREE_SYMBOLS or VIP_ONLY_SYMBOLS list
-  3. Verify it trades on Binance.US with /api/v3/ticker/24hr?symbol=XXXUSDT
+  3. Verify it has real public market data (Binance Global/US or CoinGecko fallback)
 """
 
 # ─── COIN METADATA ────────────────────────────────────────────────────────────

@@ -1,22 +1,22 @@
 """
 ai_analysis.py — Motor AI unificat pentru semnale crypto.
 
-Modele disponibile (toate gratuite cu tier free):
-  1. DeepSeek Chat      — deepseek-chat | 500k tokens/zi gratis | CEL MAI BUN pentru analiză
-  2. Groq llama3-70b    — llama-3.3-70b-versatile | ultra-rapid | free tier generos
-  3. Google Gemini Flash — gemini-2.0-flash | 15 req/min gratis | foarte capabil
-  4. Mistral Small       — mistral-small-latest | 1 req/sec gratis
-  5. Cohere Command-R    — command-r | free tier
+Modele disponibile (folosește numai dacă ai cheile API; verifică mereu tier-ul curent):
+  1. DeepSeek Chat      — deepseek-chat | analiză tehnică text
+  2. Groq llama3-70b    — llama-3.3-70b-versatile | răspuns rapid
+  3. Google Gemini Flash — gemini-2.0-flash | model rapid pentru rezumate
+  4. Mistral Small       — mistral-small-latest
+  5. Cohere Command-R    — command-r
   6. Fallback local      — fara API, analiza bazata pe indicatori (intotdeauna functioneaza)
 
 Prioritate automata: DeepSeek → Groq → Gemini → Mistral → Cohere → Local
 
 ENV variables:
-  DEEPSEEK_API_KEY   — de la https://platform.deepseek.com (gratis $5 credit la signup)
-  GROQ_API_KEY       — de la https://console.groq.com (100% gratis, fara card)
-  GEMINI_API_KEY     — de la https://aistudio.google.com/app/apikey (gratis)
-  MISTRAL_API_KEY    — de la https://console.mistral.ai (free tier)
-  COHERE_API_KEY     — de la https://dashboard.cohere.com (free tier)
+  DEEPSEEK_API_KEY   — de la https://platform.deepseek.com
+  GROQ_API_KEY       — de la https://console.groq.com
+  GEMINI_API_KEY     — de la https://aistudio.google.com/app/apikey
+  MISTRAL_API_KEY    — de la https://console.mistral.ai
+  COHERE_API_KEY     — de la https://dashboard.cohere.com
 
 Utilizare:
   from ai_analysis import ai_analyze
@@ -136,7 +136,7 @@ def _build_prompt(signal: str, symbol: str, price: float,
         nearest = min(fib.items(), key=lambda x: abs(float(x[1]) - price))
         fib_info = f"\n  Nearest Fibonacci level: {nearest[0]} at ${float(nearest[1]):,.4f}"
 
-    prompt = f"""You are a professional cryptocurrency trader and technical analyst with 10+ years experience.
+    prompt = f"""You are a careful cryptocurrency technical-analysis assistant.
 
 Analyze this trade signal and provide a concise, professional assessment:
 
@@ -197,7 +197,7 @@ def _post_json(url: str, headers: dict, body: dict, timeout: int = 12) -> dict:
         return json.loads(resp.read())
 
 def _deepseek(prompt: str) -> Optional[str]:
-    """DeepSeek Chat API — deepseek-chat (gratuit $5 credit la signup)."""
+    """DeepSeek Chat API — deepseek-chat. Configure only if you have a valid key."""
     if not DEEPSEEK_KEY or not _rate_ok("deepseek"):
         return None
     try:
@@ -207,7 +207,7 @@ def _deepseek(prompt: str) -> Optional[str]:
             body={
                 "model": "deepseek-chat",
                 "messages": [
-                    {"role": "system", "content": "You are a professional crypto trader and technical analyst."},
+                    {"role": "system", "content": "You are a careful crypto technical-analysis assistant."},
                     {"role": "user",   "content": prompt}
                 ],
                 "max_tokens": 350,
@@ -220,7 +220,7 @@ def _deepseek(prompt: str) -> Optional[str]:
         return None
 
 def _groq(prompt: str) -> Optional[str]:
-    """Groq llama3-70b — cel mai rapid, free tier generos."""
+    """Groq OpenAI-compatible API. Configure only if you have a valid key."""
     if not GROQ_KEY or not _rate_ok("groq"):
         return None
     try:
@@ -230,7 +230,7 @@ def _groq(prompt: str) -> Optional[str]:
             body={
                 "model": "llama-3.3-70b-versatile",
                 "messages": [
-                    {"role": "system", "content": "You are a professional crypto trader and technical analyst."},
+                    {"role": "system", "content": "You are a careful crypto technical-analysis assistant."},
                     {"role": "user",   "content": prompt}
                 ],
                 "max_tokens": 350,
@@ -243,7 +243,7 @@ def _groq(prompt: str) -> Optional[str]:
         return None
 
 def _gemini(prompt: str) -> Optional[str]:
-    """Google Gemini 2.0 Flash — 15 req/min gratis."""
+    """Google Gemini API. Configure only if you have a valid key."""
     if not GEMINI_KEY or not _rate_ok("gemini"):
         return None
     try:
@@ -263,7 +263,7 @@ def _gemini(prompt: str) -> Optional[str]:
         return None
 
 def _mistral(prompt: str) -> Optional[str]:
-    """Mistral Small — free tier 1 req/sec."""
+    """Mistral API. Configure only if you have a valid key."""
     if not MISTRAL_KEY or not _rate_ok("mistral"):
         return None
     try:
@@ -273,7 +273,7 @@ def _mistral(prompt: str) -> Optional[str]:
             body={
                 "model": "mistral-small-latest",
                 "messages": [
-                    {"role": "system", "content": "You are a professional crypto trader."},
+                    {"role": "system", "content": "You are a careful crypto technical-analysis assistant."},
                     {"role": "user",   "content": prompt}
                 ],
                 "max_tokens": 350,
@@ -286,7 +286,7 @@ def _mistral(prompt: str) -> Optional[str]:
         return None
 
 def _cohere(prompt: str) -> Optional[str]:
-    """Cohere Command-R — free tier."""
+    """Cohere API. Configure only if you have a valid key."""
     if not COHERE_KEY or not _rate_ok("cohere"):
         return None
     try:
@@ -296,7 +296,7 @@ def _cohere(prompt: str) -> Optional[str]:
             body={
                 "model": "command-r",
                 "messages": [
-                    {"role": "system", "content": "You are a professional crypto trader."},
+                    {"role": "system", "content": "You are a careful crypto technical-analysis assistant."},
                     {"role": "user",   "content": prompt}
                 ],
                 "max_tokens": 350,

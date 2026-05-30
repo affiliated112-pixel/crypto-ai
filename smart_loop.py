@@ -47,6 +47,18 @@ try:
 except ImportError:
     _HAS_RESULTS = False
 
+try:
+    import auto_trade_integration
+    _HAS_AUTO_TRADE = True
+except ImportError:
+    _HAS_AUTO_TRADE = False
+
+try:
+    import demo_app
+    _HAS_DEMO_APP = True
+except ImportError:
+    _HAS_DEMO_APP = False
+
 SCAN_INTERVAL = 900   # 15 minutes — enough time for indicators to develop
 
 async def _get_ch(client, ch_id):
@@ -59,6 +71,50 @@ async def _get_ch(client, ch_id):
         except Exception:
             ch = None
     return ch
+
+def _build_trade_payload(c: dict, tier: str) -> dict:
+    """Build a real signal payload for paper/auto-trader modules."""
+    price = float(c.get("price") or 0)
+    ind = c.get("ind") or {}
+    atr = float(ind.get("atr") or price * 0.018)
+    atr_pct = atr / price if price > 0 else 0.018
+    levels = signal_engine.compute_levels(price, c.get("signal"), atr, atr_pct)
+    return {
+        "symbol": c.get("symbol"),
+        "side": c.get("signal"),
+        "entry": price,
+        "tp1": levels.get("tp1", 0.0),
+        "tp2": levels.get("tp2", 0.0),
+        "tp3": levels.get("tp3", 0.0),
+        "sl": levels.get("sl", 0.0),
+        "source": tier.upper(),
+        "confidence": c.get("conf") or "MEDIUM",
+        "rr": c.get("rr", 0.0),
+    }
+
+async def _post_signal_side_effects(client, c: dict, tier: str):
+    """Record only signals that were actually sent, with matching real levels."""
+    symbol, sig, price = c["symbol"], c["signal"], float(c["price"])
+    score = int(c.get("score") or 0)
+    ind = c.get("ind") or {}
+    atr = float(ind.get("atr") or price * 0.018)
+    atr_pct = atr / price if price > 0 else 0.018
+    levels = ind.get("_levels") if isinstance(ind.get("_levels"), dict) else None
+    if not levels:
+        levels = signal_engine.compute_levels(price, sig, atr, atr_pct)
+        ind["_levels"] = levels
+
+    if _HAS_TRACKER:
+        _record_signal(symbol, sig, price, score=score, quality=signal_engine.quality_label(score), levels=levels)
+    if _HAS_PAPER:
+        paper_trading.hook_signal(symbol, sig, price)
+    if _HAS_RESULTS:
+        signal_results.register_signal(symbol, sig, price, atr=atr, score=score, tier=tier, levels=levels)
+    if _HAS_DEMO_APP:
+        demo_app.signal_received(symbol, sig, price)
+    if _HAS_AUTO_TRADE:
+        payload = _build_trade_payload(c, tier)
+        await auto_trade_integration.handle_signal(payload, client)
 
 async def _send_free(client, ch_id, symbol, sig, price, rsi, conf, ind, score):
     ch = await _get_ch(client, ch_id)
@@ -160,8 +216,8 @@ async def smart_signal_loop(client, bot_module):
         try:
             df_btc = bot.get_data("BTCUSDT", interval="5m")
             if df_btc is not None:
-                btc_sig, _, _, _ = bot.get_signal_v2(df_btc)
-                signal_engine.cache_btc_signal(btc_sig)
+                btc_sig, btc_px, _, _ = bot.get_signal_v2(df_btc)
+                signal_engine.cache_btc_signal(btc_sig, price=btc_px)
         except Exception as e:
             print(f"[SMART LOOP] BTC fetch error: {e}", flush=True)
 
@@ -178,6 +234,11 @@ async def smart_signal_loop(client, bot_module):
                     ind = bot.calc_indicators(df)
                     if ind and price:
                         ind["price"] = price
+                        try:
+                            _atr = float(ind.get("atr") or price * 0.018)
+                            ind["_levels"] = signal_engine.compute_levels(price, sig, _atr, _atr / price if price else 0.018) if sig else None
+                        except Exception:
+                            pass
 
                     candidate = signal_engine.evaluate_candidate(
                         symbol, sig, price, ind or {}, tier="free"
@@ -206,6 +267,11 @@ async def smart_signal_loop(client, bot_module):
                     ind = bot.calc_indicators(df)
                     if ind and price:
                         ind["price"] = price
+                        try:
+                            _atr = float(ind.get("atr") or price * 0.018)
+                            ind["_levels"] = signal_engine.compute_levels(price, sig, _atr, _atr / price if price else 0.018) if sig else None
+                        except Exception:
+                            pass
 
                     # MTF for VIP
                     mtf = None
@@ -229,32 +295,12 @@ async def smart_signal_loop(client, bot_module):
                 except Exception as e:
                     print(f"  [SCAN VIP] {symbol} error: {e}", flush=True)
 
-        # ── Send FREE: top 1 candidate this round (budget permitting) ─────
-        # Sort by score desc, pick the best
-        free_candidates.sort(key=lambda c: c["score"], reverse=True)
-
-        for c in free_candidates[:1]:   # send at most 1 FREE per scan round
-            if signal_engine.approve_and_record(c):
-                try:
-                    await _send_free(
-                        client, free_ch_id,
-                        c["symbol"], c["signal"], c["price"],
-                        c["rsi"], c["conf"], c["ind"], c["score"],
-                    )
-                    if _HAS_TRACKER:
-                        _record_signal(c["symbol"], c["signal"], float(c["price"]))
-                    if _HAS_PAPER:
-                        paper_trading.hook_signal(c["symbol"], c["signal"], float(c["price"]))
-                    if _HAS_RESULTS:
-                        atr = c["ind"].get("atr", c["price"] * 0.018) if c["ind"] else c["price"] * 0.018
-                        signal_results.register_signal(c["symbol"], c["signal"], float(c["price"]), atr=atr, score=c["score"], tier="free")
-                except Exception as e:
-                    print(f"  [SEND FREE] Error: {e}", flush=True)
-
-        # ── Send VIP: top 1-2 candidates this round ───────────────────────
+        # ── Send VIP first, then FREE, so VIP does not get blocked by a
+        # same-symbol free signal recorded moments earlier.
         vip_candidates.sort(key=lambda c: c["score"], reverse=True)
-
         sent_vip = 0
+        sent_symbols: set[str] = set()
+
         for c in vip_candidates:
             if sent_vip >= 2:
                 break   # max 2 VIP sends per scan round
@@ -265,22 +311,38 @@ async def smart_signal_loop(client, bot_module):
                         c["symbol"], c["signal"], c["price"],
                         c["rsi"], c["conf"], c["ind"], c["score"], c["mtf"],
                     )
-                    if _HAS_TRACKER:
-                        _record_signal(c["symbol"], c["signal"], float(c["price"]))
-                    if _HAS_PAPER:
-                        paper_trading.hook_signal(c["symbol"], c["signal"], float(c["price"]))
-                    if _HAS_RESULTS:
-                        atr = c["ind"].get("atr", c["price"] * 0.018) if c["ind"] else c["price"] * 0.018
-                        signal_results.register_signal(c["symbol"], c["signal"], float(c["price"]), atr=atr, score=c["score"], tier="vip")
+                    await _post_signal_side_effects(client, c, "vip")
+                    sent_symbols.add(c["symbol"])
                     sent_vip += 1
                     await asyncio.sleep(3)   # space out sends
                 except Exception as e:
                     print(f"  [SEND VIP] Error: {e}", flush=True)
 
+        # ── Send FREE: top 1 candidate this round, avoiding exact duplicates.
+        free_candidates.sort(key=lambda c: c["score"], reverse=True)
+        sent_free = 0
+
+        for c in free_candidates:
+            if sent_free >= 1:
+                break
+            if c["symbol"] in sent_symbols:
+                continue
+            if signal_engine.approve_and_record(c):
+                try:
+                    await _send_free(
+                        client, free_ch_id,
+                        c["symbol"], c["signal"], c["price"],
+                        c["rsi"], c["conf"], c["ind"], c["score"],
+                    )
+                    await _post_signal_side_effects(client, c, "free")
+                    sent_free += 1
+                except Exception as e:
+                    print(f"  [SEND FREE] Error: {e}", flush=True)
+
         total_qual = len(free_candidates) + len(vip_candidates)
         print(
             f"[SMART LOOP] Round done. {total_qual} qualified candidates. "
-            f"Sent: {min(len(free_candidates),1)} FREE + {sent_vip} VIP. "
+            f"Sent: {sent_free} FREE + {sent_vip} VIP. "
             f"Next in {SCAN_INTERVAL//60} min.",
             flush=True
         )

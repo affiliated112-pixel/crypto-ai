@@ -49,6 +49,7 @@ from typing import Optional
 
 import discord
 from discord.ext import commands, tasks
+import market_data
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -84,21 +85,25 @@ AUTO_CONFIRM       = _env("AUTO_CONFIRM", "false").lower() == "true"
 if not DISCORD_TOKEN:
     raise RuntimeError("DISCORD_BOT_TOKEN lipsește din ENV")
 if not BINANCE_KEY or not BINANCE_SECRET:
-    raise RuntimeError("BINANCE_API_KEY / BINANCE_SECRET lipsesc din ENV")
+    log.warning("BINANCE_API_KEY / BINANCE_SECRET lipsesc — rulare în PAPER MODE cu prețuri publice live")
 
 # ─── BINANCE CLIENT ───────────────────────────────────────────────────────────
 try:
     from binance.client import Client
     from binance.exceptions import BinanceAPIException
-    if TESTNET:
-        binance = Client(BINANCE_KEY, BINANCE_SECRET, testnet=True)
-        log.info("🧪 Binance TESTNET activ")
+    if BINANCE_KEY and BINANCE_SECRET:
+        if TESTNET:
+            binance = Client(BINANCE_KEY, BINANCE_SECRET, testnet=True)
+            log.info("🧪 Binance TESTNET activ")
+        else:
+            binance = Client(BINANCE_KEY, BINANCE_SECRET)
+            log.info("🚀 Binance LIVE activ — ATENȚIE: bani reali!")
+        BINANCE_OK = True
     else:
-        binance = Client(BINANCE_KEY, BINANCE_SECRET)
-        log.info("🚀 Binance LIVE activ — ATENȚIE: bani reali!")
-    BINANCE_OK = True
+        binance = None
+        BINANCE_OK = False
 except ImportError:
-    log.warning("python-binance nu este instalat — rulând în modul PAPER TRADE (simulat)")
+    log.warning("python-binance nu este instalat — PAPER MODE cu prețuri publice live")
     binance    = None
     BINANCE_OK = False
 
@@ -349,10 +354,9 @@ def calc_qty(symbol: str, entry: float, risk_pct: float) -> float:
 
 # ─── OBȚINE PREȚUL CURENT ─────────────────────────────────────────────────────
 def get_price(symbol: str) -> float:
-    if not BINANCE_OK or not binance:
-        return 0.0
     try:
-        return float(binance.get_symbol_ticker(symbol=symbol)["price"])
+        px = market_data.get_current_price(symbol)
+        return float(px or 0.0)
     except Exception:
         return 0.0
 
@@ -368,9 +372,11 @@ async def execute_order(signal: dict, qty: float) -> tuple[bool, str]:
     entry     = signal["entry"]
 
     if not BINANCE_OK or not binance:
-        # PAPER TRADE — simulăm execuția
-        log.info(f"[PAPER] {side} {qty} {symbol} @ {entry}")
-        return True, f"📝 PAPER TRADE simulat: {side} {qty} {symbol} @ ${entry:,.4f}"
+        # PAPER TRADE — virtual execution, priced from public live market data when available.
+        live_entry = get_price(symbol) or entry
+        signal["entry"] = live_entry
+        log.info(f"[PAPER] {side} {qty} {symbol} @ {live_entry}")
+        return True, f"📝 PAPER TRADE (preț public live): {side} {qty} {symbol} @ ${live_entry:,.4f}"
 
     try:
         if side == "BUY":

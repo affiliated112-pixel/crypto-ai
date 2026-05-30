@@ -16,6 +16,7 @@ import json
 import os
 import time
 import requests
+import market_data
 import discord
 from discord import ui
 from datetime import datetime, timezone
@@ -64,14 +65,7 @@ def save_user_portfolio(user_id: int, portfolio: dict):
     _save_all(all_data)
 
 def _get_price(symbol: str) -> float | None:
-    try:
-        r = requests.get(
-            f"https://api.binance.us/api/v3/ticker/price?symbol={symbol}",
-            headers=UA, timeout=6,
-        )
-        return float(r.json()["price"])
-    except Exception:
-        return None
+    return market_data.get_current_price(symbol)
 
 # ─── Trade Logic ──────────────────────────────────────────────────────────────
 
@@ -187,7 +181,7 @@ def build_user_embed(user_id: int, username: str) -> discord.Embed:
     embed = discord.Embed(
         title=f"💼 DEMO PORTFOLIO — {username}",
         description=(
-            f"**Bani virtuali • Zero risc real • 100% prețuri Binance live**\n"
+            f"**Bani virtuali • Zero risc real • prețuri reale din API-uri publice**\n"
             f"{'━' * 35}"
         ),
         color=color,

@@ -76,11 +76,11 @@ def _entry_strategy(signal: str, confidence: str, ind: dict, price: float) -> tu
     # Strong trend + volume surge → single entry
     if adx > 28 and vol_surge and confidence in ("🌟 VERY HIGH", "🔥 HIGH"):
         en = ("🎯 **Single Entry** — Strong trend with volume surge.\n"
-              "Enter 100% of your planned position NOW.\n"
+              "Consider entering the planned position only after confirming risk and stop-loss.\n"
               f"• Entry: `${price:,.4f}`\n"
               f"• Risk per trade: `1–2% of portfolio`")
         ro = ("🎯 **Intrare unică** — Trend puternic cu volum ridicat.\n"
-              "Intră cu 100% din poziția planificată ACUM.\n"
+              "Ia în calcul intrarea doar după ce confirmi riscul și stop-loss-ul.\n"
               f"• Entry: `${price:,.4f}`\n"
               f"• Risc per trade: `1–2% din portofoliu`")
     # Medium confidence → DCA in 2 tranches

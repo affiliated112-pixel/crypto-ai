@@ -87,7 +87,7 @@ def build_free_embed(symbol, sig, price, rsi, conf, quality=None, score=None, fi
     embed.add_field(name="📊 Indicators", value=meta, inline=False)
 
     embed.set_footer(
-        text="⚠️ Educational only — always use Stop Loss • Max 5% per trade",
+        text="⚠️ Educational only — always use Stop Loss • Risk small, usually 1–2% per trade",
         icon_url="https://cdn-icons-png.flaticon.com/512/2331/2331970.png",
     )
     return embed
