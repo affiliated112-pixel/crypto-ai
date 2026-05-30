@@ -22,6 +22,7 @@ V2 Improvements (2026):
   [5] Dynamic TP/SL via compute_levels() — ATR-based, calibrated per volatility
 """
 
+import os
 import time
 from datetime import datetime, timezone, date
 from typing import Optional
@@ -34,25 +35,81 @@ _btc_price_history: list[tuple[float, float]] = []   # [(unix_ts, price), ...]
 _BTC_DROP_THRESHOLD = 0.02   # 2% drop in 4h blocks ALL altcoin BUYs
 _BTC_HISTORY_MAX    = 50     # keep at most 50 price snapshots
 
+# ─── RUNTIME SETTINGS ─────────────────────────────────────────────────────────
+# Railway/Discord deployments need these to be adjustable without code edits.
+# SIGNAL_MODE controls sensible defaults, and every value can still be overridden
+# with a dedicated env var (FREE_MIN_SCORE, VIP_MIN_SCORE, etc.).
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return int(default)
+    try:
+        return int(str(raw).strip())
+    except ValueError:
+        return int(default)
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return float(default)
+    try:
+        return float(str(raw).strip())
+    except ValueError:
+        return float(default)
+
+
+_SIGNAL_MODE = os.environ.get("SIGNAL_MODE", "balanced").strip().lower()
+_MODE_DEFAULTS = {
+    # Original strict behaviour: very few signals, highest filtering.
+    "strict": {
+        "FREE_MAX_PER_DAY": 3, "VIP_MAX_PER_DAY": 5,
+        "FREE_MIN_SCORE": 58, "VIP_MIN_SCORE": 70,
+        "FREE_MIN_RR": 1.8, "VIP_MIN_RR": 2.2,
+        "FREE_COOLDOWN_H": 12, "VIP_COOLDOWN_H": 8,
+        "ACTIVE_START_UTC": 8, "ACTIVE_END_UTC": 22,
+    },
+    # Default for the Discord bot: sends valid medium setups, still keeps
+    # R:R, cooldown, BTC macro and correlation protection.
+    "balanced": {
+        "FREE_MAX_PER_DAY": 5, "VIP_MAX_PER_DAY": 10,
+        "FREE_MIN_SCORE": 42, "VIP_MIN_SCORE": 52,
+        "FREE_MIN_RR": 1.6, "VIP_MIN_RR": 1.8,
+        "FREE_COOLDOWN_H": 6, "VIP_COOLDOWN_H": 4,
+        "ACTIVE_START_UTC": 0, "ACTIVE_END_UTC": 24,
+    },
+    # More frequent signals for testing/small communities. Use carefully.
+    "aggressive": {
+        "FREE_MAX_PER_DAY": 8, "VIP_MAX_PER_DAY": 16,
+        "FREE_MIN_SCORE": 35, "VIP_MIN_SCORE": 45,
+        "FREE_MIN_RR": 1.3, "VIP_MIN_RR": 1.5,
+        "FREE_COOLDOWN_H": 3, "VIP_COOLDOWN_H": 2,
+        "ACTIVE_START_UTC": 0, "ACTIVE_END_UTC": 24,
+    },
+}
+_DEFAULTS = _MODE_DEFAULTS.get(_SIGNAL_MODE, _MODE_DEFAULTS["balanced"])
+
 # ─── DAILY BUDGET (max signals per day) ──────────────────────────────────────
-FREE_MAX_PER_DAY    = 3     # max 3 FREE signals per day total
-VIP_MAX_PER_DAY     = 5     # max 5 VIP signals per day total
+FREE_MAX_PER_DAY    = _int_env("FREE_MAX_PER_DAY", _DEFAULTS["FREE_MAX_PER_DAY"])
+VIP_MAX_PER_DAY     = _int_env("VIP_MAX_PER_DAY",  _DEFAULTS["VIP_MAX_PER_DAY"])
 
 # ─── SCORE THRESHOLDS ────────────────────────────────────────────────────────
-FREE_MIN_SCORE      = 58    # raised from 45 — only clear setups
-VIP_MIN_SCORE       = 70    # raised from 65 — only clear, well-confirmed setups
+FREE_MIN_SCORE      = _int_env("FREE_MIN_SCORE", _DEFAULTS["FREE_MIN_SCORE"])
+VIP_MIN_SCORE       = _int_env("VIP_MIN_SCORE",  _DEFAULTS["VIP_MIN_SCORE"])
 
 # ─── RISK:REWARD ─────────────────────────────────────────────────────────────
-FREE_MIN_RR         = 1.8   # at least 1.8:1 R:R
-VIP_MIN_RR          = 2.2   # at least 2.2:1 R:R
+FREE_MIN_RR         = _float_env("FREE_MIN_RR", _DEFAULTS["FREE_MIN_RR"])
+VIP_MIN_RR          = _float_env("VIP_MIN_RR",  _DEFAULTS["VIP_MIN_RR"])
 
 # ─── COOLDOWN (same coin, same direction) ────────────────────────────────────
-FREE_COOLDOWN_H     = 12    # 12h cooldown per coin FREE
-VIP_COOLDOWN_H      = 8     # 8h cooldown per coin VIP
+FREE_COOLDOWN_H     = _int_env("FREE_COOLDOWN_H", _DEFAULTS["FREE_COOLDOWN_H"])
+VIP_COOLDOWN_H      = _int_env("VIP_COOLDOWN_H",  _DEFAULTS["VIP_COOLDOWN_H"])
 
 # ─── ACTIVE HOURS (UTC) ──────────────────────────────────────────────────────
-ACTIVE_START_UTC    = 8     # 08:00 UTC
-ACTIVE_END_UTC      = 22    # 22:00 UTC
+# 0 → 24 means crypto signals are allowed all day. Set SIGNAL_MODE=strict or
+# override SIGNAL_ACTIVE_START_UTC / SIGNAL_ACTIVE_END_UTC for a quiet window.
+ACTIVE_START_UTC    = max(0, min(23, _int_env("SIGNAL_ACTIVE_START_UTC", _DEFAULTS["ACTIVE_START_UTC"])))
+ACTIVE_END_UTC      = max(0, min(24, _int_env("SIGNAL_ACTIVE_END_UTC",   _DEFAULTS["ACTIVE_END_UTC"])))
 
 # ─── CORRELATION GROUPS ──────────────────────────────────────────────────────
 # Don't send same direction for highly correlated coins within 2h
@@ -316,8 +373,34 @@ def compute_levels(price: float, signal: str, atr: float,
 # ─── CONTEXT CHECKS ──────────────────────────────────────────────────────────
 
 def is_active_hour() -> bool:
+    """Return True when automatic signals are allowed.
+
+    Supports normal windows (08→22), overnight windows (22→06), and 24/7
+    mode (0→24 or start == end).
+    """
+    if ACTIVE_START_UTC == ACTIVE_END_UTC or (ACTIVE_START_UTC == 0 and ACTIVE_END_UTC == 24):
+        return True
     h = datetime.now(timezone.utc).hour
-    return ACTIVE_START_UTC <= h < ACTIVE_END_UTC
+    if ACTIVE_START_UTC < ACTIVE_END_UTC:
+        return ACTIVE_START_UTC <= h < ACTIVE_END_UTC
+    return h >= ACTIVE_START_UTC or h < ACTIVE_END_UTC
+
+
+def settings_summary() -> dict:
+    """Small helper for startup logs/status/debugging."""
+    return {
+        "mode": _SIGNAL_MODE,
+        "free_min_score": FREE_MIN_SCORE,
+        "vip_min_score": VIP_MIN_SCORE,
+        "free_min_rr": FREE_MIN_RR,
+        "vip_min_rr": VIP_MIN_RR,
+        "free_max_per_day": FREE_MAX_PER_DAY,
+        "vip_max_per_day": VIP_MAX_PER_DAY,
+        "free_cooldown_h": FREE_COOLDOWN_H,
+        "vip_cooldown_h": VIP_COOLDOWN_H,
+        "active_start_utc": ACTIVE_START_UTC,
+        "active_end_utc": ACTIVE_END_UTC,
+    }
 
 def cache_btc_signal(sig: str | None, price: float | None = None):
     """Cache BTC signal AND price for macro filter tracking."""

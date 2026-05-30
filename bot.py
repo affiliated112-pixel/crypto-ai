@@ -176,22 +176,46 @@ PERFORMANCE_CHANNEL   = _channel_id("PERFORMANCE_CHANNEL",   1509524196139466852
 SIGNAL_LOOP_SECONDS = _int_env("SIGNAL_LOOP_SECONDS", 900)
 SIGNAL_START_DELAY  = _int_env("SIGNAL_START_DELAY", 5)
 
+
+def _explicit_setting(name: str) -> bool:
+    return (
+        os.environ.get(name) is not None
+        and str(os.environ.get(name)).strip() != ""
+    ) or CONFIG.get(name) is not None
+
+
+def _dedupe_symbols(items) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in items or []:
+        sym = str(item).strip().upper()
+        if sym and sym not in seen:
+            out.append(sym)
+            seen.add(sym)
+    return out
+
+
 CONFIG_SYMBOLS = CONFIG.get("SYMBOLS")
 if isinstance(CONFIG_SYMBOLS, list):
-    SYMBOLS = [s.strip().upper() for s in CONFIG_SYMBOLS if str(s).strip()]
+    SYMBOLS = _dedupe_symbols(CONFIG_SYMBOLS)
+elif _explicit_setting("SYMBOLS"):
+    SYMBOLS = _dedupe_symbols(_env("SYMBOLS", "").split(","))
+elif _coins_config is not None and hasattr(_coins_config, "FREE_SYMBOLS"):
+    SYMBOLS = _dedupe_symbols(_coins_config.FREE_SYMBOLS)
 else:
-    SYMBOLS_RAW = _env("SYMBOLS", "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT")
-    SYMBOLS = [s.strip().upper() for s in SYMBOLS_RAW.split(",") if s.strip()]
+    SYMBOLS = _dedupe_symbols("BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT".split(","))
 
 CONFIG_ALL_SYMBOLS = CONFIG.get("ALL_SYMBOLS")
 if isinstance(CONFIG_ALL_SYMBOLS, list):
-    ALL_SYMBOLS = [s.strip().upper() for s in CONFIG_ALL_SYMBOLS if str(s).strip()]
+    ALL_SYMBOLS = _dedupe_symbols(CONFIG_ALL_SYMBOLS)
+elif _explicit_setting("ALL_SYMBOLS"):
+    ALL_SYMBOLS = _dedupe_symbols(_env("ALL_SYMBOLS", "").split(","))
+elif _coins_config is not None and hasattr(_coins_config, "ALL_VIP_SYMBOLS"):
+    ALL_SYMBOLS = _dedupe_symbols(_coins_config.ALL_VIP_SYMBOLS)
 else:
-    ALL_SYMBOLS_RAW = _env(
-        "ALL_SYMBOLS",
-        "BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,AVAXUSDT,DOGEUSDT",
-    )
-    ALL_SYMBOLS = [s.strip().upper() for s in ALL_SYMBOLS_RAW.split(",") if s.strip()]
+    ALL_SYMBOLS = _dedupe_symbols("BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,ADAUSDT,AVAXUSDT,DOGEUSDT".split(","))
+
+FREE_SCAN_SYMBOLS = set(_dedupe_symbols(getattr(_coins_config, "FREE_SYMBOLS", SYMBOLS)))
 
 VIP_ROLE_NAME = _env("VIP_ROLE_NAME", "VIP")
 DISCLAIMER_EN = "Crypto Signals Bot | Not financial advice. Invest responsibly."
@@ -311,6 +335,11 @@ async def fetch_message_channel(channel_id: int, label: str = ""):
         if not perms.send_messages:
             print(f"[config] #{ch.name}: missing Send Messages permission", flush=True)
             return None
+        if not perms.embed_links:
+            print(f"[config] #{ch.name}: missing Embed Links permission (signals use embeds)", flush=True)
+            return None
+        if not perms.attach_files:
+            print(f"[config] #{ch.name}: missing Attach Files permission (VIP charts will be skipped)", flush=True)
     return ch
 
 
@@ -5137,7 +5166,9 @@ async def signal_loop():
         vip_ch    = await fetch_message_channel(VIP_SIGNALS_CHANNEL, "VIP_SIGNALS")
         alerts_ch = await fetch_message_channel(ALERTS_CHANNEL, "ALERTS")
         try:
-            print(f"[SIGNAL LOOP] Checking {len(SYMBOLS)} coins at {utcnow().strftime('%H:%M:%S')}")
+            scan_symbols = _dedupe_symbols(ALL_SYMBOLS or SYMBOLS)
+            free_scan_symbols = set(FREE_SCAN_SYMBOLS or SYMBOLS)
+            print(f"[SIGNAL LOOP] Checking {len(scan_symbols)} coins at {utcnow().strftime('%H:%M:%S')} (FREE={len(free_scan_symbols)}, VIP={len(scan_symbols)})")
 
             # [IMPROVEMENT 4] Update BTC macro cache first (used by all altcoins below)
             _btc_df  = get_data("BTCUSDT")
@@ -5146,7 +5177,7 @@ async def signal_loop():
                 _btc_sig_now, _btc_px, _, _ = get_signal_v2(_btc_df)
                 signal_engine.cache_btc_signal(_btc_sig_now, price=_btc_px)
 
-            for symbol in SYMBOLS:
+            for symbol in scan_symbols:
                 df  = get_data(symbol)
                 sig, price, rsi, conf = get_signal_v2(df)
                 ind = calc_indicators(df)
@@ -5208,9 +5239,14 @@ async def signal_loop():
                             mtf[_tf] = {"signal": None}
                     confirmed = mtf.get("15m", {}).get("signal") == sig
 
-                    free_allow, free_score, free_reason, _ = signal_engine.check_signal_quality(
-                        symbol, sig, price, ind, mtf=None, tier="free", consume=False
-                    )
+                    # FREE channel should only receive free-tier coins. VIP scans the full list.
+                    if symbol in free_scan_symbols:
+                        free_allow, free_score, free_reason, _ = signal_engine.check_signal_quality(
+                            symbol, sig, price, ind, mtf=None, tier="free", consume=False
+                        )
+                    else:
+                        free_allow, free_score, free_reason = False, 0, "VIP-only coin (not sent to FREE channel)"
+
                     vip_allow, vip_score, vip_reason, _ = signal_engine.check_signal_quality(
                         symbol, sig, price, ind, mtf=mtf, tier="vip", consume=False
                     )
@@ -5226,56 +5262,78 @@ async def signal_loop():
                         print(f"  [CHANNEL] {symbol} {sig} approved but no enabled Discord channel is available", flush=True)
                         continue
 
-                    LAST_SIGNAL[symbol] = sig
-                    LAST_SIGNAL_TS[symbol] = utcnow()
-                    best_score = max(free_score if free_allow else 0, vip_score if vip_allow else 0)
-                    print(f"  >>> SENDING {sig} signal for {symbol} (conf={conf}, free_score={free_score}, vip_score={vip_score})")
-                    SIGNAL_STATS[sig]     += 1
-                    SIGNAL_STATS["total"] += 1
-                    SIGNAL_HISTORY.append({
-                        "symbol": symbol, "signal": sig,
-                        "price": price, "rsi": round(rsi, 2),
-                        "confidence": conf,
-                        "quality_score": best_score,
-                        "free_score": free_score,
-                        "vip_score": vip_score,
-                        "timestamp": utcnow()
-                    })
-                    if len(SIGNAL_HISTORY) > 500:
-                        SIGNAL_HISTORY.pop(0)
+                    print(f"  >>> APPROVED {sig} signal for {symbol} (conf={conf}, free_score={free_score}, vip_score={vip_score})")
                     ai_text    = ai_analysis(sig, price, rsi, symbol)
                     chart      = None
-                    f_embed    = build_free_embed(symbol, sig, price, rsi, conf, ind=ind)
-                    v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed, ind=ind)
-                    sent_to_discord = False
-                    sent_tier = None
-                    if free_ch and free_allow:
-                        await free_ch.send(embed=f_embed)
-                        sent_to_discord = True
-                        sent_tier = "free"
+                    f_embed    = build_free_embed(symbol, sig, price, rsi, conf, ind=ind) if free_allow else None
+                    v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed, ind=ind) if vip_allow else None
+                    sent_tiers: list[str] = []
+
+                    if free_ch and free_allow and f_embed:
                         try:
-                            signal_engine._consume_free()
-                        except Exception:
-                            pass
-                    if vip_ch and vip_allow:
+                            await free_ch.send(embed=f_embed)
+                            sent_tiers.append("free")
+                            try:
+                                signal_engine._consume_free()
+                            except Exception:
+                                pass
+                        except Exception as send_err:
+                            print(f"  [SEND] FREE failed for {symbol} {sig}: {send_err}", flush=True)
+
+                    if vip_ch and vip_allow and v_embed:
                         try:
                             chart = generate_chart(df, symbol, sig)
-                            await vip_ch.send(embed=v_embed, file=discord.File(chart))
                         except Exception as chart_err:
-                            print(f"[chart] failed for {symbol}: {chart_err}", flush=True)
-                            await vip_ch.send(embed=v_embed)
-                        sent_to_discord = True
-                        sent_tier = "vip"
+                            chart = None
+                            print(f"  [chart] failed for {symbol}: {chart_err}", flush=True)
                         try:
-                            signal_engine._consume_vip()
-                        except Exception:
-                            pass
-                    if sent_to_discord:
+                            if chart:
+                                try:
+                                    await vip_ch.send(embed=v_embed, file=discord.File(chart))
+                                except Exception as file_send_err:
+                                    print(f"  [SEND] VIP chart/file failed for {symbol} {sig}: {file_send_err}; retrying embed only", flush=True)
+                                    await vip_ch.send(embed=v_embed)
+                            else:
+                                await vip_ch.send(embed=v_embed)
+                            sent_tiers.append("vip")
+                            try:
+                                signal_engine._consume_vip()
+                            except Exception:
+                                pass
+                        except Exception as send_err:
+                            print(f"  [SEND] VIP failed for {symbol} {sig}: {send_err}", flush=True)
+
+                    if sent_tiers:
+                        LAST_SIGNAL[symbol] = sig
+                        LAST_SIGNAL_TS[symbol] = utcnow()
+                        sent_score = max(
+                            free_score if "free" in sent_tiers else 0,
+                            vip_score if "vip" in sent_tiers else 0,
+                        )
+                        SIGNAL_STATS[sig]     += 1
+                        SIGNAL_STATS["total"] += 1
+                        SIGNAL_HISTORY.append({
+                            "symbol": symbol, "signal": sig,
+                            "price": price, "rsi": round(rsi, 2),
+                            "confidence": conf,
+                            "quality_score": sent_score,
+                            "free_score": free_score,
+                            "vip_score": vip_score,
+                            "sent_tiers": ",".join(sent_tiers),
+                            "timestamp": utcnow()
+                        })
+                        if len(SIGNAL_HISTORY) > 500:
+                            SIGNAL_HISTORY.pop(0)
                         try:
                             signal_engine._record_sent(symbol, sig)
                         except Exception:
                             pass
-                        _record_real_signal(symbol, sig, price, rsi, f"{conf} · score {best_score}/100", ind=ind, tier=sent_tier or "free")
+                        record_tier = "vip" if "vip" in sent_tiers else "free"
+                        _record_real_signal(symbol, sig, price, rsi, f"{conf} · score {sent_score}/100", ind=ind, tier=record_tier)
+                        print(f"  [SENT] {symbol} {sig} -> {', '.join(sent_tiers).upper()} (score={sent_score}/100)", flush=True)
+                    else:
+                        print(f"  [SEND] {symbol} {sig} approved but Discord send failed; not recording cooldown/budget.", flush=True)
+
                     try:
                         if chart and os.path.exists(chart):
                             os.remove(chart)
@@ -6621,6 +6679,9 @@ class _PingHandler(BaseHTTPRequestHandler):
                 "symbols": SYMBOLS,
                 "data_sources": ["Binance Global/US", "CoinGecko fallback"],
                 "signals": SIGNAL_STATS,
+                "signal_settings": signal_engine.settings_summary(),
+                "free_symbols": SYMBOLS,
+                "vip_scan_count": len(ALL_SYMBOLS),
                 "utc": utcnow().isoformat(),
             }
             body = json.dumps(payload).encode("utf-8")
@@ -6654,8 +6715,19 @@ def print_startup_config():
     print("=" * 60, flush=True)
     print("  Crypto Signals Bot — Railway", flush=True)
     print("=" * 60, flush=True)
-    print(f"[config] Monitoring: {', '.join(SYMBOLS)}", flush=True)
+    print(f"[config] FREE symbols: {', '.join(SYMBOLS)}", flush=True)
+    print(f"[config] VIP scan symbols: {len(ALL_SYMBOLS)} coins", flush=True)
     print(f"[config] Signal loop: every {SIGNAL_LOOP_SECONDS}s (start delay {SIGNAL_START_DELAY}s)", flush=True)
+    try:
+        st = signal_engine.settings_summary()
+        print(
+            f"[config] Signal mode={st['mode']} | FREE score>={st['free_min_score']} "
+            f"VIP score>={st['vip_min_score']} | FREE {st['free_max_per_day']}/day "
+            f"VIP {st['vip_max_per_day']}/day | active UTC {st['active_start_utc']}-{st['active_end_utc']}",
+            flush=True,
+        )
+    except Exception:
+        pass
     print(f"[config] VIP role: {VIP_ROLE_NAME}", flush=True)
     print("=" * 60, flush=True)
 
