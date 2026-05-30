@@ -1,82 +1,109 @@
-# Crypto Signals Bot — Railway (ghid complet)
+# Crypto Signals Bot — Railway setup
 
-## 1. GitHub
+## 1. Deploy
 
-Repo: `affiliated112-pixel/crypto-ai` — branch `main`
+Railway → **New Project** → Deploy from GitHub/upload.
 
-Fișiere importante:
-- `bot_extended.py` — entrypoint recomandat Railway/Replit (păstrează modulele și pornește extensiile)
-- `bot.py` — bot Discord core
-- `requirements.txt` — dependențe Python
-- `railway.toml` — 1 replică, health check `/health`
-- `nixpacks.toml` — suport matplotlib
+Start command:
 
-## 2. Railway — proiect nou sau existent
+```bash
+python -u bot_extended.py
+```
 
-1. https://railway.app → **New Project** → **Deploy from GitHub**
-2. Alege `affiliated112-pixel/crypto-ai`
-3. **Settings → Deploy:**
-   - Replicas: **1** (obligatoriu)
-   - Start Command: `python -u bot_extended.py` (sau lasă `railway.toml`)
+Setează **Replicas = 1**. Este important pentru cooldown, dedupe și Discord session.
 
-## 3. Variables (copy-paste)
+## 2. PostgreSQL
 
-**Variables → Raw Editor** — lipește din `railway-variables.txt`:
+Recomandat: adaugă un serviciu **PostgreSQL** în același proiect Railway.
+
+Railway va pune automat `DATABASE_URL` în service variables. Botul detectează `DATABASE_URL` și creează tabelele singur.
+
+Dacă nu există `DATABASE_URL`, botul folosește SQLite fallback, dar pentru production folosește PostgreSQL.
+
+## 3. Variables
+
+Railway → Service → **Variables → Raw Editor** → lipește din `railway-variables.txt`.
+
+Obligatoriu:
 
 ```env
 DISCORD_BOT_TOKEN=tokenul_tau_de_la_discord
+USE_PERSISTENT_STATE=1
+SIGNAL_MODE=balanced
 ```
 
-Fără ghilimele. Token din: Developer Portal → Bot → **Reset Token**.
+## 4. Unde pui ID-urile canalelor Discord
 
-## 4. Discord Developer Portal
+Tot în Railway Variables:
 
-- **Bot** → Intents: **Server Members** + **Message Content**
-- **OAuth2** → `bot` + `applications.commands` → invită pe server
-- Rol bot: **Send Messages**, **Attach Files**, **Embed Links** în canalele de semnale
+```env
+FREE_SIGNALS_CHANNEL=ID_CANAL_FREE
+VIP_SIGNALS_CHANNEL=ID_CANAL_VIP
+STATUS_CHANNEL=ID_CANAL_STATUS
+ALERTS_CHANNEL=ID_CANAL_ALERTS
+PERFORMANCE_CHANNEL=ID_CANAL_PERFORMANCE
+MARKET_NEWS_CHANNEL=ID_CANAL_NEWS
+WELCOME_CHANNEL=ID_CANAL_WELCOME
+RULES_CHANNEL=ID_CANAL_RULES
+HOWTO_CHANNEL=ID_CANAL_HOWTO
+GET_VIP_CHANNEL=ID_CANAL_GET_VIP
+ANNOUNCEMENTS_CHANNEL=ID_CANAL_ANNOUNCEMENTS
+```
 
-## 5. Redeploy
+Cum iei ID-ul: Discord → User Settings → Advanced → **Developer Mode ON** → click dreapta pe canal → **Copy Channel ID**.
 
-După orice schimbare la Variables → **Deployments → Redeploy**.
+## 5. Discord permissions
 
-## 6. Loguri OK
+În Discord, rolul botului trebuie să aibă pe canalele relevante:
 
 ```text
-[config] DISCORD_BOT_TOKEN set (72 chars)
-[config] Monitoring: BTCUSDT, ETHUSDT, ...
-Bot online: Crypto Signals#4211
-[config] #free-signals (FREE_SIGNALS) OK
-[SIGNAL LOOP] Done. Next check in 15 min.
+Send Messages
+Embed Links
+Attach Files
+Read Message History
+Use Slash Commands
 ```
+
+## 6. Comenzi de verificare după deploy
+
+În Discord:
+
+```text
+/admin_channels
+/admin_status
+/admin_last_blocked
+/admin_why BTC
+```
+
+`/admin_channels` îți arată dacă ID-urile sunt bune și dacă botul are permisiuni.
 
 ## 7. Health check
 
-Railway poate folosi: `GET /health` → JSON `{"status":"ok","discord_ready":true}`
+Railway health endpoint:
 
-Pagina web: URL-ul serviciului Railway (port public).
+```text
+/health
+/healthz
+```
 
-## 8. Schimbare server Discord
+`/health` include DB backend, budget, last scan, last signal, queue size și erori recente.
 
-Activează **Developer Mode** în Discord → click dreapta pe canal → **Copy Channel ID** → setează în Railway:
+## 8. Backtesting praguri
 
-```env
-FREE_SIGNALS_CHANNEL=1234567890123456789
-VIP_SIGNALS_CHANNEL=...
+După ce instalezi requirements:
+
+```bash
+python backtest_thresholds.py --tier free --symbols BTCUSDT,ETHUSDT,SOLUSDT --interval 5m --limit 1000
+python backtest_thresholds.py --tier vip --interval 5m --limit 1000 --output backtest_results.csv
 ```
 
 ## 9. Probleme frecvente
 
-| Eroare | Soluție |
-|--------|---------|
-| `401` / `LoginFailure` | Token greșit sau 2 replici — Replicas=1, token nou |
-| `session invalidated` | Două containere simultan — așteaptă deploy vechi să moară |
-| Nu postează în canal | Verifică ID canal + permisiuni bot |
-| `matplotlib` missing | `requirements.txt` pe GitHub + redeploy |
-
-
-## 10. Note real-data
-
-- Botul folosește `market_data.py`: Binance Global → Binance.US → CoinGecko fallback.
-- `/stats`, `/history` și performance-ul zilnic citesc din tracker-ul real TP/SL, nu din procente inventate.
-- `bot_extended.py` este recomandat pentru că păstrează modulele extra, dar nu dublează loop-urile de semnale.
-- Extra modulele demo/paper/auto-trade pornesc doar dacă setezi explicit `DEMO_APP_ENABLED=1`, `PAPER_TRADING_ENABLED=1` sau `AUTO_TRADE_ENABLED=1`.
+| Problemă | Soluție |
+|---|---|
+| `401` / `LoginFailure` | Token greșit; regenerează tokenul Discord |
+| `session invalidated` | Replicas trebuie să fie 1 |
+| Nu postează în canal | Verifică variabila `*_CHANNEL` și rulează `/admin_channels` |
+| Chart nu se trimite | Verifică `Attach Files`; botul va trimite fallback fără chart |
+| Semnale blocate | Rulează `/admin_last_blocked` sau `/admin_why BTC` |
+| După restart trimite duplicate | Verifică `DATABASE_URL` și `USE_PERSISTENT_STATE=1` |

@@ -7,7 +7,7 @@ you explicitly enable optional extras through environment variables.
 Default behaviour:
   * run the same stable Discord bot from bot.py
   * register optional slash-command modules idempotently
-  * no fake performance claims
+  * no unsupported performance claims
   * no duplicate smart/signal loops
 
 Optional env flags:

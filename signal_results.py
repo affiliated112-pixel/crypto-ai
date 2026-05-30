@@ -57,6 +57,7 @@ def register_signal(
     score:   int,
     tier:    str = "free",
     levels:  dict | None = None,
+    signal_id: str | None = None,
 ):
     """Call this immediately after sending a signal.
 
@@ -79,7 +80,7 @@ def register_signal(
             tp3 = round(price + 5.0 * atr, 6) if is_buy else round(price - 5.0 * atr, 6)
             sl  = round(price - 1.2 * atr, 6) if is_buy else round(price + 1.2 * atr, 6)
 
-    trade_id = f"{symbol}_{int(datetime.now(timezone.utc).timestamp())}"
+    trade_id = signal_id or f"{symbol}_{int(datetime.now(timezone.utc).timestamp())}"
     _open_trades[trade_id] = {
         "symbol":     symbol,
         "signal":     signal,
@@ -244,12 +245,12 @@ def _result_embed(trade: dict, result: str, close_price: float) -> discord.Embed
         value=(
             f"**{total}** trades closed\n"
             f"✅ **{wins}** wins · 🔴 **{losses}** losses\n"
-            f"**Win rate: {wr:.1f}%** (real, no fake numbers)"
+            f"**Win rate: {wr:.1f}%** (tracked signals only)"
         ),
         inline=False,
     )
 
-    embed.set_footer(text="⚠️ Past results do not guarantee future performance · Not financial advice")
+    embed.set_footer(text="Tracked results · Past performance is not a guarantee · Not financial advice")
     return embed
 
 # ─── POLLING LOOP ─────────────────────────────────────────────────────────────

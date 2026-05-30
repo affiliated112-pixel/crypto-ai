@@ -1,4 +1,4 @@
-# Crypto AI Discord Bot
+# Crypto Discord Signals Bot
 
 A Discord bot that monitors BTC/USDT on Binance, calculates RSI signals, and posts free and VIP trading signals to designated Discord channels.
 

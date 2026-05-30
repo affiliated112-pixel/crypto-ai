@@ -1,5 +1,5 @@
 """
-ai_analysis.py — Motor AI unificat pentru semnale crypto.
+ai_analysis.py — Motor de analiză tehnică pentru semnale crypto.
 
 Modele disponibile (folosește numai dacă ai cheile API; verifică mereu tier-ul curent):
   1. DeepSeek Chat      — deepseek-chat | analiză tehnică text
@@ -59,9 +59,9 @@ def _rate_ok(provider: str) -> bool:
     _last_call[provider] = now
     return True
 
-# ─── REZULTAT AI ──────────────────────────────────────────────────────────────
+# ─── REZULTAT ANALIZĂ ──────────────────────────────────────────────────────────────
 @dataclass
-class AIResult:
+class AnalysisResult:
     text:    str = ""          # textul complet (EN + RO)
     en:      str = ""          # doar engleza
     ro:      str = ""          # doar romana
@@ -74,14 +74,14 @@ class AIResult:
         if not self.text:
             return ""
         model_badge = f"`{self.model}`"
-        return f"🤖 **AI Analysis** — {model_badge}\n{self.text}"
+        return f"**Technical Rationale** — {model_badge}\n{self.text}"
 
 # ─── PROMPT BUILDER ───────────────────────────────────────────────────────────
 def _build_prompt(signal: str, symbol: str, price: float,
                   ind: dict, mtf: dict | None) -> str:
     """
     Construieste un prompt detaliat cu toti indicatorii.
-    Da AI-ului context real, nu doar RSI si semnal.
+    Construiește context complet, nu doar RSI si semnal.
     """
     coin = symbol.replace("USDT", "")
     side = "BUY (LONG)" if signal == "BUY" else "SELL (SHORT)"
@@ -316,7 +316,7 @@ def _local_fallback(signal: str, symbol: str, price: float, ind: dict) -> str:
     """
     Fallback inteligent fara API.
     Construieste o analiza in EN+RO din indicatori direct.
-    Nu e AI, dar e bazata pe logica reala — nu text hardcodat generic.
+    Fallback bazat pe indicatori calculați — nu text hardcodat generic.
     """
     coin    = symbol.replace("USDT", "")
     rsi     = ind.get("rsi", 50)
@@ -424,9 +424,9 @@ def ai_analyze(
     price:   float,
     ind:     dict,
     mtf:     dict | None = None,
-) -> AIResult:
+) -> AnalysisResult:
     """
-    Analizeaza un semnal cu AI.
+    Analizeaza un semnal cu provider extern sau fallback local.
     Incearca in ordine: DeepSeek → Groq → Gemini → Mistral → Cohere → Local.
     Intotdeauna returneaza un rezultat (niciodata nu crapa).
 
@@ -438,7 +438,7 @@ def ai_analyze(
         mtf:     dict cu semnale multi-timeframe (optional)
 
     Returns:
-        AIResult cu .text .en .ro .model .success
+        AnalysisResult cu .text .en .ro .model .success
     """
     prompt = _build_prompt(signal, symbol, price, ind, mtf)
 
@@ -458,7 +458,7 @@ def ai_analyze(
                 # Separa EN si RO daca ambele sunt in raspuns
                 en, ro = _split_en_ro(text)
                 log.info(f"[ai] {model_name} → {len(text)} chars")
-                return AIResult(text=text, en=en, ro=ro, model=model_name, success=True)
+                return AnalysisResult(text=text, en=en, ro=ro, model=model_name, success=True)
         except Exception as e:
             log.debug(f"[ai] {model_name} failed: {e}")
             continue
@@ -466,7 +466,7 @@ def ai_analyze(
     # Fallback local
     text = _local_fallback(signal, symbol, price, ind)
     en, ro = _split_en_ro(text)
-    return AIResult(text=text, en=en, ro=ro, model="local", success=False)
+    return AnalysisResult(text=text, en=en, ro=ro, model="local", success=False)
 
 def _split_en_ro(text: str) -> tuple[str, str]:
     """Separa textul in portiunea EN si RO dupa flag-urile 🇬🇧/🇷🇴."""

@@ -261,7 +261,7 @@ def build_vip_signal(
     if ai_text:
         sentence = str(ai_text).split(".")[0].strip()
         if len(sentence) > 10:
-            embed.add_field(name="🧠 Summary", value=f"*{sentence}.*", inline=False)
+            embed.add_field(name="📋 Summary", value=f"*{sentence}.*", inline=False)
 
     embed.add_field(
         name="✅ Risk checklist",

@@ -95,7 +95,7 @@ def build_free_embed(symbol, sig, price, rsi, conf, quality=None, score=None, fi
 
 def build_vip_embed(symbol, sig, price, rsi, conf, ai_text="", confirmed=False, ind=None,
                     quality=None, score=None, filters=None):
-    """Rich VIP embed with full analysis, MTF confirmation, AI text, indicators."""
+    """Rich VIP embed with full analysis, MTF confirmation, rationale text, indicators."""
     coin = _coin_from_symbol(symbol)
     is_buy = sig == "BUY"
     color = COLOR_BUY if is_buy else COLOR_SELL
@@ -152,7 +152,7 @@ def build_vip_embed(symbol, sig, price, rsi, conf, ai_text="", confirmed=False, 
             mark = "✅" if status else "⚠️"
             lines.append(f"{mark} **{name}** — {detail}")
         if lines:
-            embed.add_field(name="🧠 Smart Filters", value="\n".join(lines), inline=False)
+            embed.add_field(name="📋 Smart Filters", value="\n".join(lines), inline=False)
 
     if score is not None:
         bar_len = score // 5
@@ -164,10 +164,10 @@ def build_vip_embed(symbol, sig, price, rsi, conf, ai_text="", confirmed=False, 
         )
 
     if ai_text:
-        embed.add_field(name="🤖 AI Analysis", value=ai_text[:1000], inline=False)
+        embed.add_field(name="Trade Rationale", value=ai_text[:1000], inline=False)
 
     embed.set_footer(
-        text=f"💎 VIP Signal • {datetime.now(timezone.utc).strftime('%d %b %Y %H:%M UTC')} • DYOR",
+        text=f"💎 VIP Signal • {datetime.now(timezone.utc).strftime('%d %b %Y %H:%M UTC')} • Review risk before acting",
         icon_url="https://cdn-icons-png.flaticon.com/512/2331/2331970.png",
     )
     return embed

@@ -138,7 +138,7 @@ def _beginner_card(direction, symbol, price):
     else:
         steps = (
             f"**1️⃣** Dacă **NU ai** {coin} → **ignoră semnalul**\n"
-            f"**2️⃣** Dacă **AI** {coin} → deschide Binance/Bybit\n"
+            f"**2️⃣** Dacă **DEȚII DEJA** {coin} → deschide Binance/Bybit\n"
             f"**3️⃣** Caută **`{coin}/USDT`**\n"
             f"**4️⃣** Apasă pe **`Spot`**\n"
             f"**5️⃣** Apasă butonul **roșu `Sell`**\n"
@@ -168,7 +168,7 @@ def _beginner_card(direction, symbol, price):
         ),
         inline=False,
     )
-    embed.set_footer(text=f"📚 Educațional • nu sfat financiar • DYOR • {BEGINNER_MARKER}")
+    embed.set_footer(text=f"📚 Educațional • nu sfat financiar • Verifică riscul • {BEGINNER_MARKER}")
     return embed
 
 

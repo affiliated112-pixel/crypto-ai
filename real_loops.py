@@ -1,6 +1,6 @@
-"""REAL DATA loops — replace bot.py's fake performance/announcement/news loops.
+"""REAL DATA loops — replace bot.py's unsupported performance/announcement/news loops.
 All content is built from real tracker data + real free APIs. No hardcoded
-fake stats. Required for legal safety (no false advertising).
+unsupported stats. Required for legal safety (no false advertising).
 """
 import asyncio
 import discord
@@ -39,7 +39,7 @@ async def post_legal_disclaimer(bot):
     """
     await bot.client.wait_until_ready()
     await asyncio.sleep(15)
-    MARKER = "[CRYPTO-AI-LEGAL-DISCLAIMER-v1]"
+    MARKER = "[CRYPTO-SIGNALS-LEGAL-DISCLAIMER-v1]"
     try:
         ch = await _get_channel(bot, "ANNOUNCEMENTS_CHANNEL")
         if ch is None:
@@ -58,7 +58,7 @@ async def post_legal_disclaimer(bot):
             title="⚖️ LEGAL DISCLAIMER — Please Read Before Using Signals",
             description=(
                 "**🇬🇧 ENGLISH**\n\n"
-                "This Discord server and the Crypto AI Bot are an **educational and "
+                "This Discord server and the Crypto Signals Bot are an **educational and "
                 "informational tool only**. Nothing posted here is financial advice, "
                 "investment advice, or a recommendation to buy or sell any asset.\n\n"
                 "**Key points you must understand:**\n"
@@ -69,7 +69,7 @@ async def post_legal_disclaimer(bot):
                 "future results.\n"
                 "• 💸 Cryptocurrency trading is **highly volatile and risky** — you can "
                 "lose all the money you invest.\n"
-                "• 🧠 Always **do your own research (DYOR)** before making any trade.\n"
+                "• 📋 Always **do your own research (Review risk before acting)** before making any trade.\n"
                 "• 🛑 **Use Stop Loss** on every trade. Risk only what you can afford "
                 "to lose (1–2% of portfolio per trade is a common rule).\n"
                 "• 🚫 The bot operator(s) are **not licensed financial advisors** and "
@@ -87,7 +87,7 @@ async def post_legal_disclaimer(bot):
             title="⚖️ DISCLAIMER LEGAL — Citește înainte de a folosi semnalele",
             description=(
                 "**🇷🇴 ROMÂNĂ**\n\n"
-                "Acest server Discord și Crypto AI Bot sunt un **instrument educațional "
+                "Acest server Discord și Crypto Signals Bot sunt un **instrument educațional "
                 "și informațional**. Nimic din ce e postat aici nu reprezintă sfat "
                 "financiar, sfat de investiție sau recomandare de a cumpăra sau vinde "
                 "vreun activ.\n\n"
@@ -99,7 +99,7 @@ async def post_legal_disclaimer(bot):
                 "prezice rezultate viitoare.\n"
                 "• 💸 Tranzacționarea cripto este **extrem de volatilă și riscantă** — "
                 "poți pierde toți banii investiți.\n"
-                "• 🧠 Fă-ți **întotdeauna propria cercetare (DYOR)** înainte de a face "
+                "• 📋 Fă-ți **întotdeauna propria cercetare (Review risk before acting)** înainte de a face "
                 "vreun trade.\n"
                 "• 🛑 **Folosește Stop Loss** la fiecare tranzacție. Riscă doar bani "
                 "pe care îți poți permite să-i pierzi (1–2% din portofoliu per trade).\n"
@@ -138,13 +138,13 @@ async def real_performance_loop(bot, interval=86400):
                 s7 = tracker.compute_stats(days=7)  # last 7d
 
                 if s.get("total", 0) == 0 and s7.get("total", 0) == 0:
-                    # No signals yet — honest, no fake
+                    # No signals yet — honest, no unsupported
                     embed = discord.Embed(
                         title="📊 Daily Performance — No signals yet",
                         description=(
                             "⏳ Bot is still gathering signals. Real stats will appear here "
                             "once we have closed trades.\n\n"
-                            "🔍 All data is real — no fake numbers, no marketing fluff."
+                            "🔍 All data is real — tracked data only, no marketing fluff."
                         ),
                         color=0x95A5A6,
                         timestamp=datetime.now(timezone.utc),
@@ -243,7 +243,7 @@ async def real_market_news_loop(bot, interval=1800):
         await asyncio.sleep(interval)
 
 async def real_announcement_loop(bot, interval=86400):
-    """Honest announcements — NO fake 87% win rate claims.
+    """Honest announcements — NO unsupported 87% win rate claims.
     First item is always the LEGAL DISCLAIMER so it cycles into view daily.
     """
     await bot.client.wait_until_ready()
@@ -254,11 +254,11 @@ async def real_announcement_loop(bot, interval=86400):
             "🇬🇧 This bot is an **educational tool only**. Signals are algorithmic "
             "opinions based on technical indicators — **NOT financial advice**. "
             "Past performance does not predict future results. Crypto is volatile — "
-            "you can lose money. Always DYOR and use Stop Loss.\n\n"
+            "you can lose money. Always Review risk before acting and use Stop Loss.\n\n"
             "🇷🇴 Acest bot este un **instrument educațional**. Semnalele sunt opinii "
             "algoritmice bazate pe indicatori tehnici — **NU e sfat financiar**. "
             "Performanța trecută nu garantează rezultate viitoare. Crypto e volatil — "
-            "poți pierde bani. Fă-ți DYOR și folosește Stop Loss."
+            "poți pierde bani. Fă-ți Review risk before acting și folosește Stop Loss."
         ),
         (
             "💡 How to use signals safely / Cum să folosești semnalele în siguranță",
@@ -268,7 +268,7 @@ async def real_announcement_loop(bot, interval=86400):
             "ÎNTOTDEAUNA pune Stop Loss înainte de intrare. Maxim 1–2% portofoliu per trade."
         ),
         (
-            "🔍 Live public data — no fake stats / Date live publice, fără statistici inventate",
+            "🔍 Live public data — no unsupported stats / Date live publice, fără statistici inventate",
             "🇬🇧 All signals are calculated from live Binance candles using RSI, MACD, "
             "Bollinger Bands, EMA, VWAP, ADX, Stochastic. Smart filter uses Fear & Greed, "
             "real news sentiment, cross-exchange validation. Use `/stats` to see real win rate.\n\n"
@@ -293,7 +293,7 @@ async def real_announcement_loop(bot, interval=86400):
                     color=0x3498DB,
                     timestamp=datetime.now(timezone.utc),
                 )
-                embed.set_footer(text="📚 Educational only • Live public data • DYOR • Not financial advice")
+                embed.set_footer(text="📚 Educational only • Live public data • Review risk before acting • Not financial advice")
                 await ch.send(embed=embed)
             i += 1
         except Exception as e:

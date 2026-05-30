@@ -171,7 +171,7 @@ def _coingecko_news(limit: int = 10) -> list[dict]:
         log.debug(f"[news] CoinGecko error: {e}")
         return []
 
-# ─── DETECTIE SENTIMENT (simplu, fara AI) ────────────────────────────────────
+# ─── DETECTIE SENTIMENT (simplu, din surse publice) ────────────────────────────────────
 _BULL_WORDS = {"surge", "rally", "bull", "gain", "soar", "rise", "ath", "pump",
                "breakout", "adoption", "buy", "green", "recover", "climb", "high"}
 _BEAR_WORDS = {"crash", "drop", "fall", "bear", "dump", "plunge", "sell", "red",
@@ -290,7 +290,7 @@ def _fresh_news_for_sentiment(limit: int) -> list[dict]:
 def aggregate_sentiment(limit: int = 12, reddit_limit: int = 15) -> dict:
     """Return a transparent real sentiment snapshot from live headlines/posts.
 
-    No generated counts and no AI summaries: only fetched RSS/CoinGecko headlines
+    No generated counts or unsupported summaries: only fetched RSS/CoinGecko headlines
     plus Reddit public JSON posts when Reddit responds.
     """
     try:

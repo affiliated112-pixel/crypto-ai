@@ -28,7 +28,7 @@ def register(tree, client):
     @tree.command(name="help", description="📖 List all commands grouped by category")
     async def slash_help(interaction: discord.Interaction):
         embed = discord.Embed(
-            title="🤖 Crypto Signals Bot — Commands",
+            title="Crypto Signals Bot — Commands",
             description="Type `/` in Discord to run a command. Stats and signals use tracked/live public data only.",
             color=0x5865F2,
             timestamp=datetime.now(timezone.utc),
@@ -83,7 +83,7 @@ def register(tree, client):
         )
 
         embed.add_field(
-            name="🧠 News, Sentiment & Flows",
+            name="📋 News, Sentiment & Flows",
             value=(
                 "`/news` · `/sentiment` · `/whales` · `/stables`"
             ),
@@ -114,7 +114,7 @@ def register(tree, client):
         )
 
         embed.set_footer(
-            text="Educational only — not financial advice. No guaranteed profit. DYOR.",
+            text="Educational only — not financial advice. No guaranteed profit. Review risk before acting.",
             icon_url="https://cdn-icons-png.flaticon.com/512/2331/2331970.png",
         )
         await interaction.response.send_message(embed=embed)

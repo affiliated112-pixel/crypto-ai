@@ -1,9 +1,9 @@
 """vip_analysis.py — Enhanced VIP deep signal engine.
 
 Differences vs FREE:
-  FREE  → 6 coins | 1 timeframe (5m) | TP1 only | no chart | no AI | no MTF
+  FREE  → 6 coins | 1 timeframe (5m) | TP1 only | no chart | no extended rationale | no MTF
   VIP   → 30 coins | 3 timeframes (5m+15m+1h) | TP1+TP2+TP3 | 4-panel chart |
-           AI analysis | Fibonacci | Ichimoku | Smart Score | Sector tag |
+           Technical rationale | Fibonacci | Ichimoku | Smart Score | Sector tag |
            Entry strategy | Position sizing advice
 
 This module is imported by bot_extended.py and starts the VIP loop independently
@@ -413,9 +413,9 @@ def build_vip_deep_embed(
         embed.add_field(name="🎯 Strategie Intrare 🇷🇴", value=strat_ro, inline=False)
         embed.add_field(name="\u200b", value="━━━━━━━━━━━━━━━━━━━━━━━━━━━━", inline=False)
 
-    # ── AI Analysis ───────────────────────────────────────────────────────
+    # ── Technical Rationale ───────────────────────────────────────────────────────
     embed.add_field(
-        name="🧠 AI Analysis",
+        name="📋 Technical Rationale",
         value=ai_text or "_Analysis unavailable — all data shown above_",
         inline=False,
     )
@@ -501,7 +501,7 @@ async def vip_deep_signal_loop(client, vip_ch_id: int, free_ch_id: int, interval
                         print(f"  [VIP] {symbol}: SKIP (SmartScore={smart_val} < 35)", flush=True)
                         continue
 
-                    # ── AI Analysis ───────────────────────────────────────
+                    # ── Technical Rationale ───────────────────────────────────────
                     ai_text = bot.ai_analysis(sig, price, rsi, symbol)
 
                     # ── Chart ─────────────────────────────────────────────

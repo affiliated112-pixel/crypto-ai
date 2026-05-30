@@ -502,13 +502,13 @@ async def _get_or_create_channel(client: discord.Client) -> Optional[discord.Tex
         try:
             ch = await guild.create_text_channel(
                 "auto-trader",
-                topic="🤖 Canal privat auto-trading | Comenzi: /trade_status /trade_pnl /trade_stop",
+                topic="⚙️ Canal privat auto-trading | Comenzi: /trade_status /trade_pnl /trade_stop",
                 overwrites=overwrites,
             )
             _channel = ch
             log.info(f"[auto_trade] canal creat: #{ch.name} ({ch.id})")
             await ch.send(
-                "🤖 **Auto-Trader activat!**\n\n"
+                "⚙️ **Auto-Trader activat!**\n\n"
                 f"Mod: **{'📝 PAPER' if PAPER_MODE else ('🧪 TESTNET' if TESTNET else '🚀 LIVE')}**\n"
                 f"Risk per trade: **{_get_setting('risk_pct', str(RISK_PCT))}%**\n"
                 f"Max trades simultane: **{_get_setting('max_trades', str(MAX_TRADES))}**\n"

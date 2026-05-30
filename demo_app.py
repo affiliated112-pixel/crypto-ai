@@ -403,7 +403,7 @@ class MainAppView(ui.View):
             content=(
                 f"🎉 **Bine ai venit la Demo Trading, {interaction.user.display_name}!**\n"
                 f"Ai primit `$5.00` virtuali. Botul începe să tranzacționeze automat "
-                f"la următorul semnal BUY/SELL! 🤖\n"
+                f"la următorul semnal BUY/SELL! ⚙️\n"
                 f"Urmărește portofelul tău mai jos 👇"
             ),
             embed=embed,

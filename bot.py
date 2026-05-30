@@ -34,6 +34,8 @@ from pathlib import Path
 import db
 import signal_engine
 import market_data
+import reliable_send
+import runtime_state
 try:
     import coins_config as _coins_config
 except Exception:
@@ -125,7 +127,7 @@ def _print_token_help(reason: str) -> None:
 
 TOKEN = _require_discord_token()
 
-# AI API Keys (opțional — Railway Variables)
+# Analysis provider API Keys (opțional — Railway Variables)
 GROQ_API_KEY       = _env("GROQ_API_KEY")
 COHERE_API_KEY     = _env("COHERE_API_KEY")
 OPENROUTER_API_KEY = _env("OPENROUTER_API_KEY")
@@ -771,6 +773,7 @@ def _register_optional_command_modules():
         ("commands_stats", "register", (tree, client)),
         ("commands_help", "register", (tree, client)),
         ("commands_admin", "register", (tree, client)),
+        ("commands_reliability", "register", (tree, client)),
         ("commands_paper", "register", (tree,)),
         ("coin_ticket", "register_commands", (tree,)),
         ("on_demand", "register_commands", (tree,)),
@@ -808,7 +811,7 @@ async def _send_tracker_alert(event, record, extra):
 
 
 def _start_real_background_extras():
-    """Start real-data background helpers once; never posts fake stats."""
+    """Start real-data background helpers once; never posts unsupported stats."""
     global _extra_tasks_started
     if _extra_tasks_started:
         return
@@ -845,7 +848,7 @@ def _signal_levels(price: float, signal: str, ind: dict | None = None) -> dict:
         return signal_engine.compute_levels(price, signal, price * 0.018, 0.018)
 
 
-def _record_real_signal(symbol: str, signal: str, price: float, rsi: float, confidence: str, ind: dict | None = None, tier: str = "free"):
+def _record_real_signal(symbol: str, signal: str, price: float, rsi: float, confidence: str, ind: dict | None = None, tier: str = "free", signal_id: str | None = None):
     """Persist a sent signal to SQLite + real outcome trackers."""
     levels = _signal_levels(price, signal, ind)
     try:
@@ -861,13 +864,18 @@ def _record_real_signal(symbol: str, signal: str, price: float, rsi: float, conf
         score, quality = None, confidence
     try:
         import tracker
-        tracker.record_signal(symbol, signal, float(price), score=score, quality=quality or confidence, levels=levels)
+        tracker.record_signal(symbol, signal, float(price), score=score, quality=quality or confidence, levels=levels, tier=tier, signal_id=signal_id)
     except Exception as e:
         print(f"[tracker] record error: {e}", flush=True)
     try:
+        if signal_id:
+            db.open_signal_result(signal_id, tier, symbol, signal, float(price), levels, meta={"score": score, "quality": quality or confidence})
+    except Exception as e:
+        print(f"[db] result open error: {e}", flush=True)
+    try:
         import signal_results
         atr = (ind or {}).get("atr") or price * 0.018
-        signal_results.register_signal(symbol, signal, float(price), float(atr), int(score or 0), tier=tier, levels=levels)
+        signal_results.register_signal(symbol, signal, float(price), float(atr), int(score or 0), tier=tier, levels=levels, signal_id=signal_id)
     except Exception as e:
         print(f"[results] register error: {e}", flush=True)
 
@@ -901,21 +909,113 @@ def _record_real_signal(symbol: str, signal: str, price: float, rsi: float, conf
 
     return levels
 
+
+def _candidate_rr(price: float, signal: str, ind: dict | None) -> float:
+    try:
+        atr = (ind or {}).get("atr") or price * 0.018
+        atr_pct = atr / price if price else 0.018
+        return signal_engine.compute_rr(float(price), signal, float(atr), float(atr_pct))
+    except Exception:
+        return 0.0
+
+
+def _signal_meta(symbol: str, signal: str, price: float, rsi: float | None, conf: str | None, score: int | None, ind: dict | None, tier: str) -> dict:
+    levels = _signal_levels(price, signal, ind)
+    return {
+        "symbol": symbol, "side": signal, "tier": tier, "entry": float(price or 0),
+        "rsi": float(rsi or 0), "confidence": conf, "score": score,
+        "rr": _candidate_rr(float(price or 0), signal, ind),
+        "levels": levels,
+        "source": market_data.last_source(symbol),
+    }
+
+
+def _record_block_decision(symbol: str, signal: str | None, tier: str, score: int | None, reason: str, price: float | None = None, rsi: float | None = None, ind: dict | None = None):
+    try:
+        rr = _candidate_rr(float(price or (ind or {}).get("price") or 0), signal or "", ind) if signal else None
+        db.record_blocked_signal(symbol, signal, tier, score, reason, rr=rr, meta={
+            "price": price, "rsi": rsi, "source": market_data.last_source(symbol),
+        })
+    except Exception as e:
+        print(f"[db] block log error: {e}", flush=True)
+
+
+async def _send_signal_tier(channel, tier: str, symbol: str, signal: str, price: float, rsi: float, conf: str, ind: dict, embed: discord.Embed, df=None, score: int | None = None) -> tuple[bool, str | None, str | None]:
+    """Reserve, send through the queue, and mark DB/budget only on success."""
+    tier = (tier or "free").lower()
+    cool_h = signal_engine.FREE_COOLDOWN_H if tier == "free" else signal_engine.VIP_COOLDOWN_H
+    rr = _candidate_rr(float(price), signal, ind)
+    meta = _signal_meta(symbol, signal, price, rsi, conf, score, ind, tier)
+
+    if channel is None:
+        reason = "Discord channel unavailable"
+        _record_block_decision(symbol, signal, tier, score, reason, price, rsi, ind)
+        return False, None, reason
+
+    try:
+        if db.has_recent_signal(symbol, signal, tier, cool_h):
+            reason = f"Persistent cooldown active ({cool_h}h)"
+            _record_block_decision(symbol, signal, tier, score, reason, price, rsi, ind)
+            return False, None, reason
+    except Exception as e:
+        print(f"[db] cooldown check error: {e}", flush=True)
+
+    signal_id = db.build_signal_id(tier, symbol, signal, price)
+    if not db.reserve_signal(signal_id, tier, symbol, signal, float(price), score=score, rr=rr, confidence=str(conf), meta=meta):
+        reason = "Duplicate signal reservation"
+        _record_block_decision(symbol, signal, tier, score, reason, price, rsi, ind)
+        return False, signal_id, reason
+
+    chart_path = None
+    if tier == "vip":
+        try:
+            chart_path = generate_chart(df, symbol, signal) if df is not None else None
+        except Exception as chart_err:
+            print(f"  [chart] failed for {symbol}: {chart_err}", flush=True)
+            chart_path = None
+
+    try:
+        msg = await reliable_send.send_queued(channel, embed=embed, file_path=chart_path, signal_id=signal_id, tier=tier)
+        if msg:
+            db.mark_signal_sent(signal_id, getattr(channel, "id", None), getattr(msg, "id", None), meta={"sent_ok": True})
+            if tier == "free":
+                signal_engine._consume_free()
+            else:
+                signal_engine._consume_vip()
+            try:
+                signal_engine._record_sent(symbol, signal)
+            except Exception:
+                pass
+            runtime_state.mark_signal_sent(symbol, signal, tier, signal_id)
+            return True, signal_id, None
+        db.mark_signal_failed(signal_id, "Discord send returned no message")
+        return False, signal_id, "Discord send failed"
+    except Exception as send_err:
+        db.mark_signal_failed(signal_id, str(send_err))
+        runtime_state.mark_error(send_err)
+        return False, signal_id, str(send_err)
+    finally:
+        try:
+            if chart_path and os.path.exists(chart_path):
+                os.remove(chart_path)
+        except Exception:
+            pass
+
 # =========================
-# AI ANALYSIS — optional API providers + local fallback
+# TECHNICAL RATIONALE — optional API providers + local fallback
 # =========================
 
-# AI Analysis — redirected to ai_analysis.py (unified engine)
+# Trade Rationale — redirected to ai_analysis.py (unified engine)
 try:
     import ai_analysis as _ai_mod
     def ai_analysis(signal, price, rsi, symbol, ind=None):
         return _ai_mod.ai_analysis(signal, price, rsi, symbol, ind=ind)
-    print("[ai] ai_analysis.py loaded — DeepSeek/Groq/Gemini/Mistral/Cohere/Local", flush=True)
+    print("[analysis] ai_analysis.py loaded — provider/local rationale available", flush=True)
 except ImportError:
     def ai_analysis(signal, price, rsi, symbol, ind=None):
         coin = symbol.replace('USDT','')
-        return f"🤖 {signal} {coin} @ ${price:.4f} | RSI {rsi:.1f}"
-    print("[ai] ai_analysis.py not found — using minimal fallback", flush=True)
+        return f"{signal} {coin} @ ${price:.4f} | RSI {rsi:.1f} | Technical setup based on current indicators."
+    print("[analysis] ai_analysis.py not found — using minimal fallback", flush=True)
 
 # =========================
 # CHART GENERATION (3 PANELS, DARK PRO)
@@ -1140,7 +1240,7 @@ def build_free_embed(symbol, signal, price, rsi, confidence, ind=None):
     )
     if logo:
         embed.set_thumbnail(url=logo)
-    embed.set_author(name="🤖 Crypto Signals Bot — Free Signal", icon_url=BOT_ICON)
+    embed.set_author(name="Crypto Signals Bot — Free Signal", icon_url=BOT_ICON)
 
     embed.add_field(name="📊 RSI (14)", value=rsi_bar(rsi), inline=False)
     embed.add_field(name="⭐ Confidence / Calitate", value=conf_stars(confidence), inline=False)
@@ -1152,11 +1252,11 @@ def build_free_embed(symbol, signal, price, rsi, confidence, ind=None):
     embed.add_field(name="🇬🇧 Steps",      value=steps_en,  inline=True)
     embed.add_field(name="🇷🇴 Pași",       value=steps_ro,  inline=True)
     embed.add_field(
-        name="💎 VIP adds TP2/TP3 + deeper analysis",
-        value="🇬🇧 VIP gets full ATR levels, chart and AI explanation.\n🇷🇴 VIP primește niveluri ATR complete, grafic și explicație AI.",
+        name="💎 VIP adds TP2/TP3 + full technical plan",
+        value="🇬🇧 VIP gets full ATR levels, chart and technical rationale.\n🇷🇴 VIP primește niveluri ATR complete, grafic și plan tehnic complet.",
         inline=False
     )
-    embed.set_footer(text=f"Real market data only · No guaranteed profit · {DISCLAIMER_RO}")
+    embed.set_footer(text=f"Market data · Manage risk · {DISCLAIMER_RO}")
     return embed
 
 def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_15m=False, ind=None):
@@ -1252,8 +1352,8 @@ def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_1
     embed.add_field(name="\u200b", value=SEP, inline=False)
 
     embed.add_field(
-        name="🧠 AI Analysis / Analiza AI",
-        value=ai_text if ai_text else "_Analysis unavailable — data only mode_",
+        name="📋 Trade Rationale / Raționament",
+        value=ai_text if ai_text else "_Rationale unavailable — data only mode_",
         inline=False
     )
     embed.add_field(name="\u200b", value=SEP, inline=False)
@@ -1265,7 +1365,7 @@ def build_vip_embed(symbol, signal, price, rsi, confidence, ai_text, confirmed_1
         ),
         inline=False
     )
-    embed.set_footer(text=f"Real market data only · No guaranteed profit · Crypto Signals Bot VIP  •  {DISCLAIMER_RO}")
+    embed.set_footer(text=f"Market data · Manage risk · Crypto Signals Bot VIP  •  {DISCLAIMER_RO}")
     return embed
 
 def build_price_embed(symbol):
@@ -1569,9 +1669,9 @@ TRADING_TIPS = [
     ("📦 Volumul confirmă mișcarea / Volume Confirms Moves",
      "🇷🇴 O creștere de preț **cu volum mare** = mișcare reală. Cu volum mic = posibil falsă.\n"
      "💡 Volumul = câți oameni cumpără/vând. Mai mult volum = mai multă convingere.\n"
-     "🇬🇧 Price rise **with high volume** = real move. Low volume = possibly fake breakout."),
+     "🇬🇧 Price rise **with high volume** = real move. Low volume = possibly unsupported breakout."),
 
-    ("🧠 Emoțiile în trading / Emotions in Trading",
+    ("📋 Emoțiile în trading / Emotions in Trading",
      "🇷🇴 **Frica** te face să vinzi prea devreme. **Lăcomia** te face să ții prea mult.\n"
      "Soluția: **setează TP și SL** înainte să intri și **respectă-le** indiferent ce simți.\n"
      "🇬🇧 **Fear** makes you sell too early. **Greed** makes you hold too long.\n"
@@ -2402,7 +2502,7 @@ async def slash_firsttrade(interaction: discord.Interaction, step: int = 0):
                  "🚀 **Ești gata să faci primul trade!**\n"
                  "Folosește `/signals_explained` pentru a vedea cum arată exact un semnal.\n"
                  "Folosește `/risk` pentru a calcula dimensiunea poziției.\n"
-                 "💎 Upgrade la **VIP** pentru semnale cu TP1+TP2+TP3+SL și analiză AI!\n\n"
+                 "💎 Upgrade la **VIP** pentru semnale cu TP1+TP2+TP3+SL și raționament tehnic!\n\n"
                  "🚀 **You're ready for your first trade!**\n"
                  "Use `/signals_explained` to see exactly how a signal looks.\n"
                  "Use `/risk` to calculate your position size."),
@@ -2988,7 +3088,7 @@ async def slash_journal(
         )
 
 
-@tree.command(name="sentiment", description="🧠 Full market sentiment: Fear&Greed + RSI + trend overview")
+@tree.command(name="sentiment", description="📋 Full market sentiment: Fear&Greed + RSI + trend overview")
 async def slash_sentiment(interaction: discord.Interaction):
     await interaction.response.defer()
     try:
@@ -3037,7 +3137,7 @@ async def slash_sentiment(interaction: discord.Interaction):
                ("🔴 Bearish" if avg_rsi > 55 and (isinstance(fg_score, int) and fg_score < 50) else "🟡 Mixed")
 
     embed = discord.Embed(
-        title="🧠 Market Sentiment / Sentiment Piață",
+        title="📋 Market Sentiment / Sentiment Piață",
         description=(
             f"🇬🇧 Combined view: Fear & Greed + RSI + price momentum\n"
             f"🇷🇴 Vedere combinată: Fear & Greed + RSI + momentum preț"
@@ -3181,7 +3281,7 @@ async def slash_analysis(interaction: discord.Interaction, coin: str = "BTCUSDT"
     embed.add_field(name="\u200b", value=SEP, inline=False)
     embed.add_field(
         name="⚠️ Disclaimer",
-        value="🇬🇧 Not financial advice. DYOR.\n🇷🇴 Nu e sfat financiar. Fă propriile cercetări.",
+        value="🇬🇧 Not financial advice. Review risk before acting.\n🇷🇴 Nu e sfat financiar. Fă propriile cercetări.",
         inline=False
     )
     embed.set_footer(text=f"Crypto Signals Bot  •  5 indicators  •  Binance + Messari + CoinGecko")
@@ -4776,7 +4876,7 @@ async def on_member_join(member):
             timestamp=utcnow()
         )
         dm_embed.set_thumbnail(url=BOT_ICON)
-        dm_embed.set_author(name="🤖 Crypto Signals Bot", icon_url=BOT_ICON)
+        dm_embed.set_author(name="Crypto Signals Bot", icon_url=BOT_ICON)
 
         dm_embed.add_field(
             name="🎯 Pasul 1 — Înțelege cum funcționează",
@@ -4844,6 +4944,8 @@ async def on_member_join(member):
 async def on_ready():
     global _background_tasks_started
     print(f"Bot online: {client.user}")
+    runtime_state.mark_discord_ready(True)
+    await reliable_send.start()
     _register_optional_command_modules()
     await tree.sync()
     print("Slash commands synced.")
@@ -5118,10 +5220,10 @@ async def on_ready():
 
     vip_embed = discord.Embed(title="💎 GET VIP ACCESS", color=discord.Color.gold())
     vip_embed.add_field(name="🇬🇧 What you get",
-        value="✅ Signals with TP1 / TP2 / SL\n✅ RSI + MACD charts attached\n✅ AI trade analysis\n"
+        value="✅ Signals with TP1 / TP2 / SL\n✅ RSI + MACD charts attached\n✅ technical trade rationale\n"
               "✅ Multi-timeframe confirmation\n✅ On-demand `/signal` command\n✅ Price alerts via DM", inline=True)
     vip_embed.add_field(name="🇷🇴 Ce primești",
-        value="✅ Semnale cu TP1 / TP2 / SL\n✅ Grafice RSI + MACD atașate\n✅ Analiză AI per semnal\n"
+        value="✅ Semnale cu TP1 / TP2 / SL\n✅ Grafice RSI + MACD atașate\n✅ Raționament tehnic per semnal\n"
               "✅ Confirmare multi-timeframe\n✅ Comanda `/signal` on-demand\n✅ Alerte de preț via DM", inline=True)
     vip_embed.add_field(name="📩 Contact",
         value="👤 <@1426677891269267618>\n👤 <@1463583046962909410>", inline=False)
@@ -5169,6 +5271,7 @@ async def signal_loop():
             scan_symbols = _dedupe_symbols(ALL_SYMBOLS or SYMBOLS)
             free_scan_symbols = set(FREE_SCAN_SYMBOLS or SYMBOLS)
             print(f"[SIGNAL LOOP] Checking {len(scan_symbols)} coins at {utcnow().strftime('%H:%M:%S')} (FREE={len(free_scan_symbols)}, VIP={len(scan_symbols)})")
+            runtime_state.mark_scan_start(len(scan_symbols))
 
             # [IMPROVEMENT 4] Update BTC macro cache first (used by all altcoins below)
             _btc_df  = get_data("BTCUSDT")
@@ -5179,6 +5282,8 @@ async def signal_loop():
 
             for symbol in scan_symbols:
                 df  = get_data(symbol)
+                if df is not None:
+                    runtime_state.mark_market_fetch(symbol, market_data.last_source(symbol))
                 sig, price, rsi, conf = get_signal_v2(df)
                 ind = calc_indicators(df)
 
@@ -5225,6 +5330,8 @@ async def signal_loop():
                     cooldown_elapsed = last_ts is None or (utcnow() - last_ts).total_seconds() >= SIGNAL_COOLDOWN_HOURS * 3600
                     if last_sig == sig and not cooldown_elapsed:
                         print(f"  [COOLDOWN] {sig} for {symbol} blocked — same direction, cooldown not elapsed")
+                        _record_block_decision(symbol, sig, "free", None, "Legacy cooldown active", price, rsi, ind)
+                        _record_block_decision(symbol, sig, "vip", None, "Legacy cooldown active", price, rsi, ind)
                         continue
 
                     # Second: honest quality gates. Loop checks use real indicators
@@ -5257,51 +5364,45 @@ async def signal_loop():
 
                     if not (free_allow or vip_allow):
                         print(f"  [QUALITY] {symbol} {sig} blocked — FREE: {free_reason} | VIP: {vip_reason}", flush=True)
+                        _record_block_decision(symbol, sig, "free", free_score, free_reason, price, rsi, ind)
+                        _record_block_decision(symbol, sig, "vip", vip_score, vip_reason, price, rsi, ind)
                         continue
                     if not ((free_ch and free_allow) or (vip_ch and vip_allow)):
                         print(f"  [CHANNEL] {symbol} {sig} approved but no enabled Discord channel is available", flush=True)
+                        if free_allow and not free_ch:
+                            _record_block_decision(symbol, sig, "free", free_score, "Discord FREE channel unavailable", price, rsi, ind)
+                        if vip_allow and not vip_ch:
+                            _record_block_decision(symbol, sig, "vip", vip_score, "Discord VIP channel unavailable", price, rsi, ind)
                         continue
 
                     print(f"  >>> APPROVED {sig} signal for {symbol} (conf={conf}, free_score={free_score}, vip_score={vip_score})")
                     ai_text    = ai_analysis(sig, price, rsi, symbol)
-                    chart      = None
                     f_embed    = build_free_embed(symbol, sig, price, rsi, conf, ind=ind) if free_allow else None
                     v_embed    = build_vip_embed(symbol, sig, price, rsi, conf, ai_text, confirmed, ind=ind) if vip_allow else None
                     sent_tiers: list[str] = []
+                    sent_ids: dict[str, str] = {}
 
-                    if free_ch and free_allow and f_embed:
-                        try:
-                            await free_ch.send(embed=f_embed)
+                    if free_allow and f_embed:
+                        ok, sid, reason = await _send_signal_tier(
+                            free_ch, "free", symbol, sig, price, rsi, conf, ind, f_embed, df=df, score=free_score
+                        )
+                        if ok:
                             sent_tiers.append("free")
-                            try:
-                                signal_engine._consume_free()
-                            except Exception:
-                                pass
-                        except Exception as send_err:
-                            print(f"  [SEND] FREE failed for {symbol} {sig}: {send_err}", flush=True)
+                            if sid:
+                                sent_ids["free"] = sid
+                        else:
+                            print(f"  [SEND] FREE failed/blocked for {symbol} {sig}: {reason}", flush=True)
 
-                    if vip_ch and vip_allow and v_embed:
-                        try:
-                            chart = generate_chart(df, symbol, sig)
-                        except Exception as chart_err:
-                            chart = None
-                            print(f"  [chart] failed for {symbol}: {chart_err}", flush=True)
-                        try:
-                            if chart:
-                                try:
-                                    await vip_ch.send(embed=v_embed, file=discord.File(chart))
-                                except Exception as file_send_err:
-                                    print(f"  [SEND] VIP chart/file failed for {symbol} {sig}: {file_send_err}; retrying embed only", flush=True)
-                                    await vip_ch.send(embed=v_embed)
-                            else:
-                                await vip_ch.send(embed=v_embed)
+                    if vip_allow and v_embed:
+                        ok, sid, reason = await _send_signal_tier(
+                            vip_ch, "vip", symbol, sig, price, rsi, conf, ind, v_embed, df=df, score=vip_score
+                        )
+                        if ok:
                             sent_tiers.append("vip")
-                            try:
-                                signal_engine._consume_vip()
-                            except Exception:
-                                pass
-                        except Exception as send_err:
-                            print(f"  [SEND] VIP failed for {symbol} {sig}: {send_err}", flush=True)
+                            if sid:
+                                sent_ids["vip"] = sid
+                        else:
+                            print(f"  [SEND] VIP failed/blocked for {symbol} {sig}: {reason}", flush=True)
 
                     if sent_tiers:
                         LAST_SIGNAL[symbol] = sig
@@ -5324,29 +5425,22 @@ async def signal_loop():
                         })
                         if len(SIGNAL_HISTORY) > 500:
                             SIGNAL_HISTORY.pop(0)
-                        try:
-                            signal_engine._record_sent(symbol, sig)
-                        except Exception:
-                            pass
                         record_tier = "vip" if "vip" in sent_tiers else "free"
-                        _record_real_signal(symbol, sig, price, rsi, f"{conf} · score {sent_score}/100", ind=ind, tier=record_tier)
+                        record_signal_id = sent_ids.get(record_tier) or next(iter(sent_ids.values()), None)
+                        _record_real_signal(symbol, sig, price, rsi, f"{conf} · score {sent_score}/100", ind=ind, tier=record_tier, signal_id=record_signal_id)
                         print(f"  [SENT] {symbol} {sig} -> {', '.join(sent_tiers).upper()} (score={sent_score}/100)", flush=True)
                     else:
                         print(f"  [SEND] {symbol} {sig} approved but Discord send failed; not recording cooldown/budget.", flush=True)
-
-                    try:
-                        if chart and os.path.exists(chart):
-                            os.remove(chart)
-                    except Exception:
-                        pass
                 elif sig:
                     print(f"  [DATA] {sig} for {symbol} blocked — missing price or indicator data")
 
 
+            runtime_state.mark_scan_finished()
             print(f"[SIGNAL LOOP] Done. Next check in {SIGNAL_LOOP_SECONDS // 60} min.")
             await asyncio.sleep(SIGNAL_LOOP_SECONDS)
 
         except discord.HTTPException as e:
+            runtime_state.mark_error(e)
             print(f"[SIGNAL LOOP ERROR] HTTP {e.status}: {e}", flush=True)
             if e.status == 401:
                 print(
@@ -5357,6 +5451,7 @@ async def signal_loop():
                 print("[SIGNAL LOOP] Missing channel permissions — check bot role on Discord.", flush=True)
             await asyncio.sleep(120)
         except Exception as e:
+            runtime_state.mark_error(e)
             print(f"[SIGNAL LOOP ERROR] {e}", flush=True)
             if alerts_ch and client.is_ready():
                 try:
@@ -5569,7 +5664,7 @@ async def market_news_loop():
 # =========================
 
 async def announcement_loop():
-    """REAL educational announcements — zero fake performance claims."""
+    """REAL educational announcements — zero unsupported performance claims."""
     await client.wait_until_ready()
     channel = await fetch_message_channel(ANNOUNCEMENTS_CHANNEL, "ANNOUNCEMENTS")
     items = [
@@ -5592,8 +5687,8 @@ async def announcement_loop():
          "• Pune Stop Loss ÎNAINTE de a cumpăra\n"
          "• Riscă max 1-2% din portofoliu per trade\n"
          "• Nu investi bani pe care nu îți permiți să-i pierzi\n"
-         "• Fă-ți propria cercetare (DYOR)\n\n"
-         "🇬🇧 **GOLDEN RULES:** Set SL before buying • Risk max 1-2% • Never invest what you can't lose • DYOR"),
+         "• Fă-ți propria cercetare (Review risk before acting)\n\n"
+         "🇬🇧 **GOLDEN RULES:** Set SL before buying • Risk max 1-2% • Never invest what you can't lose • Review risk before acting"),
     ]
     i = 0
     while True:
@@ -5949,7 +6044,7 @@ async def on_message(message: discord.Message):
                 await message.delete()
                 warn_msg = await message.channel.send(
                     embed=discord.Embed(
-                        title="🤖 Anti-Spam — Mute Automat",
+                        title="⚙️ Anti-Spam — Mute Automat",
                         description=(
                             f"🇷🇴 {message.author.mention} a fost **mutat automat 5 minute** pentru spam.\n"
                             "🇬🇧 User was **auto-muted for 5 minutes** for spamming."
@@ -6521,11 +6616,11 @@ async def status_update_loop():
                 btc_str = f"`${btc_info['price']:,.2f}` (`{btc_info['change']:+.2f}%`)" if btc_info else "N/A"
                 eth_str = f"`${eth_info['price']:,.2f}` (`{eth_info['change']:+.2f}%`)" if eth_info else "N/A"
                 embed = discord.Embed(
-                    title="🤖 Bot Status — Online & Monitoring",
+                    title="⚙️ Bot Status — Online & Monitoring",
                     description=f"🟢 **All systems operational** | Updated: `{utcnow().strftime('%H:%M UTC')}`",
                     color=0x22c55e, timestamp=utcnow()
                 )
-                embed.set_author(name="🤖 Crypto Signals Bot — Status", icon_url=BOT_ICON)
+                embed.set_author(name="Crypto Signals Bot — Status", icon_url=BOT_ICON)
                 embed.add_field(name="₿ BTC",  value=btc_str, inline=True)
                 embed.add_field(name="Ξ ETH",  value=eth_str, inline=True)
                 embed.add_field(name="😱 F&G",  value=f"`{fg_score}/100` {fg_class}", inline=True)
@@ -6671,7 +6766,8 @@ class _PingHandler(BaseHTTPRequestHandler):
         path = (self.path or "/").split("?")[0]
         if path in ("/health", "/healthz"):
             ready = client.is_ready()
-            payload = {
+            runtime_state.mark_discord_ready(ready)
+            payload = runtime_state.health_payload({
                 "status": "ok" if ready else "degraded",
                 "discord_ready": ready,
                 "bot": str(client.user) if client.user else None,
@@ -6680,10 +6776,12 @@ class _PingHandler(BaseHTTPRequestHandler):
                 "data_sources": ["Binance Global/US", "CoinGecko fallback"],
                 "signals": SIGNAL_STATS,
                 "signal_settings": signal_engine.settings_summary(),
+                "budget": signal_engine.budget_status(),
+                "discord_send_queue": reliable_send.stats(),
                 "free_symbols": SYMBOLS,
                 "vip_scan_count": len(ALL_SYMBOLS),
                 "utc": utcnow().isoformat(),
-            }
+            })
             body = json.dumps(payload).encode("utf-8")
             # Return 503 when Discord is not connected so Railway restarts the container.
             # /healthz stays 200 to allow a lightweight liveness probe that does not trigger restarts.
@@ -6699,7 +6797,7 @@ class _PingHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
         uptime_info = (
-            f"<h2 style='color:#00c896;font-family:monospace'>🤖 Crypto Signals Bot — ONLINE</h2>"
+            f"<h2 style='color:#00c896;font-family:monospace'>Crypto Signals Bot — ONLINE</h2>"
             f"<p>Signals: BUY <b>{SIGNAL_STATS['BUY']}</b> | SELL <b>{SIGNAL_STATS['SELL']}</b> | Total <b>{SIGNAL_STATS['total']}</b></p>"
             f"<p>Discord: <b>{'connected' if client.is_ready() else 'starting...'}</b></p>"
             f"<p style='color:#8b949e'>Last ping: {utcnow().strftime('%d %b %Y %H:%M:%S UTC')}</p>"

@@ -78,7 +78,7 @@ def register(tree, client, replace_existing: bool = False):
             await interaction.followup.send(embed=embed)
 
     if enabled("sentiment"):
-        @tree.command(name="sentiment", description="🧠 Real market sentiment from news + public Reddit when available")
+        @tree.command(name="sentiment", description="📋 Real market sentiment from news + public Reddit when available")
         async def slash_sentiment(interaction: discord.Interaction):
             await interaction.response.defer()
             s = news.aggregate_sentiment()

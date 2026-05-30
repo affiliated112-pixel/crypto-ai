@@ -29,6 +29,11 @@ from typing import Optional
 
 import coins_config
 
+try:
+    import db
+except Exception:  # DB is optional for offline tests
+    db = None
+
 # ─── BTC MACRO FILTER STATE ───────────────────────────────────────────────────
 # Tracks BTC price over time to detect 4h macro drops
 _btc_price_history: list[tuple[float, float]] = []   # [(unix_ts, price), ...]
@@ -88,6 +93,7 @@ _MODE_DEFAULTS = {
     },
 }
 _DEFAULTS = _MODE_DEFAULTS.get(_SIGNAL_MODE, _MODE_DEFAULTS["balanced"])
+_USE_DB_STATE = os.environ.get("USE_PERSISTENT_STATE", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 # ─── DAILY BUDGET (max signals per day) ──────────────────────────────────────
 FREE_MAX_PER_DAY    = _int_env("FREE_MAX_PER_DAY", _DEFAULTS["FREE_MAX_PER_DAY"])
@@ -135,26 +141,57 @@ _btc_cache:         dict            = {"signal": None, "ts": 0, "price": None}
 def _today() -> date:
     return datetime.now(timezone.utc).date()
 
+def _db_daily_count(tier: str) -> int | None:
+    if not (_USE_DB_STATE and db):
+        return None
+    try:
+        return int(db.get_daily_count(tier))
+    except Exception as e:
+        print(f"[signal_engine] DB daily count failed: {e}", flush=True)
+        return None
+
 def free_budget_ok() -> bool:
+    count = _db_daily_count("free")
+    if count is not None:
+        return count < FREE_MAX_PER_DAY
     return _daily_free.get(_today(), 0) < FREE_MAX_PER_DAY
 
 def vip_budget_ok() -> bool:
+    count = _db_daily_count("vip")
+    if count is not None:
+        return count < VIP_MAX_PER_DAY
     return _daily_vip.get(_today(), 0) < VIP_MAX_PER_DAY
 
 def _consume_free():
     d = _today()
     _daily_free[d] = _daily_free.get(d, 0) + 1
+    if _USE_DB_STATE and db:
+        try:
+            db.increment_daily_counter("free")
+        except Exception as e:
+            print(f"[signal_engine] DB FREE counter failed: {e}", flush=True)
 
 def _consume_vip():
     d = _today()
     _daily_vip[d] = _daily_vip.get(d, 0) + 1
+    if _USE_DB_STATE and db:
+        try:
+            db.increment_daily_counter("vip")
+        except Exception as e:
+            print(f"[signal_engine] DB VIP counter failed: {e}", flush=True)
 
 def budget_status() -> dict:
     d = _today()
+    free_sent = _db_daily_count("free")
+    vip_sent = _db_daily_count("vip")
+    if free_sent is None:
+        free_sent = _daily_free.get(d, 0)
+    if vip_sent is None:
+        vip_sent = _daily_vip.get(d, 0)
     return {
-        "free_sent":  _daily_free.get(d, 0),
+        "free_sent":  free_sent,
         "free_max":   FREE_MAX_PER_DAY,
-        "vip_sent":   _daily_vip.get(d, 0),
+        "vip_sent":   vip_sent,
         "vip_max":    VIP_MAX_PER_DAY,
         "free_ok":    free_budget_ok(),
         "vip_ok":     vip_budget_ok(),
@@ -527,6 +564,12 @@ def evaluate_candidate(
     # Cooldown
     if not _cooldown_ok(symbol, signal, cool_h):
         return None
+    if _USE_DB_STATE and db:
+        try:
+            if db.has_recent_signal(symbol, signal, tier, cool_h):
+                return None
+        except Exception as e:
+            print(f"[signal_engine] DB cooldown check failed: {e}", flush=True)
 
     # Quality score
     score = compute_quality_score(ind, signal, mtf if tier == "vip" else None)
@@ -598,6 +641,12 @@ def approve_and_record(candidate: dict) -> bool:
     cool_h = FREE_COOLDOWN_H if tier == "free" else VIP_COOLDOWN_H
     if not _cooldown_ok(symbol, signal, cool_h):
         return False
+    if _USE_DB_STATE and db:
+        try:
+            if db.has_recent_signal(symbol, signal, tier, cool_h):
+                return False
+        except Exception as e:
+            print(f"[signal_engine] DB cooldown check failed: {e}", flush=True)
 
     # Approve
     _record_sent(symbol, signal)
@@ -647,6 +696,12 @@ def check_signal_quality(
 
     if not _cooldown_ok(symbol, signal, cool_h):
         return False, 0, f"Cooldown active for {symbol} {signal} ({cool_h}h)", None
+    if _USE_DB_STATE and db:
+        try:
+            if db.has_recent_signal(symbol, signal, tier, cool_h):
+                return False, 0, f"Persistent cooldown active for {symbol} {signal} ({cool_h}h)", None
+        except Exception as e:
+            print(f"[signal_engine] DB cooldown check failed: {e}", flush=True)
 
     score = compute_quality_score(ind, signal, mtf if tier == "vip" else None)
     if score < min_score:
@@ -768,6 +823,12 @@ def _gate_decision(
 
     if not _cooldown_ok(symbol, signal, cool_h):
         return False, 0, f"Cooldown active for {symbol} {signal} ({cool_h}h)."
+    if _USE_DB_STATE and db:
+        try:
+            if db.has_recent_signal(symbol, signal, tier, cool_h):
+                return False, 0, f"Persistent cooldown active for {symbol} {signal} ({cool_h}h)."
+        except Exception as e:
+            print(f"[signal_engine] DB cooldown check failed: {e}", flush=True)
 
     score = compute_quality_score(ind, signal, mtf if tier == "vip" else None)
     if score < min_score:

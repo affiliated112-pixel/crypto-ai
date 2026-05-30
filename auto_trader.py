@@ -762,7 +762,7 @@ async def on_ready():
         mode  = "PAPER 📝" if not BINANCE_OK else ("TESTNET 🧪" if TESTNET else "LIVE 🚀")
         coins = len(ALL_SYMBOLS)
         await dm.send(
-            f"🤖 **Auto-Trader pornit!**\n\n"
+            f"⚙️ **Auto-Trader pornit!**\n\n"
             f"Mod: **{mode}**\n"
             f"Monede scanate: **{coins}** (toate VIP)\n"
             f"Risk per trade: **{RISK_PERCENT}%**\n"
@@ -825,7 +825,7 @@ def _only_trader():
 async def cmd_help(ctx):
     await ctx.send(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "🤖 **Auto-Trader — Comenzi DM**\n"
+        "⚙️ **Auto-Trader — Comenzi DM**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "**`!status`**      — portofoliu + trades deschise\n"
         "**`!pnl`**         — profit/pierdere total\n"

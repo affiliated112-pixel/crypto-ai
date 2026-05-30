@@ -1,4 +1,4 @@
-# Real-data / no-fake cleanup
+# Real-data / real-data cleanup
 
 This patch keeps the existing Discord bot structure and modules, but tightens the project so it avoids invented numbers, duplicate registrations, and weak automatic signals.
 
@@ -21,12 +21,12 @@ This patch keeps the existing Discord bot structure and modules, but tightens th
 - Added transparent news/sentiment behavior:
   - public RSS / CoinGecko news
   - public Reddit JSON only when available
-  - no invented Reddit counts, win rates, or AI-generated fake summaries
+  - no invented Reddit counts, win rates, or unsupported generated summaries
 - Updated signal embeds to safer, more honest wording:
   - “setup” instead of guaranteed entry
   - educational disclaimer
   - 1–2% risk language
-  - no guaranteed profit or fake probability claims
+  - no guaranteed profit or unsupported probability claims
 - Updated `bot_extended.py` into a safe wrapper:
   - no duplicate signal loops
   - optional demo/paper/auto-trade extras via env flags

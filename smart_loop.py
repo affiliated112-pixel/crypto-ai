@@ -138,7 +138,7 @@ async def _send_free(client, ch_id, symbol, sig, price, rsi, conf, ind, score):
 async def _send_vip(client, vip_ch_id, symbol, sig, price, rsi, conf, ind, score, mtf):
     vip_ch = await _get_ch(client, vip_ch_id)
 
-    # Build AI text
+    # Build rationale text
     ai_text = bot.ai_analysis(sig, price, rsi, symbol)
 
     # MTF summary
