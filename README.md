@@ -27,6 +27,7 @@ ALERTS_CHANNEL=ID_CANAL_ALERTS
 PERFORMANCE_CHANNEL=ID_CANAL_PERFORMANCE
 MARKET_NEWS_CHANNEL=ID_CANAL_NEWS
 WELCOME_CHANNEL=ID_CANAL_WELCOME
+FAQ_CHANNEL=ID_CANAL_FAQ
 RULES_CHANNEL=ID_CANAL_RULES
 HOWTO_CHANNEL=ID_CANAL_HOWTO
 GET_VIP_CHANNEL=ID_CANAL_GET_VIP
@@ -41,6 +42,17 @@ După deploy, rulează în Discord:
 /admin_channels
 /admin_status
 ```
+
+## RCB Discord branding
+
+Varianta modificată include:
+
+- logo local în `assets/rcb-logo.png` folosit în embed-uri când botul are permisiunea **Attach Files**;
+- `WELCOME_CHANNEL=1509522341074567208` cu welcome hub și mesaj de join mai curat;
+- `FAQ_CHANNEL=1509524421675847913` cu FAQ în engleză și română;
+- `MARKET_NEWS_CHANNEL=1509522484594999387` cu Market News Desk, sentiment tags și surse mai selective: CoinDesk, The Block, Decrypt, Cointelegraph, Bitcoin Magazine, CryptoSlate și CoinGecko.
+
+La pornire botul postează mesajele statice o singură dată, verificând ultimele mesaje din canal ca să nu facă spam.
 
 ## PostgreSQL / persistent DB
 

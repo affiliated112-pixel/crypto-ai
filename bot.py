@@ -162,6 +162,7 @@ def _int_env(name: str, default: int) -> int:
 WELCOME_CHANNEL       = _channel_id("WELCOME_CHANNEL",       1509522341074567208)
 RULES_CHANNEL         = _channel_id("RULES_CHANNEL",         1509522358812151938)
 HOWTO_CHANNEL         = _channel_id("HOWTO_CHANNEL",         1509522378072391801)
+FAQ_CHANNEL           = _channel_id("FAQ_CHANNEL",           1509524421675847913)
 STATUS_CHANNEL        = _channel_id("STATUS_CHANNEL",        1509524579364638830)
 ALERTS_CHANNEL        = _channel_id("ALERTS_CHANNEL",        1509524631332196422)
 ANNOUNCEMENTS_CHANNEL = _channel_id("ANNOUNCEMENTS_CHANNEL", 1509524177730666588)
@@ -275,7 +276,7 @@ COIN_LOGOS = {
     "AVAXUSDT": "https://assets.coingecko.com/coins/images/12559/small/Avalanche_Circle_RedWhite_Trans.png",
     "DOGEUSDT": "https://assets.coingecko.com/coins/images/5/small/dogecoin.png",
 }
-BOT_ICON = "https://assets.coingecko.com/coins/images/1/small/bitcoin.png"
+BOT_ICON = _env("RCB_LOGO_URL", "https://assets.coingecko.com/coins/images/1/small/bitcoin.png")
 SEP  = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 SEP2 = "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬"
 
@@ -345,12 +346,50 @@ async def fetch_message_channel(channel_id: int, label: str = ""):
     return ch
 
 
+async def send_rcb_embed(channel, embed, *, author_name=None, content=None):
+    """Send an embed with the local RCB logo when available."""
+    try:
+        import community_embeds
+        await community_embeds.send_branded(
+            channel,
+            embed,
+            author_name=author_name,
+            content=content,
+        )
+    except Exception as e:
+        print(f"[branding] fallback send: {e}", flush=True)
+        await channel.send(content=content, embed=embed)
+
+
+async def setup_rcb_static_channels():
+    """Create polished Welcome, FAQ and Market News intro posts once."""
+    try:
+        import community_embeds
+        await community_embeds.setup_static_channels(
+            client=client,
+            fetch_message_channel=fetch_message_channel,
+            channel_ids={
+                "welcome": WELCOME_CHANNEL,
+                "rules": RULES_CHANNEL,
+                "howto": HOWTO_CHANNEL,
+                "faq": FAQ_CHANNEL,
+                "market_news": MARKET_NEWS_CHANNEL,
+                "get_vip": GET_VIP_CHANNEL,
+            },
+        )
+    except Exception as e:
+        print(f"[branding] static channel setup skipped: {e}", flush=True)
+
+
 async def verify_signal_channels():
     names = {
         "FREE_SIGNALS": FREE_SIGNALS_CHANNEL,
         "VIP_SIGNALS": VIP_SIGNALS_CHANNEL,
         "ALERTS": ALERTS_CHANNEL,
         "STATUS": STATUS_CHANNEL,
+        "WELCOME": WELCOME_CHANNEL,
+        "FAQ": FAQ_CHANNEL,
+        "MARKET_NEWS": MARKET_NEWS_CHANNEL,
     }
     for label, cid in names.items():
         ch = await fetch_message_channel(cid, label)
@@ -4828,43 +4867,45 @@ async def on_member_join(member):
     # ── Welcome message in channel ──
     ch = await fetch_message_channel(WELCOME_CHANNEL, "WELCOME")
     if ch:
-        embed = discord.Embed(
-            title=f"👋 Bun venit / Welcome, {member.display_name}!",
-            description=(
-                "🇷🇴 **Bun venit pe serverul Crypto Signals!** 🎉\n"
-                "Suntem o comunitate de traderi care primesc semnale BUY/SELL în timp real pentru BTC, ETH, SOL și BNB.\n\n"
-                f"📜 Reguli → <#{RULES_CHANNEL}>\n"
-                f"📊 Cum funcționează → <#{HOWTO_CHANNEL}>\n"
-                f"💎 Obține VIP → <#{GET_VIP_CHANNEL}>\n\n"
-                "🇬🇧 **Welcome to Crypto Signals server!** 🎉\n"
-                "We're a trading community receiving real-time BUY/SELL signals for BTC, ETH, SOL & BNB.\n\n"
-                f"📜 Rules → <#{RULES_CHANNEL}>\n"
-                f"📊 How to use → <#{HOWTO_CHANNEL}>\n"
-                f"💎 Get VIP → <#{GET_VIP_CHANNEL}>"
-            ),
-            color=discord.Color.gold(),
-            timestamp=utcnow()
-        )
-        embed.set_thumbnail(url=member.display_avatar.url)
-        embed.add_field(
-            name="🚀 Ești nou? Începe aici! / New here? Start here!",
-            value=(
-                "`/firsttrade` — Ghid complet: de la zero la primul trade\n"
-                "`/binance` — Cum folosești Binance pas cu pas\n"
-                "`/signals_explained` — Ce înseamnă fiecare câmp din semnal\n"
-                "`/tutorial 1` — Ce este un semnal BUY/SELL\n"
-                "`/glossary` — Dicționar termeni crypto\n"
-                "`/help` — Toate comenzile disponibile"
-            ),
-            inline=False
-        )
-        embed.set_footer(text="Crypto Signals Bot  •  Nu este sfat financiar")
-        await ch.send(embed=embed)
+        try:
+            import community_embeds
+            embed = community_embeds.build_member_welcome_embed(
+                member,
+                {
+                    "welcome": WELCOME_CHANNEL,
+                    "rules": RULES_CHANNEL,
+                    "howto": HOWTO_CHANNEL,
+                    "faq": FAQ_CHANNEL,
+                    "market_news": MARKET_NEWS_CHANNEL,
+                    "get_vip": GET_VIP_CHANNEL,
+                },
+            )
+            await community_embeds.send_branded(ch, embed, keep_thumbnail=True)
+        except Exception as e:
+            print(f"[welcome] branded welcome fallback: {e}", flush=True)
+            embed = discord.Embed(
+                title=f"👋 Bun venit / Welcome, {member.display_name}!",
+                description=(
+                    "🇷🇴 **Bun venit pe serverul RCB Crypto AI!** 🎉\n"
+                    "Urmărește semnalele, știrile și ghidurile cu risk management clar.\n\n"
+                    f"📜 Reguli → <#{RULES_CHANNEL}>\n"
+                    f"❓ FAQ → <#{FAQ_CHANNEL}>\n"
+                    f"📊 Cum funcționează → <#{HOWTO_CHANNEL}>\n"
+                    f"💎 Obține VIP → <#{GET_VIP_CHANNEL}>\n\n"
+                    "🇬🇧 **Welcome to RCB Crypto AI!** 🎉\n"
+                    "Follow signals, market news and guides with clear risk management."
+                ),
+                color=discord.Color.gold(),
+                timestamp=utcnow(),
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.set_footer(text="RCB Crypto AI • Nu este sfat financiar • Not financial advice")
+            await ch.send(embed=embed)
 
     # ── Automatic DM with beginner starter guide ──
     try:
         dm_embed = discord.Embed(
-            title=f"👋 Salut {member.display_name}! Bun venit pe Crypto Signals!",
+            title=f"👋 Salut {member.display_name}! Bun venit pe RCB Crypto AI!",
             description=(
                 "🇷🇴 Îți mulțumim că te-ai alăturat comunității noastre de trading!\n"
                 "Am pregătit un **ghid rapid** ca să începi cu dreptul.\n\n"
@@ -4876,7 +4917,7 @@ async def on_member_join(member):
             timestamp=utcnow()
         )
         dm_embed.set_thumbnail(url=BOT_ICON)
-        dm_embed.set_author(name="Crypto Signals Bot", icon_url=BOT_ICON)
+        dm_embed.set_author(name="RCB Crypto AI — Starter Guide", icon_url=BOT_ICON)
 
         dm_embed.add_field(
             name="🎯 Pasul 1 — Înțelege cum funcționează",
@@ -4931,8 +4972,8 @@ async def on_member_join(member):
             ),
             inline=False
         )
-        dm_embed.set_footer(text="Crypto Signals Bot  •  Nu este sfat financiar  •  Not financial advice")
-        await member.send(embed=dm_embed)
+        dm_embed.set_footer(text="RCB Crypto AI  •  Nu este sfat financiar  •  Not financial advice")
+        await send_rcb_embed(member, dm_embed)
     except discord.Forbidden:
         pass  # User has DMs disabled — skip silently
 
@@ -4963,7 +5004,7 @@ async def on_ready():
             color=discord.Color.green(),
             timestamp=utcnow()
         )
-        await status_ch.send(embed=embed)
+        await send_rcb_embed(status_ch, embed)
 
     async def send_once(channel, embed, keyword):
         """Send embed only if bot hasn't posted it before (checks last 30 msgs)."""
@@ -4974,7 +5015,9 @@ async def on_ready():
                 title = msg.embeds[0].title or ""
                 if keyword.lower() in title.lower():
                     return
-        await channel.send(embed=embed)
+        await send_rcb_embed(channel, embed)
+
+    await setup_rcb_static_channels()
 
     rules_embed = discord.Embed(title="📜 Rules / Reguli", color=discord.Color.orange())
     rules_embed.add_field(name="🇬🇧 Rules",
@@ -5488,7 +5531,7 @@ async def fear_greed_loop():
             embed.add_field(name="🇷🇴 Interpretare",   value=interp_ro, inline=False)
             embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             if channel:
-                await channel.send(embed=embed)
+                await send_rcb_embed(channel, embed)
         except Exception:
             pass
         await asyncio.sleep(3600)
@@ -5528,7 +5571,7 @@ async def top_movers_loop():
                 inline=False)
             embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
             if channel:
-                await channel.send(embed=embed)
+                await send_rcb_embed(channel, embed)
         except Exception:
             pass
 
@@ -5620,7 +5663,7 @@ async def neutral_market_loop():
 # =========================
 
 async def market_news_loop():
-    """REAL news from public RSS/CoinGecko sources — no hardcoded text."""
+    """REAL news from reliable public crypto sources — no hardcoded text."""
     await client.wait_until_ready()
     channel = await fetch_message_channel(MARKET_NEWS_CHANNEL, "MARKET_NEWS")
     posted_links = set()
@@ -5635,26 +5678,37 @@ async def market_news_loop():
                     posted_links.add(item["link"])
                     if len(posted_links) > 100:
                         posted_links = set(list(posted_links)[-50:])
-                    mood   = item.get("mood", "⚪")
-                    mood_l = "🟢 Bullish" if mood == "🟢" else ("🔴 Bearish" if mood == "🔴" else "⚪ Neutral")
-                    color  = discord.Color.green() if mood == "🟢" else (discord.Color.red() if mood == "🔴" else discord.Color.light_grey())
-                    title  = item.get("title", "Crypto News")[:200]
-                    source = item.get("source", "Multi-source RSS")
-                    emoji  = item.get("emoji", "📰")
-                    summary = item.get("summary", "")
-                    embed  = discord.Embed(
-                        title=f"{emoji} {title}",
-                        url=item["link"],
-                        description=(
-                            f"{mood_l} | Sursă: **{source}**\n"
-                            + (f"\n{summary}\n" if summary else "")
-                            + f"\n🔗 [Citește articolul complet]({item['link']})"
-                        ),
-                        color=color,
-                        timestamp=utcnow()
-                    )
-                    embed.set_footer(text=f"📡 Date reale: CoinDesk · Decrypt · CryptoSlate · CoinGecko  |  {DISCLAIMER_EN}")
-                    await channel.send(embed=embed)
+                    try:
+                        import community_embeds
+                        embed = community_embeds.build_market_news_embed(
+                            item,
+                            disclaimer_en=DISCLAIMER_EN,
+                            disclaimer_ro=DISCLAIMER_RO,
+                        )
+                        embed.timestamp = utcnow()
+                        await community_embeds.send_branded(channel, embed, author_name="RCB Crypto AI • Market News")
+                    except Exception as e:
+                        print(f"[market_news] branded embed fallback: {e}", flush=True)
+                        mood   = item.get("mood", "⚪")
+                        mood_l = "🟢 Bullish" if mood == "🟢" else ("🔴 Bearish" if mood == "🔴" else "⚪ Neutral")
+                        color  = discord.Color.green() if mood == "🟢" else (discord.Color.red() if mood == "🔴" else discord.Color.light_grey())
+                        title  = item.get("title", "Crypto News")[:200]
+                        source = item.get("source", "Multi-source RSS")
+                        emoji  = item.get("emoji", "📰")
+                        summary = item.get("summary", "")
+                        embed  = discord.Embed(
+                            title=f"{emoji} {title}",
+                            url=item["link"],
+                            description=(
+                                f"{mood_l} | Sursă: **{source}**\n"
+                                + (f"\n{summary}\n" if summary else "")
+                                + f"\n🔗 [Citește articolul complet]({item['link']})"
+                            ),
+                            color=color,
+                            timestamp=utcnow()
+                        )
+                        embed.set_footer(text=f"📡 Date reale: CoinDesk · The Block · Decrypt · Cointelegraph · CryptoSlate · CoinGecko  |  {DISCLAIMER_EN}")
+                        await send_rcb_embed(channel, embed)
         except Exception as e:
             print(f"[market_news] error: {e}", flush=True)
         await asyncio.sleep(1800)
@@ -5697,7 +5751,7 @@ async def announcement_loop():
                 title, desc = items[i % len(items)]
                 embed = discord.Embed(title=title, description=desc, color=discord.Color.blue(), timestamp=utcnow())
                 embed.set_footer(text=f"📚 Educational only  |  {DISCLAIMER_EN}")
-                await channel.send(embed=embed)
+                await send_rcb_embed(channel, embed)
             i += 1
         except Exception as e:
             print(f"[announcement] error: {e}", flush=True)
@@ -5774,7 +5828,7 @@ async def performance_loop():
                     )
 
                 embed.set_footer(text=f"📡 Surse: Binance Global/US + CoinGecko fallback  |  {DISCLAIMER_EN}")
-                await channel.send(embed=embed)
+                await send_rcb_embed(channel, embed)
         except Exception as e:
             print(f"[performance] error: {e}", flush=True)
         await asyncio.sleep(86400)
@@ -5805,7 +5859,7 @@ async def crash_alert():
                         color=discord.Color.red(), timestamp=utcnow()
                     )
                     embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
-                    await channel.send(embed=embed)
+                    await send_rcb_embed(channel, embed)
         except Exception as e:
             print(f"Crash alert error: {e}")
         await asyncio.sleep(600)
@@ -5855,7 +5909,7 @@ async def pump_alert_loop():
                             embed.add_field(name="📊 RSI", value=rsi_bar(ind["rsi"]), inline=False)
                         embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
                         if channel:
-                            await channel.send(embed=embed)
+                            await send_rcb_embed(channel, embed)
 
                 # DUMP: -3% in ~50 min (more granular than crash_alert)
                 elif pump_pct < -3:
@@ -5880,7 +5934,7 @@ async def pump_alert_loop():
                             embed.set_thumbnail(url=logo)
                         embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
                         if channel:
-                            await channel.send(embed=embed)
+                            await send_rcb_embed(channel, embed)
 
         except Exception as e:
             print(f"Pump alert error: {e}")
@@ -5922,7 +5976,7 @@ async def education_loop():
                     inline=False
                 )
                 embed.set_footer(text=f"Crypto Signals Bot  •  Tip {index+1}/{len(TRADING_TIPS)}  •  {DISCLAIMER_RO}")
-                await channel.send(embed=embed)
+                await send_rcb_embed(channel, embed)
                 index += 1
         except Exception:
             pass
@@ -6515,7 +6569,7 @@ async def weekly_recap_loop():
                 )
                 embed.set_footer(text=f"🇬🇧 {DISCLAIMER_EN}  |  🇷🇴 {DISCLAIMER_RO}")
                 if channel:
-                    await channel.send(embed=embed)
+                    await send_rcb_embed(channel, embed)
                 await asyncio.sleep(3600)
             else:
                 await asyncio.sleep(1800)
@@ -6591,7 +6645,7 @@ async def daily_summary_loop():
                 )
                 embed.set_footer(text=f"Crypto Signals Bot  •  {DISCLAIMER_RO}")
                 if channel:
-                    await channel.send(embed=embed)
+                    await send_rcb_embed(channel, embed)
                 await asyncio.sleep(3600)
             else:
                 await asyncio.sleep(60)
@@ -6640,7 +6694,7 @@ async def status_update_loop():
                     inline=True
                 )
                 embed.set_footer(text=f"Crypto Signals Bot  •  Next update in 30 min")
-                await channel.send(embed=embed)
+                await send_rcb_embed(channel, embed)
         except Exception as e:
             print(f"Status update error: {e}")
         await asyncio.sleep(1800)

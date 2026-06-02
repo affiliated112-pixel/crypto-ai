@@ -44,6 +44,7 @@ ALERTS_CHANNEL=ID_CANAL_ALERTS
 PERFORMANCE_CHANNEL=ID_CANAL_PERFORMANCE
 MARKET_NEWS_CHANNEL=ID_CANAL_NEWS
 WELCOME_CHANNEL=ID_CANAL_WELCOME
+FAQ_CHANNEL=ID_CANAL_FAQ
 RULES_CHANNEL=ID_CANAL_RULES
 HOWTO_CHANNEL=ID_CANAL_HOWTO
 GET_VIP_CHANNEL=ID_CANAL_GET_VIP
@@ -51,6 +52,19 @@ ANNOUNCEMENTS_CHANNEL=ID_CANAL_ANNOUNCEMENTS
 ```
 
 Cum iei ID-ul: Discord → User Settings → Advanced → **Developer Mode ON** → click dreapta pe canal → **Copy Channel ID**.
+
+### Canalele custom RCB
+
+În build-ul acesta sunt setate deja default-urile cerute:
+
+```env
+WELCOME_CHANNEL=1509522341074567208
+MARKET_NEWS_CHANNEL=1509522484594999387
+FAQ_CHANNEL=1509524421675847913
+BRAND_NAME=RCB Crypto AI
+```
+
+Botul folosește `assets/rcb-logo.png` în embed-uri. Asigură permisiuni: **Send Messages**, **Embed Links**, **Attach Files**, **Read Message History**.
 
 ## 5. Discord permissions
 

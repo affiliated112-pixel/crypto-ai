@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover
 
 CHANNEL_ENV_NAMES = [
     "FREE_SIGNALS_CHANNEL", "VIP_SIGNALS_CHANNEL", "ALERTS_CHANNEL", "STATUS_CHANNEL",
-    "WELCOME_CHANNEL", "RULES_CHANNEL", "HOWTO_CHANNEL", "ANNOUNCEMENTS_CHANNEL",
+    "WELCOME_CHANNEL", "RULES_CHANNEL", "HOWTO_CHANNEL", "FAQ_CHANNEL", "ANNOUNCEMENTS_CHANNEL",
     "MARKET_NEWS_CHANNEL", "GET_VIP_CHANNEL", "PERFORMANCE_CHANNEL",
 ]
 
@@ -250,8 +250,14 @@ def register(tree: app_commands.CommandTree, client: discord.Client):
             return
         lines = []
         import os
+        import json
+        from pathlib import Path
+        try:
+            cfg = json.loads(Path(__file__).with_name("config.json").read_text(encoding="utf-8"))
+        except Exception:
+            cfg = {}
         for name in CHANNEL_ENV_NAMES:
-            raw = os.environ.get(name, "")
+            raw = os.environ.get(name, "") or str(cfg.get(name, "") or "")
             if not raw:
                 lines.append(f"`{name}` not set")
                 continue

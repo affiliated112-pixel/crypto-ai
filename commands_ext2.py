@@ -52,7 +52,7 @@ def register(tree, client, replace_existing: bool = False):
         return True
 
     if enabled("news"):
-        @tree.command(name="news", description="📰 Latest crypto news from public RSS/CoinGecko sources")
+        @tree.command(name="news", description="📰 Latest crypto news from reliable public crypto sources")
         async def slash_news(interaction: discord.Interaction):
             await interaction.response.defer()
             items = news.fetch_news(limit=10)
@@ -70,11 +70,11 @@ def register(tree, client, replace_existing: bool = False):
                 else:
                     lines.append(f"{mood} **{title}** — `{source}`")
             embed = discord.Embed(
-                title="📰 Latest Crypto News",
+                title="📰 RCB Market News — Reliable Sources",
                 description="\n\n".join(lines) if lines else "No fresh news returned right now.",
                 color=0x3498DB,
             )
-            embed.set_footer(text="Mood is keyword-based: 🟢 bullish · 🔴 bearish · ⚪ neutral · Sources: public RSS/CoinGecko")
+            embed.set_footer(text="Mood is keyword-based: 🟢 bullish · 🔴 bearish · ⚪ neutral · Sources: CoinDesk/The Block/Decrypt/Cointelegraph/CryptoSlate/CoinGecko")
             await interaction.followup.send(embed=embed)
 
     if enabled("sentiment"):

@@ -1,248 +1,252 @@
 """
-news.py — Crypto news din surse 100% gratuite, fara API key.
+news.py — real crypto news from public, no-key sources.
 
-Surse folosite (toate public, fara autentificare):
-  1. CoinDesk RSS       — cel mai mare site de crypto news
-  2. Decrypt RSS        — stiri crypto independente
-  3. Bitcoin Magazine   — focus BTC/macro
-  4. CryptoSlate RSS    — altcoin + DeFi news
-  5. CoinGecko News API — agregator gratuit, fara key
-  6. Reddit r/CryptoCurrency — sentiment comunitate
-
-Toate sursele sunt rotite automat. Daca una pica, celelalte raman.
+Reliable-source mode for the RCB Discord market-news channel.
+The bot pulls from established public feeds and labels the source in every
+Discord embed. If one feed is unavailable, the next one is used automatically.
 """
 
 from __future__ import annotations
 
-import re
-import time
+import html
+import json
 import logging
-from typing import Optional
-from urllib.request import urlopen, Request
+import re
 from urllib.error import URLError
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
 log = logging.getLogger("news")
 
-# ─── SURSE RSS (fara API key) ────────────────────────────────────────────────
+# Public, no-key feeds. Keep this list conservative: fewer but stronger sources.
 RSS_SOURCES = [
     {
-        "name":  "CoinDesk",
-        "url":   "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "name": "CoinDesk",
+        "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
         "emoji": "📰",
+        "reliability": "established crypto newsroom",
     },
     {
-        "name":  "Decrypt",
-        "url":   "https://decrypt.co/feed",
-        "emoji": "🔓",
-    },
-    {
-        "name":  "Bitcoin Magazine",
-        "url":   "https://bitcoinmagazine.com/.rss/full/",
-        "emoji": "₿",
-    },
-    {
-        "name":  "CryptoSlate",
-        "url":   "https://cryptoslate.com/feed/",
-        "emoji": "📊",
-    },
-    {
-        "name":  "CryptoPotato",
-        "url":   "https://cryptopotato.com/feed/",
-        "emoji": "🥔",
-    },
-    {
-        "name":  "The Block",
-        "url":   "https://www.theblock.co/rss.xml",
+        "name": "The Block",
+        "url": "https://www.theblock.co/rss.xml",
         "emoji": "🧱",
+        "reliability": "research + institutional crypto coverage",
     },
     {
-        "name":  "NewsBTC",
-        "url":   "https://www.newsbtc.com/feed/",
+        "name": "Decrypt",
+        "url": "https://decrypt.co/feed",
+        "emoji": "🔓",
+        "reliability": "independent crypto newsroom",
+    },
+    {
+        "name": "Cointelegraph",
+        "url": "https://cointelegraph.com/rss",
         "emoji": "📡",
+        "reliability": "major crypto newsroom",
+    },
+    {
+        "name": "Bitcoin Magazine",
+        "url": "https://bitcoinmagazine.com/.rss/full/",
+        "emoji": "₿",
+        "reliability": "Bitcoin-focused specialist outlet",
+    },
+    {
+        "name": "CryptoSlate",
+        "url": "https://cryptoslate.com/feed/",
+        "emoji": "📊",
+        "reliability": "crypto market + sector coverage",
     },
 ]
 
-# ─── COINGECKO NEWS API (gratuit, fara key) ──────────────────────────────────
 COINGECKO_NEWS_URL = "https://api.coingecko.com/api/v3/news"
-
-# ─── CACHE intern (evita sa reposteze aceeasi stire) ─────────────────────────
 _cache_links: set[str] = set()
-_cache_max   = 200
+_cache_max = 250
 
-def _clean_html(text: str) -> str:
-    """Sterge taguri HTML dintr-un string."""
-    clean = re.sub(r"<[^>]+>", "", text or "")
-    return clean.strip()[:400]
+_BULL_WORDS = {
+    "surge", "rally", "bull", "gain", "soar", "rise", "ath", "pump",
+    "breakout", "adoption", "buy", "green", "recover", "climb", "high",
+    "approval", "inflow", "accumulate", "support", "record", "upgrade",
+}
+_BEAR_WORDS = {
+    "crash", "drop", "fall", "bear", "dump", "plunge", "sell", "red",
+    "low", "hack", "ban", "fear", "down", "warning", "collapse", "outflow",
+    "lawsuit", "exploit", "liquidation", "rejection", "risk", "probe",
+}
 
-def _user_agent_headers() -> dict:
+
+def _user_agent_headers(accept: str = "application/rss+xml, application/xml, text/xml, */*") -> dict[str, str]:
     return {
-        "User-Agent": "Mozilla/5.0 CryptoBot/2.0 (news aggregator; +https://discord.gg)",
-        "Accept":     "application/rss+xml, application/xml, text/xml, */*",
+        "User-Agent": "Mozilla/5.0 RCB-Crypto-AI/3.0 (Discord market news bot)",
+        "Accept": accept,
     }
 
-# ─── PARSARE RSS ──────────────────────────────────────────────────────────────
+
+def _clean_html(text: str, limit: int = 400) -> str:
+    clean = html.unescape(re.sub(r"<[^>]+>", " ", text or ""))
+    clean = re.sub(r"\s+", " ", clean).strip()
+    return clean[:limit]
+
+
+def _canonical_link(link: str) -> str:
+    """Remove fragments and obvious tracking query strings for dedupe."""
+    link = (link or "").strip()
+    if not link:
+        return ""
+    parts = urlsplit(link)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), "", ""))
+
+
+def _source_payload(source: dict, title: str, link: str, summary: str) -> dict:
+    return {
+        "title": _clean_html(title, 220),
+        "link": link.strip(),
+        "summary": _clean_html(summary, 320),
+        "source": source["name"],
+        "emoji": source.get("emoji", "📰"),
+        "reliability": source.get("reliability", "public crypto news feed"),
+    }
+
+
 def _parse_rss(source: dict, timeout: int = 8) -> list[dict]:
-    """
-    Fetches and parses an RSS feed.
-    Returns list of {title, link, summary, source, emoji}.
-    """
+    """Fetch and parse RSS/Atom. Returns normalized news dictionaries."""
     try:
-        req  = Request(source["url"], headers=_user_agent_headers())
+        req = Request(source["url"], headers=_user_agent_headers())
         with urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
         root = ET.fromstring(raw)
     except URLError as e:
-        log.debug(f"[news] RSS {source['name']} URLError: {e}")
+        log.debug("[news] RSS %s URLError: %s", source["name"], e)
         return []
     except ET.ParseError as e:
-        log.debug(f"[news] RSS {source['name']} ParseError: {e}")
+        log.debug("[news] RSS %s ParseError: %s", source["name"], e)
         return []
     except Exception as e:
-        log.debug(f"[news] RSS {source['name']} error: {e}")
+        log.debug("[news] RSS %s error: %s", source["name"], e)
         return []
 
-    items = []
-    # Suporta atat RSS (<channel><item>) cat si Atom (<entry>)
-    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    items: list[dict] = []
     for item in root.iter("item"):
         title = item.findtext("title", "")
-        link  = item.findtext("link", "") or item.findtext("guid", "")
-        desc  = item.findtext("description", "")
-        if not title or not link:
-            continue
-        items.append({
-            "title":   _clean_html(title)[:200],
-            "link":    link.strip(),
-            "summary": _clean_html(desc)[:300],
-            "source":  source["name"],
-            "emoji":   source["emoji"],
-        })
-    # Fallback Atom feed
+        link = item.findtext("link", "") or item.findtext("guid", "")
+        desc = item.findtext("description", "")
+        if title and link:
+            items.append(_source_payload(source, title, link, desc))
+
     if not items:
-        for entry in root.iter("{http://www.w3.org/2005/Atom}entry"):
-            title = entry.findtext("{http://www.w3.org/2005/Atom}title", "")
-            link_el = entry.find("{http://www.w3.org/2005/Atom}link")
-            link    = link_el.get("href", "") if link_el is not None else ""
-            summary = entry.findtext("{http://www.w3.org/2005/Atom}summary", "")
-            if not title or not link:
-                continue
-            items.append({
-                "title":   _clean_html(title)[:200],
-                "link":    link.strip(),
-                "summary": _clean_html(summary)[:300],
-                "source":  source["name"],
-                "emoji":   source["emoji"],
-            })
+        atom_ns = "{http://www.w3.org/2005/Atom}"
+        for entry in root.iter(f"{atom_ns}entry"):
+            title = entry.findtext(f"{atom_ns}title", "")
+            link_el = entry.find(f"{atom_ns}link")
+            link = link_el.get("href", "") if link_el is not None else ""
+            summary = entry.findtext(f"{atom_ns}summary", "")
+            if title and link:
+                items.append(_source_payload(source, title, link, summary))
     return items
 
-# ─── COINGECKO NEWS ──────────────────────────────────────────────────────────
+
 def _coingecko_news(limit: int = 10) -> list[dict]:
-    """
-    Fetches news from CoinGecko public API.
-    Free/public endpoint; failures are handled as empty results.
-    """
+    """Fetch CoinGecko public news API. Returns [] on rate limit/failure."""
     try:
-        import json
         req = Request(
             COINGECKO_NEWS_URL,
-            headers={
-                "User-Agent": "CryptoBot/2.0",
-                "Accept":     "application/json",
-            }
+            headers=_user_agent_headers("application/json, */*"),
         )
         with urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read())
+        articles = data.get("data") if isinstance(data, dict) else data
         items = []
-        for art in (data.get("data") or data)[:limit]:
+        for art in (articles or [])[:limit]:
             title = art.get("title") or art.get("name", "")
-            url   = art.get("url") or art.get("news_url", "")
+            url = art.get("url") or art.get("news_url", "")
             if not title or not url:
                 continue
             items.append({
-                "title":   title[:200],
-                "link":    url,
-                "summary": (art.get("description") or "")[:300],
-                "source":  "CoinGecko",
-                "emoji":   "🦎",
+                "title": _clean_html(title, 220),
+                "link": url,
+                "summary": _clean_html(art.get("description", ""), 320),
+                "source": "CoinGecko",
+                "emoji": "🦎",
+                "reliability": "market data/news aggregator",
             })
         return items
     except Exception as e:
-        log.debug(f"[news] CoinGecko error: {e}")
+        log.debug("[news] CoinGecko error: %s", e)
         return []
 
-# ─── DETECTIE SENTIMENT (simplu, din surse publice) ────────────────────────────────────
-_BULL_WORDS = {"surge", "rally", "bull", "gain", "soar", "rise", "ath", "pump",
-               "breakout", "adoption", "buy", "green", "recover", "climb", "high"}
-_BEAR_WORDS = {"crash", "drop", "fall", "bear", "dump", "plunge", "sell", "red",
-               "low", "hack", "ban", "fear", "down", "warning", "collapse"}
 
 def _detect_mood(title: str) -> str:
-    """Returns emoji: 🟢 bullish | 🔴 bearish | ⚪ neutral"""
-    t = title.lower()
+    t = (title or "").lower()
     bull = sum(1 for w in _BULL_WORDS if w in t)
     bear = sum(1 for w in _BEAR_WORDS if w in t)
-    if bull > bear:   return "🟢"
-    if bear > bull:   return "🔴"
+    if bull > bear:
+        return "🟢"
+    if bear > bull:
+        return "🔴"
     return "⚪"
 
-# ─── FUNCTIA PRINCIPALA ───────────────────────────────────────────────────────
-def fetch_news(limit: int = 5, source_idx: int | None = None) -> list[dict]:
-    """
-    Fetches fresh crypto news from multiple free sources.
-    Rotates through RSS sources + CoinGecko. Deduplicates by URL.
-    Returns list of {title, link, summary, source, emoji, mood}.
 
-    Args:
-        limit:      how many articles to return
-        source_idx: if set, use only that RSS source (for rotation)
+def _with_mood(item: dict) -> dict:
+    item = dict(item)
+    item["mood"] = _detect_mood((item.get("title") or "") + " " + (item.get("summary") or ""))
+    return item
+
+
+def fetch_news(limit: int = 5, source_idx: int | None = None) -> list[dict]:
+    """Fetch fresh crypto news from trusted public sources.
+
+    Returns dicts with: title, link, summary, source, emoji, reliability, mood.
+    Dedupes by canonical URL so the news channel does not repost the same link.
     """
     global _cache_links
+    limit = max(1, min(int(limit or 5), 20))
+    source_items: list[dict] = []
 
-    all_items: list[dict] = []
+    sources = [RSS_SOURCES[source_idx % len(RSS_SOURCES)]] if source_idx is not None else RSS_SOURCES
+    for src in sources:
+        # Keep several per source so the output is not dominated by one feed.
+        source_items.extend(_parse_rss(src)[: max(2, limit)])
 
-    # Incearca RSS sources
-    sources_to_try = (
-        [RSS_SOURCES[source_idx % len(RSS_SOURCES)]]
-        if source_idx is not None
-        else RSS_SOURCES
-    )
-    for src in sources_to_try:
-        items = _parse_rss(src)
-        all_items.extend(items)
-        if len(all_items) >= limit * 3:
-            break
+    if not source_items:
+        source_items = _coingecko_news(limit * 2)
 
-    # Fallback: CoinGecko daca toate RSS-urile au picat
-    if not all_items:
-        all_items = _coingecko_news(limit * 2)
-
-    # Deduplicare + filtrare cache
-    fresh = []
-    for item in all_items:
+    fresh: list[dict] = []
+    seen: set[str] = set()
+    for item in source_items:
         link = item.get("link", "")
-        if not link or link in _cache_links:
+        canonical = _canonical_link(link)
+        if not canonical or canonical in seen or canonical in _cache_links:
             continue
-        item["mood"] = _detect_mood(item["title"])
-        fresh.append(item)
-        _cache_links.add(link)
+        seen.add(canonical)
+        _cache_links.add(canonical)
+        fresh.append(_with_mood(item))
         if len(fresh) >= limit:
             break
 
-    # Curata cache-ul daca e prea mare
+    # If every candidate was already cached after a long runtime, return a small
+    # safe fallback rather than leaving the channel silent forever.
+    if not fresh:
+        for item in source_items:
+            link = item.get("link", "")
+            canonical = _canonical_link(link)
+            if not canonical or canonical in seen:
+                continue
+            seen.add(canonical)
+            fresh.append(_with_mood(item))
+            if len(fresh) >= limit:
+                break
+
     if len(_cache_links) > _cache_max:
-        _cache_links = set(list(_cache_links)[-100:])
+        _cache_links = set(list(_cache_links)[-125:])
 
     return fresh
 
-# ─── COMPATIBILITATE cu real_loops.py ───────────────────────────────────────
+
 def cryptopanic_news(limit: int = 5) -> list[dict]:
-    """Compatibility wrapper for older callers.
-    Uses current public RSS/CoinGecko sources, not CryptoPanic.
-    """
+    """Compatibility wrapper for older callers. Uses current public sources."""
     return fetch_news(limit=limit)
 
-# ─── AGREGARE SENTIMENT pentru smart_filter/commands_ext2 ───────────────────
+
 def _sentiment_score_text(text: str) -> int:
     t = (text or "").lower()
     bull = sum(1 for w in _BULL_WORDS if w in t)
@@ -253,10 +257,12 @@ def _sentiment_score_text(text: str) -> int:
 def _fetch_reddit_titles(limit: int = 15) -> list[str]:
     """Best-effort public Reddit JSON fetch. Returns [] when unavailable."""
     try:
-        import json
         req = Request(
             f"https://www.reddit.com/r/CryptoCurrency/hot.json?limit={max(1, min(limit, 50))}",
-            headers={"User-Agent": "crypto-ai-discord-bot/2.0 sentiment check", "Accept": "application/json"},
+            headers={
+                "User-Agent": "RCB-Crypto-AI/3.0 sentiment check",
+                "Accept": "application/json",
+            },
         )
         with urlopen(req, timeout=8) as resp:
             data = json.loads(resp.read())
@@ -269,7 +275,7 @@ def _fetch_reddit_titles(limit: int = 15) -> list[str]:
                 posts.append((title + " " + body).strip())
         return posts[:limit]
     except Exception as e:
-        log.debug(f"[news] Reddit sentiment unavailable: {e}")
+        log.debug("[news] Reddit sentiment unavailable: %s", e)
         return []
 
 
@@ -277,21 +283,19 @@ def _fresh_news_for_sentiment(limit: int) -> list[dict]:
     """Fetch headlines for sentiment without consuming the repost cache."""
     items: list[dict] = []
     for src in RSS_SOURCES:
-        items.extend(_parse_rss(src))
+        items.extend(_parse_rss(src)[: max(1, limit // 2)])
         if len(items) >= limit:
             break
     if not items:
         items = _coingecko_news(limit)
-    for item in items:
-        item["mood"] = _detect_mood(item.get("title", ""))
-    return items[:limit]
+    return [_with_mood(item) for item in items[:limit]]
 
 
 def aggregate_sentiment(limit: int = 12, reddit_limit: int = 15) -> dict:
-    """Return a transparent real sentiment snapshot from live headlines/posts.
+    """Transparent market sentiment from fetched headlines + public Reddit.
 
-    No generated counts or unsupported summaries: only fetched RSS/CoinGecko headlines
-    plus Reddit public JSON posts when Reddit responds.
+    No generated counts or unsupported summaries are used. All counts are based
+    on fetched titles/summaries at runtime.
     """
     try:
         items = _fresh_news_for_sentiment(limit)
@@ -335,5 +339,5 @@ def aggregate_sentiment(limit: int = 12, reddit_limit: int = 15) -> dict:
         "bullish": bullish,
         "bearish": bearish,
         "neutral": neutral,
-        "source": "multi-source RSS/CoinGecko + Reddit public JSON",
+        "source": "CoinDesk/The Block/Decrypt/Cointelegraph/Bitcoin Magazine/CryptoSlate/CoinGecko + Reddit public JSON",
     }

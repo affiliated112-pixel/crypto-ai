@@ -198,7 +198,7 @@ async def real_performance_loop(bot, interval=86400):
         await asyncio.sleep(interval)
 
 async def real_market_news_loop(bot, interval=1800):
-    """Posts REAL crypto news from public RSS/CoinGecko sources — NOT random hardcoded text."""
+    """Posts REAL crypto news from reliable public crypto sources — NOT random hardcoded text."""
     await bot.client.wait_until_ready()
     await asyncio.sleep(60)
     last_posted = set()
@@ -235,7 +235,7 @@ async def real_market_news_loop(bot, interval=1800):
                         timestamp=datetime.now(timezone.utc),
                     )
                     embed.set_footer(
-                        text="📡 CoinDesk · Decrypt · Bitcoin Magazine · CryptoSlate · CoinGecko — public news feeds"
+                        text="📡 CoinDesk · The Block · Decrypt · Cointelegraph · CryptoSlate · CoinGecko — reliable public feeds"
                     )
                     await ch.send(embed=embed)
         except Exception as e:
