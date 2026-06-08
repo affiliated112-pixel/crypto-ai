@@ -9,6 +9,56 @@ let _market = {};
 let _prevTotal = null;
 let _scanLeft = 900;
 
+// ── Binance REST fallback prices (used when /api/stats has no data) ──────────
+// { BTC: {price, change}, ETH: ... }
+const _DIRECT_PRICES = {};
+const _BINANCE_SYMBOLS = ['BTCUSDT','ETHUSDT','SOLUSDT','BNBUSDT','XRPUSDT','AVAXUSDT','DOGEUSDT','ADAUSDT'];
+let _directFetchBusy = false;
+
+async function _fetchDirectPrices() {
+  if (_directFetchBusy) return;
+  _directFetchBusy = true;
+  try {
+    const url = 'https://api.binance.com/api/v3/ticker/24hr?symbols=' +
+      encodeURIComponent(JSON.stringify(_BINANCE_SYMBOLS));
+    const r = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const arr = await r.json();
+    arr.forEach(t => {
+      const name = t.symbol.replace('USDT', '');
+      _DIRECT_PRICES[name] = {
+        name,
+        price: +t.lastPrice,
+        change: +t.priceChangePercent,
+        high: +t.highPrice,
+        low: +t.lowPrice,
+        volume: +t.quoteVolume,
+        spark: [],
+      };
+    });
+  } catch (_) {
+    // Try Binance.US as second fallback
+    try {
+      const url2 = 'https://api.binance.us/api/v3/ticker/24hr?symbols=' +
+        encodeURIComponent(JSON.stringify(_BINANCE_SYMBOLS));
+      const r2 = await fetch(url2, { signal: AbortSignal.timeout(6000) });
+      if (r2.ok) {
+        const arr2 = await r2.json();
+        arr2.forEach(t => {
+          const name = t.symbol.replace('USDT', '');
+          _DIRECT_PRICES[name] = { name, price: +t.lastPrice, change: +t.priceChangePercent, high: +t.highPrice, low: +t.lowPrice, volume: +t.quoteVolume, spark: [] };
+        });
+      }
+    } catch (_2) {}
+  } finally {
+    _directFetchBusy = false;
+  }
+}
+
+// Fetch direct prices immediately on load, then every 15s.
+_fetchDirectPrices();
+setInterval(_fetchDirectPrices, 15000);
+
 // ── Helpers ──────────────────────────────────────────
 const $  = id => document.getElementById(id);
 const qs = sel => document.querySelector(sel);
@@ -191,11 +241,16 @@ function resetPT(){
 }
 
 function getPrice(coin){
-  // Prefer the live websocket price (realtime.js) when available, fall back to REST market data.
+  // 1. Prefer the live websocket price (realtime.js) — sub-100ms latency.
   const live=(typeof window!=='undefined'&&window.RT_PRICES&&window.RT_PRICES[coin])?window.RT_PRICES[coin].price:null;
   if(live!=null&&!isNaN(live)) return +live;
+  // 2. Server-side REST price from /api/stats.
   const p=(_market.prices||[]).find(x=>x.name===coin||x.name.startsWith(coin));
-  return p?+p.price:null;
+  if(p&&p.price) return +p.price;
+  // 3. Direct Binance REST fallback (fetched client-side).
+  const d=_DIRECT_PRICES[coin];
+  if(d&&d.price) return +d.price;
+  return null;
 }
 
 function setSide(s){
@@ -232,8 +287,22 @@ function updateSummary(){
 function openPosition(){
   const coin=($('ptCoin')||{}).value||'BTC';
   const amt=parseFloat(($('ptAmt')||{}).value)||0;
-  const price=getPrice(coin);
-  if(!price){toast('⚠️','Preț indisponibil','Prețul nu a fost încă încărcat. Revino în câteva secunde.');return;}
+  let price=getPrice(coin);
+
+  // If price still null, try one more time to refresh direct prices then abort.
+  if(!price){
+    toast('⏳','Se încască prețul…','Așteaptă 2 secunde, se fetch-uiesc prețurile direct din Binance.','toast-gold');
+    _fetchDirectPrices().then(()=>{
+      const retry=getPrice(coin);
+      if(retry){
+        // Re-submit automatically after fetch
+        setTimeout(()=>{ if(getPrice(coin)) openPosition(); },200);
+      } else {
+        toast('⚠️','Preț indisponibil','Verifici conexiunea la internet? Binance API inaccesibil.');
+      }
+    });
+    return;
+  }
   if(amt<10){toast('⚠️','Sumă prea mică','Minim $10 per poziție.');return;}
   if(amt>_pt.cash){toast('❌','Fonduri insuficiente',`Ai doar ${fmtUsd(_pt.cash)} disponibil.`);return;}
   _pt.cash-=amt;
@@ -336,10 +405,12 @@ function renderStatus(d){
 }
 
 function renderTicker(d){
-  const prices=d.market?.prices||[];
+  const serverPrices=d.market?.prices||[];
   const COINS=['BTC','ETH','SOL','BNB','XRP','AVAX','DOGE','ADA'];
   COINS.forEach(sym=>{
-    const p=prices.find(x=>x.name===sym||x.name.startsWith(sym));
+    // Skip if realtime.js already painted this coin via WebSocket.
+    if(window.RT_PRICES&&window.RT_PRICES[sym]) return;
+    const p=serverPrices.find(x=>x.name===sym||x.name.startsWith(sym))||_DIRECT_PRICES[sym];
     if(!p) return;
     const up=(p.change||0)>=0;
     const val=`${fmtUsd(p.price)} <span class="${up?'tick-up':'tick-dn'}">${up?'▲':'▼'}${Math.abs(p.change||0).toFixed(2)}%</span>`;
@@ -363,7 +434,12 @@ function renderFng(d){
 
 function renderPrices(d){
   const area=$('pricesArea'); if(!area) return;
-  const prices=d.market?.prices||[]; if(!prices.length) return;
+  // Use server prices when available, otherwise fall back to direct Binance prices.
+  let prices=d.market?.prices||[];
+  if(!prices.length && Object.keys(_DIRECT_PRICES).length) {
+    prices = Object.values(_DIRECT_PRICES);
+  }
+  if(!prices.length) return;
   area.innerHTML=prices.slice(0,6).map(p=>{
     const up=(p.change||0)>=0;
     return `<div class="price-card ${up?'up-card':'dn-card'}" onclick="quickChart('${p.name}')">
@@ -593,6 +669,13 @@ async function loadData(){
     if(!res.ok) throw new Error('HTTP '+res.status);
     const d=await res.json();
     _market=d.market||{};
+
+    // If /api/stats returned no prices (bot offline/starting up),
+    // inject the direct Binance prices so the UI is never empty.
+    if(!(_market.prices&&_market.prices.length) && Object.keys(_DIRECT_PRICES).length) {
+      _market = { ...(_market||{}), prices: Object.values(_DIRECT_PRICES) };
+    }
+
     renderStatus(d); renderStats(d); renderTicker(d);
     renderFng(d); renderPrices(d); renderSignals(d);
     renderPerformance(d); renderDiscord(d); renderAdmin(d);
@@ -605,9 +688,19 @@ async function loadData(){
     // load news once
     if(!_newsLoaded) loadNews();
   }catch(e){
+    // /api/stats failed — still render prices from direct Binance fetch.
+    if(Object.keys(_DIRECT_PRICES).length){
+      _market={prices:Object.values(_DIRECT_PRICES)};
+      renderPrices({market:_market}); renderTicker({market:_market});
+    }
     set('statusText','Eroare conexiune');
     console.error('panel error',e);
   }
+  // Always refresh paper trading panel (uses getPrice which checks all sources)
+  renderPT();
+  // Update live price in trade form
+  const coin=($('ptCoin')||{}).value;
+  if(coin) set('tfPrice',fmtUsd(getPrice(coin)));
 }
 
 loadData();
