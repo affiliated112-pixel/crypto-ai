@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Crypto Time Machine — Romania Crypto Signals</title>
+  <meta name="description" content="Dacă investeai $1000 în Bitcoin acum 1 an, aveai azi $X? Calculează profitul tău crypto cu Time Machine-ul nostru."/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#05080f;--bg2:#0a0e1a;--card:#0d1322;--border:rgba(70,100,200,0.18);--text:#e8efff;--muted:#6b7a9e;--blue:#2a63ff;--blue2:#5082ff;--green:#00d47e;--red:#ff2d55;--gold:#f5a800;}
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35}
+    .page{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:40px 24px 80px}
+    .back-link{display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;font-size:14px;margin-bottom:32px;transition:color .2s}
+    .back-link:hover{color:var(--text)}
+    .page-header{text-align:center;margin-bottom:48px}
+    .page-emoji{font-size:64px;margin-bottom:16px;display:block;animation:float 4s ease-in-out infinite}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+    h1{font-size:clamp(28px,5vw,48px);font-weight:900;letter-spacing:-1.5px;margin-bottom:12px}
+    .grad{background:linear-gradient(90deg,#5082ff,#f5a800,#ff2d55);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .page-sub{font-size:16px;color:var(--muted);max-width:500px;margin:0 auto;line-height:1.7}
+    .tiktok-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,0,80,.1);border:1px solid rgba(255,0,80,.25);color:#ff2050;font-size:12px;font-weight:700;padding:5px 14px;border-radius:999px;margin-bottom:20px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;margin-bottom:20px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+    .field{display:flex;flex-direction:column;gap:8px}
+    .field label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+    .field select,.field input{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;font-family:inherit;outline:none;transition:border-color .2s;-webkit-appearance:none}
+    .field select:focus,.field input:focus{border-color:var(--blue2)}
+    .calc-btn{width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,var(--blue),var(--blue2));color:white;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;transition:all .2s;box-shadow:0 8px 24px rgba(42,99,255,.35)}
+    .calc-btn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(42,99,255,.5)}
+    .result-card{display:none;background:linear-gradient(135deg,rgba(42,99,255,.08),rgba(245,168,0,.05));border:2px solid var(--border);border-radius:20px;padding:40px;text-align:center;margin-top:20px;position:relative;overflow:hidden}
+    .result-card.show{display:block}
+    .result-card::before{content:'';position:absolute;top:-60px;right:-60px;width:300px;height:300px;background:radial-gradient(circle,rgba(245,168,0,.1),transparent 70%);border-radius:50%;pointer-events:none}
+    .result-label{font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+    .result-invested{font-size:20px;font-weight:700;color:var(--muted);margin-bottom:16px}
+    .result-value{font-size:clamp(36px,8vw,72px);font-weight:900;font-family:'JetBrains Mono',monospace;margin-bottom:8px}
+    .result-value.profit{color:var(--green)}
+    .result-value.loss{color:var(--red)}
+    .result-pct{font-size:22px;font-weight:800;margin-bottom:24px}
+    .result-pct.profit{color:var(--green)}
+    .result-pct.loss{color:var(--red)}
+    .result-breakdown{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:24px 0}
+    .rb-item{background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:12px;padding:14px}
+    .rb-val{font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .rb-lbl{font-size:11px;color:var(--muted);margin-top:4px}
+    .result-msg{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:24px;background:rgba(0,0,0,.2);padding:14px;border-radius:10px}
+    .share-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .share-btn{padding:11px 20px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;border:none;transition:all .2s;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+    .share-tiktok{background:#ff2050;color:white}
+    .share-discord{background:#5865f2;color:white}
+    .share-copy{background:var(--card);border:1px solid var(--border);color:var(--text)}
+    .share-btn:hover{transform:translateY(-2px);opacity:.9}
+    .examples{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:24px}
+    .example-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:all .2s;text-align:center}
+    .example-card:hover{border-color:var(--blue2);transform:translateY(-2px)}
+    .ex-coin{font-size:20px;margin-bottom:6px}
+    .ex-title{font-size:13px;font-weight:700;margin-bottom:4px}
+    .ex-sub{font-size:11px;color:var(--muted)}
+    .loading-spinner{display:none;text-align:center;padding:20px;font-size:14px;color:var(--muted)}
+    .loading-spinner.show{display:block}
+    .error-msg{display:none;color:var(--red);text-align:center;padding:12px;background:rgba(255,45,85,.08);border:1px solid rgba(255,45,85,.2);border-radius:10px;margin-top:12px;font-size:13px}
+    .error-msg.show{display:block}
+    @media(max-width:600px){.form-grid{grid-template-columns:1fr}.result-breakdown{grid-template-columns:1fr 1fr}.examples{grid-template-columns:1fr 1fr}}
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="page">
+  <a href="/" class="back-link">← Înapoi la site</a>
+  <div class="page-header">
+    <div class="tiktok-badge">📱 Viral pe TikTok</div>
+    <span class="page-emoji">⏰</span>
+    <h1>Crypto <span class="grad">Time Machine</span></h1>
+    <p class="page-sub">Descoperă câți bani ai fi avut dacă investeai în crypto. Date reale. Rezultate reale. Fără BS.</p>
+  </div>
+
+  <!-- Quick examples -->
+  <div class="examples" style="margin-bottom:24px">
+    <div class="example-card" onclick="quickCalc('bitcoin','2024-01-01',1000)">
+      <div class="ex-coin">₿</div>
+      <div class="ex-title">$1000 BTC</div>
+      <div class="ex-sub">Acum 1 an</div>
+    </div>
+    <div class="example-card" onclick="quickCalc('solana','2023-01-01',1000)">
+      <div class="ex-coin">◎</div>
+      <div class="ex-title">$1000 SOL</div>
+      <div class="ex-sub">Acum 2 ani</div>
+    </div>
+    <div class="example-card" onclick="quickCalc('ethereum','2022-01-01',1000)">
+      <div class="ex-coin">Ξ</div>
+      <div class="ex-title">$1000 ETH</div>
+      <div class="ex-sub">Acum 3 ani</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="form-grid">
+      <div class="field">
+        <label>Monedă</label>
+        <select id="coin">
+          <option value="bitcoin">₿ Bitcoin (BTC)</option>
+          <option value="ethereum">Ξ Ethereum (ETH)</option>
+          <option value="solana">◎ Solana (SOL)</option>
+          <option value="binancecoin">BNB</option>
+          <option value="ripple">XRP</option>
+          <option value="cardano">ADA</option>
+          <option value="dogecoin">🐕 Dogecoin (DOGE)</option>
+          <option value="avalanche-2">AVAX</option>
+          <option value="chainlink">LINK</option>
+          <option value="matic-network">MATIC</option>
+          <option value="shiba-inu">🐕 Shiba Inu (SHIB)</option>
+          <option value="pepe">🐸 PEPE</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Suma investită ($)</label>
+        <input type="number" id="amount" value="1000" min="1" max="1000000" step="100"/>
+      </div>
+      <div class="field">
+        <label>Data investiției</label>
+        <input type="date" id="dateFrom" value="2024-01-01"/>
+      </div>
+      <div class="field">
+        <label>Până azi</label>
+        <input type="date" id="dateTo" readonly style="opacity:.6;cursor:not-allowed"/>
+      </div>
+    </div>
+    <button class="calc-btn" onclick="calculate()">🚀 Calculează Profitul!</button>
+    <div class="loading-spinner" id="loadingSpinner">⏳ Se calculează cu date reale de la CoinGecko…</div>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-label">Ai investit</div>
+    <div class="result-invested" id="rInvested">$1,000</div>
+    <div class="result-label" style="margin-top:8px">Valoarea ta azi ar fi</div>
+    <div class="result-value" id="rValue">$0</div>
+    <div class="result-pct" id="rPct">+0%</div>
+    <div class="result-breakdown">
+      <div class="rb-item">
+        <div class="rb-val" id="rProfit">$0</div>
+        <div class="rb-lbl">Profit / Pierdere</div>
+      </div>
+      <div class="rb-item">
+        <div class="rb-val" id="rPriceStart">$0</div>
+        <div class="rb-lbl">Preț la cumpărare</div>
+      </div>
+      <div class="rb-item">
+        <div class="rb-val" id="rPriceNow">$0</div>
+        <div class="rb-lbl">Preț acum</div>
+      </div>
+    </div>
+    <div class="result-msg" id="rMsg"></div>
+    <div class="share-btns">
+      <button class="share-btn share-tiktok" onclick="shareToTikTok()">🎵 Shareaza pe TikTok</button>
+      <a class="share-btn share-discord" href="https://discord.gg/romaniacrypto" target="_blank">💬 Join Discord VIP</a>
+      <button class="share-btn share-copy" onclick="copyResult()">📋 Copiaza rezultatul</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+$('dateTo').value = new Date().toISOString().split('T')[0];
+
+function fmt(n){ return '$'+Math.round(n).toLocaleString('en-US'); }
+function fmtP(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
+
+const MSGS = {
+  huge: n => `🤯 WOW! Ai fi făcut ${fmtP(n)} profit! Asta înseamnă că $1 investit s-ar fi transformat în $${(1+n/100).toFixed(2)}. Ăsta e puterea crypto — și de aceea oamenii smart intră devreme!`,
+  good: n => `🚀 Profit solid de ${fmtP(n)}! Mai bine decât orice bancă din România care îți dă 5-6% pe an. Cu semnalele noastre VIP poți optimiza momentul perfect de intrare.`,
+  small: n => `📈 ${fmtP(n)} profit — nu spectaculos, dar peste inflație! Timing-ul contează enorm în crypto. Semnalele noastre AI identifică momentele optime de intrare și ieșire.`,
+  loss: n => `📉 ${fmtP(n)} în această perioadă. Crypto e volatil — dar cu semnale bune poți evita capcanele și intra la momentul potrivit. Join-ează Discord-ul nostru pentru semnale FREE!`,
+};
+
+async function calculate(coinOverride, dateOverride, amtOverride){
+  const coin = coinOverride || $('coin').value;
+  const amt = amtOverride || parseFloat($('amount').value) || 1000;
+  const dateFrom = dateOverride || $('dateFrom').value;
+  const dateTo = $('dateTo').value;
+  
+  if(!dateFrom){ showErr('Selectează o dată de start!'); return; }
+  if(new Date(dateFrom) >= new Date(dateTo)){ showErr('Data de start trebuie să fie în trecut!'); return; }
+
+  $('loadingSpinner').className='loading-spinner show';
+  $('resultCard').className='result-card';
+  $('errorMsg').className='error-msg';
+
+  try{
+    const fromTs = Math.floor(new Date(dateFrom).getTime()/1000);
+    const toTs = Math.floor(new Date(dateTo).getTime()/1000);
+    const url = `https://api.coingecko.com/api/v3/coins/${coin}/market_chart/range?vs_currency=usd&from=${fromTs}&to=${toTs}`;
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('API error '+res.status);
+    const data = await res.json();
+    const prices = data.prices;
+    if(!prices||prices.length<2) throw new Error('Date insuficiente');
+    
+    const priceStart = prices[0][1];
+    const priceEnd = prices[prices.length-1][1];
+    const qty = amt / priceStart;
+    const valueNow = qty * priceEnd;
+    const profit = valueNow - amt;
+    const pct = ((priceEnd - priceStart) / priceStart) * 100;
+    
+    $('rInvested').textContent = fmt(amt);
+    $('rValue').textContent = fmt(valueNow);
+    $('rValue').className = 'result-value '+(profit>=0?'profit':'loss');
+    $('rPct').textContent = fmtP(pct);
+    $('rPct').className = 'result-pct '+(pct>=0?'profit':'loss');
+    $('rProfit').textContent = (profit>=0?'+':'')+fmt(profit);
+    $('rProfit').style.color = profit>=0?'var(--green)':'var(--red)';
+    $('rPriceStart').textContent = '$'+priceStart.toFixed(2);
+    $('rPriceNow').textContent = '$'+priceEnd.toFixed(2);
+    
+    let msg;
+    if(pct>200) msg=MSGS.huge(pct);
+    else if(pct>20) msg=MSGS.good(pct);
+    else if(pct>=0) msg=MSGS.small(pct);
+    else msg=MSGS.loss(pct);
+    $('rMsg').textContent=msg;
+    
+    $('resultCard').className='result-card show';
+    $('resultCard').scrollIntoView({behavior:'smooth',block:'center'});
+    window._lastResult={coin,amt,dateFrom,pct,valueNow,profit};
+  }catch(e){
+    showErr('Eroare la încărcare date. Încearcă altă monedă sau perioadă.');
+  }finally{
+    $('loadingSpinner').className='loading-spinner';
+  }
+}
+
+function quickCalc(coin,date,amt){
+  $('coin').value=coin; $('amount').value=amt; $('dateFrom').value=date;
+  calculate();
+}
+
+function showErr(msg){
+  $('loadingSpinner').className='loading-spinner';
+  $('errorMsg').textContent=msg;
+  $('errorMsg').className='error-msg show';
+}
+
+function shareToTikTok(){
+  if(!window._lastResult) return;
+  const {coin,amt,dateFrom,pct,valueNow}=window._lastResult;
+  const text=`💰 Dacă investeam $${amt} în ${coin.toUpperCase()} pe ${dateFrom}, aveam azi $${Math.round(valueNow).toLocaleString()} (${pct>=0?'+':''}${pct.toFixed(0)}%)! 🚀 Calculează și tu pe romaniacryptosignals.up.railway.app ⏰ #crypto #bitcoin #investitii #romania`;
+  navigator.clipboard.writeText(text).then(()=>alert('✅ Text copiat! Lipeste-l pe TikTok cu un screen recording al rezultatului!'));
+}
+
+function copyResult(){
+  if(!window._lastResult) return;
+  const {amt,valueNow,pct}=window._lastResult;
+  navigator.clipboard.writeText(`Dacă investeam $${amt}, aveam azi $${Math.round(valueNow).toLocaleString()} (${pct>=0?'+':''}${pct.toFixed(1)}%)! | Romania Crypto Signals`);
+  alert('✅ Copiat!');
+}
+
+// Particles bg
+(function(){
+  const c=$('bgCanvas'); if(!c) return;
+  const ctx=c.getContext('2d'); let w,h,pts;
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;pts=Array.from({length:40},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.2+.4}));}
+  resize(); window.addEventListener('resize',resize);
+  (function draw(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(90,130,255,.4)';ctx.fill();}requestAnimationFrame(draw);})();
+})();
+</script>
+</body>
+</html>

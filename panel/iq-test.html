@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Crypto IQ Test — Romania Crypto Signals</title>
+  <meta name="description" content="Cât de bun ești la crypto? Fă testul în 2 minute și află dacă ești Beginner, Intermediate sau Pro Trader!"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#05080f;--bg2:#0a0e1a;--card:#0d1322;--border:rgba(70,100,200,0.18);--text:#e8efff;--muted:#6b7a9e;--blue:#2a63ff;--blue2:#5082ff;--green:#00d47e;--red:#ff2d55;--gold:#f5a800;}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.3}
+    .page{position:relative;z-index:1;max-width:720px;margin:0 auto;padding:40px 24px 80px}
+    .back-link{display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;font-size:14px;margin-bottom:32px;transition:color .2s}
+    .back-link:hover{color:var(--text)}
+    .page-header{text-align:center;margin-bottom:40px}
+    .page-emoji{font-size:56px;display:block;animation:bounce .8s infinite alternate}
+    @keyframes bounce{from{transform:translateY(0)}to{transform:translateY(-10px)}}
+    h1{font-size:clamp(26px,5vw,42px);font-weight:900;letter-spacing:-1px;margin:12px 0}
+    .grad{background:linear-gradient(90deg,#5082ff,#f5a800);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .page-sub{font-size:15px;color:var(--muted);line-height:1.7}
+    .tiktok-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(255,0,80,.1);border:1px solid rgba(255,0,80,.25);color:#ff2050;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin-bottom:16px}
+    /* Progress */
+    .progress-bar{height:4px;background:rgba(255,255,255,.06);border-radius:2px;margin-bottom:32px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--blue2));border-radius:2px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+    .q-counter{font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px}
+    /* Question */
+    .q-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:32px;margin-bottom:16px}
+    .q-num{font-size:11px;font-weight:700;color:var(--blue2);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+    .q-text{font-size:20px;font-weight:800;line-height:1.4;margin-bottom:24px}
+    .options{display:flex;flex-direction:column;gap:10px}
+    .opt-btn{
+      padding:14px 18px;border-radius:12px;border:1.5px solid var(--border);
+      background:rgba(0,0,0,.2);color:var(--text);font-size:15px;font-weight:600;
+      cursor:pointer;font-family:inherit;transition:all .2s;text-align:left;
+    }
+    .opt-btn:hover{border-color:var(--blue2);background:rgba(42,99,255,.08);transform:translateX(4px)}
+    .opt-btn.correct{background:rgba(0,212,126,.12);border-color:var(--green);color:var(--green)}
+    .opt-btn.wrong{background:rgba(255,45,85,.12);border-color:var(--red);color:var(--red)}
+    .opt-btn.disabled{cursor:default;transform:none}
+    .explanation{background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;color:var(--muted);line-height:1.6;margin-top:12px;display:none}
+    .explanation.show{display:block}
+    .next-btn{width:100%;padding:15px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--blue),var(--blue2));color:white;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;transition:all .2s;display:none;margin-top:12px}
+    .next-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(42,99,255,.4)}
+    .next-btn.show{display:block}
+    /* Result */
+    .result-screen{display:none;text-align:center}
+    .result-screen.show{display:block}
+    .result-badge{font-size:72px;margin-bottom:20px;animation:float 3s ease-in-out infinite}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+    .result-title{font-size:clamp(24px,5vw,40px);font-weight:900;letter-spacing:-1px;margin-bottom:8px}
+    .result-level{font-size:16px;font-weight:700;padding:6px 20px;border-radius:999px;display:inline-block;margin-bottom:20px}
+    .level-beginner{background:rgba(255,45,85,.15);color:var(--red);border:1px solid rgba(255,45,85,.3)}
+    .level-intermediate{background:rgba(245,168,0,.15);color:var(--gold);border:1px solid rgba(245,168,0,.3)}
+    .level-advanced{background:rgba(42,99,255,.15);color:var(--blue2);border:1px solid rgba(42,99,255,.3)}
+    .level-pro{background:rgba(0,212,126,.15);color:var(--green);border:1px solid rgba(0,212,126,.3)}
+    .score-ring{width:140px;height:140px;border-radius:50%;margin:24px auto;display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:900;font-family:'JetBrains Mono',monospace;position:relative}
+    .result-desc{font-size:15px;color:var(--muted);line-height:1.7;max-width:480px;margin:0 auto 28px}
+    .result-cta{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px}
+    .result-cta h3{font-size:18px;font-weight:800;margin-bottom:8px}
+    .result-cta p{font-size:14px;color:var(--muted);margin-bottom:16px}
+    .cta-btn{display:inline-flex;align-items:center;gap:8px;padding:13px 24px;border-radius:12px;font-size:14px;font-weight:800;text-decoration:none;transition:all .2s;cursor:pointer;border:none;font-family:inherit}
+    .cta-discord{background:#5865f2;color:white}
+    .cta-retry{background:var(--card);border:1px solid var(--border);color:var(--text)}
+    .cta-share{background:linear-gradient(135deg,var(--gold),#ffc840);color:#1a0800}
+    .cta-btn:hover{transform:translateY(-2px);opacity:.9}
+    .btns-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .score-answers{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:16px 0}
+    .sa-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+    .sa-dot.ok{background:rgba(0,212,126,.15);color:var(--green)}
+    .sa-dot.nok{background:rgba(255,45,85,.15);color:var(--red)}
+    @media(max-width:500px){.q-text{font-size:17px}.opt-btn{font-size:13px;padding:12px 14px}}
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="page">
+  <a href="/" class="back-link">← Înapoi la site</a>
+  <div class="page-header">
+    <div class="tiktok-badge">📱 Shareaza scorul pe TikTok</div>
+    <span class="page-emoji">🧠</span>
+    <h1>Crypto <span class="grad">IQ Test</span></h1>
+    <p class="page-sub">10 întrebări · 2 minute · Află dacă ești Beginner, Intermediate sau Pro Trader!</p>
+  </div>
+
+  <!-- Quiz -->
+  <div id="quizSection">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:10%"></div></div>
+    <div class="q-counter" id="qCounter">Întrebarea 1 din 10</div>
+    <div class="q-card">
+      <div class="q-num" id="qNum">Întrebarea 1</div>
+      <div class="q-text" id="qText">—</div>
+      <div class="options" id="optionsContainer"></div>
+      <div class="explanation" id="explanation"></div>
+    </div>
+    <button class="next-btn" id="nextBtn" onclick="nextQuestion()">Următoarea întrebare →</button>
+  </div>
+
+  <!-- Result -->
+  <div class="result-screen" id="resultScreen">
+    <div class="result-badge" id="rBadge">🏆</div>
+    <div class="result-title" id="rTitle">Pro Trader!</div>
+    <div class="result-level" id="rLevel">PRO</div>
+    <div class="score-ring" id="scoreRing">
+      <span id="scoreText">0/10</span>
+    </div>
+    <div class="score-answers" id="scoreAnswers"></div>
+    <p class="result-desc" id="rDesc">—</p>
+    <div class="result-cta" id="rCTA"></div>
+    <div class="btns-row">
+      <button class="cta-btn cta-share" onclick="shareScore()">📱 Shareaza pe TikTok</button>
+      <a class="cta-btn cta-discord" href="https://discord.gg/romaniacrypto" target="_blank">💬 Join Discord</a>
+      <button class="cta-btn cta-retry" onclick="retryTest()">🔄 Încearcă din nou</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    q: "Ce înseamnă 'Bull Market' în crypto?",
+    opts: ["Piața scade puternic","Piața crește puternic","Volumul e mic","Monedele se listează"],
+    correct: 1,
+    exp: "🐂 Un Bull Market este o perioadă când prețurile cresc semnificativ. Opusul este Bear Market (piața scade). În crypto, bull run-urile pot dura luni întregi cu creșteri de 100-1000%."
+  },
+  {
+    q: "RSI peste 70 înseamnă că o monedă este:",
+    opts: ["Subevaluată — moment bun de cumpărat","Supraevaluată — posibil să scadă","În consolidare","Fără volum"],
+    correct: 1,
+    exp: "📊 RSI (Relative Strength Index) peste 70 = zona de supracumpărare (overbought). Asta nu înseamnă că scade sigur, dar e semnal de prudență. Sub 30 = subevaluată."
+  },
+  {
+    q: "Ce este 'leverage' (levierul) în trading?",
+    opts: ["O taxă a exchange-ului","Amplificarea puterii de cumpărare cu bani împrumutați","Un tip de monedă","Procesul de staking"],
+    correct: 1,
+    exp: "⚡ Leverage îți permite să controlezi o poziție mai mare cu capital mic. 10x leverage înseamnă că $100 controlează $1000. Profiturile se amplifică, DAR și pierderile — risc ridicat!"
+  },
+  {
+    q: "Ce face MACD în analiza tehnică?",
+    opts: ["Măsoară volumul","Identifică trenduri și momentum","Calculează capitalizarea","Arată prețul mediu pe 30 zile"],
+    correct: 1,
+    exp: "📈 MACD (Moving Average Convergence Divergence) arată forța și direcția trendului. Când linia MACD trece deasupra liniei semnal = semnal BUY. Sub = semnal SELL."
+  },
+  {
+    q: "Ce este un 'Stop Loss'?",
+    opts: ["Comanda care opreste bot-ul","Ordinul care vinde automat dacă prețul scade sub un nivel","Taxa de retragere","Profitul maxim posibil"],
+    correct: 1,
+    exp: "🛡️ Stop Loss este cel mai important instrument de management al riscului. Setezi un preț minim — dacă piața scade până acolo, poziția se închide automat, limitând pierderea."
+  },
+  {
+    q: "Ce înseamnă 'DCA' în investiții crypto?",
+    opts: ["Decentralized Crypto Asset","Dollar Cost Averaging — cumperi la intervale regulate","Digital Currency Account","Direct Crypto Access"],
+    correct: 1,
+    exp: "💰 DCA (Dollar Cost Averaging) = cumperi aceeași sumă în dolari la intervale regulate (ex: $100 pe lună în BTC), indiferent de preț. Astfel eviți să cumperi tot la vârf."
+  },
+  {
+    q: "Ce sunt Bollinger Bands?",
+    opts: ["Un tip de NFT","Benzi care arată volatilitatea și nivelele de suport/rezistență","Un exchange descentralizat","Portofelul hardware Ledger"],
+    correct: 1,
+    exp: "📏 Bollinger Bands constau din 3 linii: media mobilă simplă și 2 benzi (sus/jos) la 2 deviații standard. Când prețul atinge banda de jos = potențial moment de cumpărare."
+  },
+  {
+    q: "Ce este 'market cap' (capitalizarea de piață)?",
+    opts: ["Prețul maxim atins vreodată","Numărul total de tranzacții","Prețul × numărul de monede în circulație","Rezervele exchange-ului"],
+    correct: 2,
+    exp: "🏦 Market Cap = Preț × Supply circulant. BTC la $60,000 cu 19.5M monede = ~$1.17 trilioane. Market cap mare = monedă mai stabilă. Small cap = volatilitate mai mare."
+  },
+  {
+    q: "Ce se întâmplă la un Bitcoin 'Halving'?",
+    opts: ["Prețul BTC se înjumătățește","Recompensa minerilor se înjumătățește","Numărul de BTC se dublează","Exchange-urile suspendă tranzacțiile"],
+    correct: 1,
+    exp: "⛏️ La fiecare ~4 ani, recompensa pentru minarea unui bloc Bitcoin se înjumătățește. Asta reduce inflația BTC. Istoric, halvingurile au precedat bull run-uri majore (2016, 2020)."
+  },
+  {
+    q: "Care este cea mai sigură metodă de a păstra crypto pe termen lung?",
+    opts: ["Pe exchange (ex: Binance)","În portofel hardware (cold wallet)","Pe telefon în MetaMask","Pe un site random"],
+    correct: 1,
+    exp: "🔐 Cold wallet (hardware wallet, ex: Ledger, Trezor) este cel mai sigur. Cheile private sunt offline — nu pot fi hackate. 'Not your keys, not your coins' este regula de aur în crypto."
+  }
+];
+
+let _current = 0, _score = 0, _answers = [];
+
+function renderQuestion(){
+  const q = QUESTIONS[_current];
+  document.getElementById('qNum').textContent = `Întrebarea ${_current+1}`;
+  document.getElementById('qText').textContent = q.q;
+  document.getElementById('qCounter').textContent = `Întrebarea ${_current+1} din ${QUESTIONS.length}`;
+  document.getElementById('progressFill').style.width = ((_current+1)/QUESTIONS.length*100)+'%';
+  document.getElementById('explanation').className = 'explanation';
+  document.getElementById('explanation').textContent = '';
+  document.getElementById('nextBtn').className = 'next-btn';
+  const cont = document.getElementById('optionsContainer');
+  cont.innerHTML = q.opts.map((o,i) =>
+    `<button class="opt-btn" onclick="answer(${i})" id="opt${i}">${String.fromCharCode(65+i)}. ${o}</button>`
+  ).join('');
+}
+
+function answer(idx){
+  const q = QUESTIONS[_current];
+  const correct = idx === q.correct;
+  if(correct) _score++;
+  _answers.push(correct);
+  document.querySelectorAll('.opt-btn').forEach((b,i) => {
+    b.classList.add('disabled');
+    b.onclick = null;
+    if(i === q.correct) b.classList.add('correct');
+    else if(i === idx && !correct) b.classList.add('wrong');
+  });
+  const exp = document.getElementById('explanation');
+  exp.textContent = q.exp;
+  exp.className = 'explanation show';
+  document.getElementById('nextBtn').className = 'next-btn show';
+  document.getElementById('nextBtn').textContent = _current < QUESTIONS.length-1 ? 'Următoarea întrebare →' : '🏆 Vezi rezultatul!';
+}
+
+function nextQuestion(){
+  _current++;
+  if(_current >= QUESTIONS.length){ showResult(); return; }
+  renderQuestion();
+}
+
+function showResult(){
+  document.getElementById('quizSection').style.display = 'none';
+  const rs = document.getElementById('resultScreen');
+  rs.className = 'result-screen show';
+  const pct = Math.round((_score/QUESTIONS.length)*100);
+  let badge, title, level, levelCls, desc, cta;
+  if(_score <= 3){
+    badge='🌱'; title='Crypto Beginner!'; level='BEGINNER 🌱'; levelCls='level-beginner';
+    desc='Nu-i bai! Toată lumea a început de undeva. Alătură-te Discord-ului nostru și în 30 de zile vei ști mai mult decât 90% din oameni despre crypto.';
+    cta=`<h3>🎓 Vrei să înveți crypto de la zero?</h3><p>Join Discord-ul nostru gratuit — avem canal dedicat educației crypto pentru beginners.</p><a class="cta-btn cta-discord" href="https://discord.gg/romaniacrypto" target="_blank">💬 Intru sa invat GRATUIT</a>`;
+  } else if(_score <= 6){
+    badge='📈'; title='Intermediate Trader!'; level='INTERMEDIATE 📈'; levelCls='level-intermediate';
+    desc='Bine! Știi bazele și ești pe drumul cel bun. Cu semnalele noastre AI îți poți îmbunătăți dramatic timing-ul de intrare și ieșire.';
+    cta=`<h3>📡 Semnale AI care îți completează cunoștințele</h3><p>Semnalele noastre FREE îți dau context pe care analiza ta o poate confirma.</p><a class="cta-btn cta-discord" href="https://discord.gg/romaniacrypto" target="_blank">📡 Semnale FREE pe Discord</a>`;
+  } else if(_score <= 8){
+    badge='🚀'; title='Advanced Trader!'; level='ADVANCED 🚀'; levelCls='level-advanced';
+    desc='Impresionant! Știi ce faci. Semnalele noastre VIP cu RSI, MACD, Bollinger Bands sunt exact ce ai nevoie pentru execuții precise.';
+    cta=`<h3>⭐ Ești gata pentru VIP</h3><p>La nivelul tău, semnalele cu Entry+TP+SL precise fac diferența între profit și break-even.</p><a class="cta-btn" style="background:linear-gradient(135deg,#f5a800,#ffc840);color:#1a0800" href="https://discord.gg/romaniacrypto" target="_blank">💎 Încearcă VIP — $25/lună</a>`;
+  } else {
+    badge='🏆'; title='Pro Trader!'; level='PRO TRADER 🏆'; levelCls='level-pro';
+    desc='Respect! Ești în top 1% al cunoștințelor crypto. Semnalele noastre VIP cu AI scoring sunt instrumentul perfect pentru un Pro ca tine.';
+    cta=`<h3>🤝 Pro la Pro</h3><p>Semnalele noastre sunt construite pentru traderi ca tine — entry precis, multiple TP-uri, SL calculat, scor AI pe fiecare semnal.</p><a class="cta-btn" style="background:linear-gradient(135deg,#f5a800,#ffc840);color:#1a0800" href="https://discord.gg/romaniacrypto" target="_blank">💎 Acces VIP — $25/lună</a>`;
+  }
+  document.getElementById('rBadge').textContent = badge;
+  document.getElementById('rTitle').textContent = title;
+  document.getElementById('rLevel').textContent = level;
+  document.getElementById('rLevel').className = 'result-level '+levelCls;
+  document.getElementById('scoreText').textContent = `${_score}/10`;
+  const ring = document.getElementById('scoreRing');
+  const col = pct>=70?'var(--green)':pct>=40?'var(--gold)':'var(--red)';
+  ring.style.background = `conic-gradient(${col} ${pct*3.6}deg, rgba(255,255,255,0.05) ${pct*3.6}deg)`;
+  ring.style.boxShadow = `0 0 40px ${col}33`;
+  const dots = document.getElementById('scoreAnswers');
+  dots.innerHTML = _answers.map((a,i) => `<div class="sa-dot ${a?'ok':'nok'}">${a?'✓':'✗'}</div>`).join('');
+  document.getElementById('rDesc').textContent = desc;
+  document.getElementById('rCTA').innerHTML = cta;
+  window._quizResult = {score:_score, pct, level:level.split(' ')[0]};
+}
+
+function shareScore(){
+  if(!window._quizResult) return;
+  const {score,pct,level}=window._quizResult;
+  const text=`🧠 Mi-am testat Crypto IQ-ul pe Romania Crypto Signals!\n\nScor: ${score}/10 (${pct}%)\nNivel: ${level}\n\nTu ce scor iei? 👇\nromaniacryptosignals.up.railway.app/iq-test.html\n\n#crypto #bitcoin #cryptoromania #investitii`;
+  navigator.clipboard.writeText(text).then(()=>alert('✅ Text copiat! Lipeste-l pe TikTok cu un screenshot al rezultatului!'));
+}
+
+function retryTest(){
+  _current=0; _score=0; _answers=[];
+  document.getElementById('resultScreen').className='result-screen';
+  document.getElementById('quizSection').style.display='block';
+  renderQuestion();
+}
+
+// Particles
+(function(){const c=document.getElementById('bgCanvas');if(!c)return;const ctx=c.getContext('2d');let w,h,pts;function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;pts=Array.from({length:35},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.2+.4}));}resize();window.addEventListener('resize',resize);(function draw(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(90,130,255,.35)';ctx.fill();}requestAnimationFrame(draw);})();})();
+
+renderQuestion();
+</script>
+</body>
+</html>

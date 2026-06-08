@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Portfolio Tracker — Romania Crypto Signals</title>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#05080f;--bg2:#0a0e1a;--card:#0d1322;--border:rgba(70,100,200,0.18);--text:#e8efff;--muted:#6b7a9e;--blue:#2a63ff;--blue2:#5082ff;--green:#00d47e;--red:#ff2d55;--gold:#f5a800;}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.3}
+    .page{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:40px 24px 80px}
+    .back-link{display:inline-flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;font-size:14px;margin-bottom:32px;transition:color .2s}
+    .back-link:hover{color:var(--text)}
+    .page-header{text-align:center;margin-bottom:40px}
+    .page-emoji{font-size:56px;display:block;margin-bottom:12px}
+    h1{font-size:clamp(26px,5vw,42px);font-weight:900;letter-spacing:-1px;margin-bottom:10px}
+    .grad-gold{background:linear-gradient(90deg,#f5a800,#ffd060);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .page-sub{font-size:15px;color:var(--muted);line-height:1.7}
+    .tiktok-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(255,0,80,.1);border:1px solid rgba(255,0,80,.25);color:#ff2050;font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;margin-bottom:16px}
+    /* Layout */
+    .pt-layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px}
+    .card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:18px}
+    /* Add form */
+    .add-form{display:flex;flex-direction:column;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+    .field select,.field input{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;padding:11px 13px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s;-webkit-appearance:none;width:100%}
+    .field select:focus,.field input:focus{border-color:var(--blue2)}
+    .add-btn{width:100%;padding:13px;border-radius:11px;border:none;background:linear-gradient(135deg,var(--blue),var(--blue2));color:white;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;transition:all .2s}
+    .add-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(42,99,255,.4)}
+    /* Total banner */
+    .total-banner{background:linear-gradient(135deg,rgba(42,99,255,.08),rgba(245,168,0,.05));border:1px solid var(--border);border-radius:18px;padding:24px;margin-bottom:16px;text-align:center}
+    .tb-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+    .tb-total{font-size:clamp(28px,5vw,48px);font-weight:900;font-family:'JetBrains Mono',monospace;margin-bottom:4px}
+    .tb-pnl{font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .tb-invested{font-size:13px;color:var(--muted);margin-top:4px}
+    /* Holdings table */
+    .holdings-list{display:flex;flex-direction:column;gap:10px}
+    .holding-item{background:rgba(0,0,0,.2);border:1px solid var(--border);border-radius:14px;padding:16px;display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:12px;transition:all .2s}
+    .holding-item:hover{border-color:rgba(70,100,200,.35)}
+    .hi-left{display:flex;align-items:center;gap:12px}
+    .hi-icon{width:38px;height:38px;border-radius:10px;background:rgba(42,99,255,.15);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .hi-name{font-weight:800;font-size:15px}
+    .hi-qty{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+    .hi-mid{text-align:right}
+    .hi-value{font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .hi-price{font-size:11px;color:var(--muted);margin-top:2px}
+    .hi-right{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+    .hi-pnl{font-size:14px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .hi-delete{background:rgba(255,45,85,.1);color:var(--red);border:1px solid rgba(255,45,85,.2);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s}
+    .hi-delete:hover{background:rgba(255,45,85,.2)}
+    .pos{color:var(--green)}
+    .neg{color:var(--red)}
+    .empty-msg{text-align:center;padding:40px;color:var(--muted);font-size:14px}
+    /* Pie chart */
+    .allocation-card{margin-top:16px}
+    .alloc-list{display:flex;flex-direction:column;gap:8px}
+    .alloc-item{display:flex;align-items:center;gap:10px;font-size:13px}
+    .alloc-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+    .alloc-bar-track{flex:1;height:6px;background:rgba(255,255,255,.06);border-radius:999px;overflow:hidden}
+    .alloc-bar-fill{height:100%;border-radius:999px;transition:width 1s}
+    .alloc-pct{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;min-width:40px;text-align:right}
+    .update-chip{font-size:11px;color:var(--muted);text-align:center;margin-top:12px}
+    .share-row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+    .share-btn{padding:10px 16px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;border:none;transition:all .2s;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+    .sh-tiktok{background:#ff2050;color:white}
+    .sh-discord{background:#5865f2;color:white}
+    @media(max-width:760px){.pt-layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="page">
+  <a href="/" class="back-link">← Înapoi la site</a>
+  <div class="page-header">
+    <div class="tiktok-badge">📱 Shareaza portofoliul pe TikTok</div>
+    <span class="page-emoji">💼</span>
+    <h1>Portfolio <span class="grad-gold">Tracker</span></h1>
+    <p class="page-sub">Construiește portofoliul tău virtual și urmărește valoarea în timp real. Salvat automat în browser.</p>
+  </div>
+
+  <div class="pt-layout">
+    <!-- Add form -->
+    <div>
+      <div class="card">
+        <div class="card-title">➕ Adaugă în portofoliu</div>
+        <div class="add-form">
+          <div class="field">
+            <label>Monedă</label>
+            <select id="ptCoin">
+              <option value="bitcoin" data-sym="BTC" data-ic="₿">Bitcoin (BTC)</option>
+              <option value="ethereum" data-sym="ETH" data-ic="Ξ">Ethereum (ETH)</option>
+              <option value="solana" data-sym="SOL" data-ic="◎">Solana (SOL)</option>
+              <option value="binancecoin" data-sym="BNB" data-ic="🔶">BNB</option>
+              <option value="ripple" data-sym="XRP" data-ic="◈">XRP</option>
+              <option value="cardano" data-sym="ADA" data-ic="🔵">Cardano (ADA)</option>
+              <option value="dogecoin" data-sym="DOGE" data-ic="🐕">Dogecoin (DOGE)</option>
+              <option value="avalanche-2" data-sym="AVAX" data-ic="🔺">Avalanche (AVAX)</option>
+              <option value="chainlink" data-sym="LINK" data-ic="🔗">Chainlink (LINK)</option>
+              <option value="shiba-inu" data-sym="SHIB" data-ic="🐕">Shiba Inu (SHIB)</option>
+              <option value="matic-network" data-sym="MATIC" data-ic="🟣">Polygon (MATIC)</option>
+              <option value="pepe" data-sym="PEPE" data-ic="🐸">PEPE</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Suma investită ($)</label>
+            <input type="number" id="ptAmt" value="500" min="1" step="100" placeholder="ex: 500"/>
+          </div>
+          <button class="add-btn" onclick="addHolding()">➕ Adaugă în portofoliu</button>
+        </div>
+      </div>
+      <div class="card allocation-card">
+        <div class="card-title">🥧 Alocarea portofoliului</div>
+        <div class="alloc-list" id="allocList"><div class="empty-msg" style="padding:20px">Nicio alocare</div></div>
+      </div>
+    </div>
+
+    <!-- Portfolio display -->
+    <div>
+      <div class="total-banner">
+        <div class="tb-label">Valoare totală portofoliu</div>
+        <div class="tb-total" id="ptTotal">$0.00</div>
+        <div class="tb-pnl" id="ptPnl">PnL: $0.00</div>
+        <div class="tb-invested" id="ptInvested">Investit: $0.00</div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>💼 Holdings</span>
+          <button onclick="clearPortfolio()" style="background:rgba(255,45,85,.1);color:var(--red);border:1px solid rgba(255,45,85,.2);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🗑 Șterge tot</button>
+        </div>
+        <div class="holdings-list" id="holdingsList">
+          <div class="empty-msg">Adaugă prima monedă în portofoliu 👆</div>
+        </div>
+        <div class="update-chip" id="updateChip">—</div>
+        <div class="share-row">
+          <button class="share-btn sh-tiktok" onclick="sharePortfolio()">📱 TikTok</button>
+          <a class="share-btn sh-discord" href="https://discord.gg/romaniacrypto" target="_blank">💬 Discord VIP</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PT_KEY='rcb_portfolio_v2';
+const COLORS=['#2a63ff','#00d47e','#f5a800','#ff2d55','#8b5cf6','#06b6d4','#f97316','#ec4899'];
+let _portfolio=loadPF(), _prices={};
+
+function loadPF(){ try{return JSON.parse(localStorage.getItem(PT_KEY))||[];}catch{return[];} }
+function savePF(){ localStorage.setItem(PT_KEY,JSON.stringify(_portfolio)); }
+
+function fmtUsd(n){ if(isNaN(+n)) return '$0'; const v=+n; return (v<0?'-$':'$')+Math.abs(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+async function fetchPrices(){
+  const ids=[..._portfolio.map(h=>h.id), 'bitcoin','ethereum','solana'];
+  const uniq=[...new Set(ids)].join(',');
+  try{
+    const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${uniq}&vs_currencies=usd&include_24hr_change=true`);
+    const data=await res.json();
+    Object.assign(_prices,data);
+    renderPortfolio();
+    document.getElementById('updateChip').textContent='Actualizat la '+new Date().toLocaleTimeString('ro-RO');
+  }catch(e){document.getElementById('updateChip').textContent='Eroare la actualizare prețuri';}
+}
+
+function addHolding(){
+  const sel=document.getElementById('ptCoin');
+  const opt=sel.options[sel.selectedIndex];
+  const id=sel.value, sym=opt.dataset.sym, ic=opt.dataset.ic, name=opt.text;
+  const amt=parseFloat(document.getElementById('ptAmt').value)||0;
+  if(amt<=0){alert('Introdu o sumă validă!');return;}
+  _portfolio.push({id,sym,ic,name:name.split('(')[0].trim(),amt,addedAt:Date.now()});
+  savePF(); fetchPrices();
+}
+
+function removeHolding(idx){ _portfolio.splice(idx,1); savePF(); renderPortfolio(); }
+function clearPortfolio(){ if(confirm('Ștergi tot portofoliul?')){_portfolio=[];savePF();renderPortfolio();} }
+
+function renderPortfolio(){
+  const list=document.getElementById('holdingsList');
+  const alloc=document.getElementById('allocList');
+  if(!_portfolio.length){
+    list.innerHTML='<div class="empty-msg">Adaugă prima monedă în portofoliu 👆</div>';
+    document.getElementById('ptTotal').textContent='$0.00';
+    document.getElementById('ptPnl').textContent='PnL: $0.00';
+    document.getElementById('ptInvested').textContent='Investit: $0.00';
+    alloc.innerHTML='<div class="empty-msg" style="padding:20px">Nicio alocare</div>';
+    return;
+  }
+  let totalVal=0, totalInv=0;
+  const items=_portfolio.map((h,i)=>{
+    const p=_prices[h.id]?.usd||0;
+    const change=_prices[h.id]?.usd_24h_change||0;
+    const qty=p>0?h.amt/p:0;
+    const curVal=p>0?h.amt*(p/p):h.amt;
+    // We track invested amt, current price vs price at time of add is unknown, so show current value
+    // Approximate: show current market value vs invested
+    totalVal+=p>0?h.amt:h.amt; // simplified
+    totalInv+=h.amt;
+    return {h,p,change,qty,curVal:h.amt,idx:i};
+  });
+  // re-calculate with real prices
+  let realTotal=0;
+  const realItems=_portfolio.map((h,i)=>{
+    const p=_prices[h.id]?.usd||0;
+    const change=_prices[h.id]?.usd_24h_change||0;
+    totalInv=_portfolio.reduce((s,x)=>s+x.amt,0);
+    const qty=p>0?h.amt/p:0;
+    const curVal=qty*p;
+    realTotal+=curVal||h.amt;
+    return {h,p,change,qty,curVal:curVal||h.amt,idx:i};
+  });
+  const totalPnl=realTotal-totalInv;
+  const totalPct=totalInv>0?((realTotal-totalInv)/totalInv*100):0;
+  document.getElementById('ptTotal').textContent=fmtUsd(realTotal);
+  const pnlEl=document.getElementById('ptPnl');
+  pnlEl.textContent=`PnL: ${totalPnl>=0?'+':''}${fmtUsd(totalPnl)} (${totalPnl>=0?'+':''}${totalPct.toFixed(1)}%)`;
+  pnlEl.className='tb-pnl '+(totalPnl>=0?'pos':'neg');
+  document.getElementById('ptInvested').textContent=`Investit: ${fmtUsd(totalInv)}`;
+  list.innerHTML=realItems.map(({h,p,change,qty,curVal,idx})=>`
+    <div class="holding-item">
+      <div class="hi-left">
+        <div class="hi-icon">${h.ic}</div>
+        <div>
+          <div class="hi-name">${h.sym}</div>
+          <div class="hi-qty">${qty.toFixed(4)} ${h.sym}</div>
+        </div>
+      </div>
+      <div class="hi-mid">
+        <div class="hi-value">${fmtUsd(curVal)}</div>
+        <div class="hi-price">$${p.toFixed(2)}/unit</div>
+      </div>
+      <div class="hi-right">
+        <span class="hi-pnl ${change>=0?'pos':'neg'}">${change>=0?'+':''}${change.toFixed(1)}% 24h</span>
+        <button class="hi-delete" onclick="removeHolding(${idx})">✕</button>
+      </div>
+    </div>`).join('');
+  // Allocation
+  alloc.innerHTML=realItems.map(({h,curVal},i)=>{
+    const pct=realTotal>0?(curVal/realTotal*100):0;
+    return `<div class="alloc-item">
+      <div class="alloc-dot" style="background:${COLORS[i%COLORS.length]}"></div>
+      <span style="min-width:50px;font-weight:700">${h.sym}</span>
+      <div class="alloc-bar-track"><div class="alloc-bar-fill" style="width:${pct.toFixed(0)}%;background:${COLORS[i%COLORS.length]}"></div></div>
+      <span class="alloc-pct">${pct.toFixed(0)}%</span>
+    </div>`;
+  }).join('');
+}
+
+function sharePortfolio(){
+  const total=document.getElementById('ptTotal').textContent;
+  const invested=document.getElementById('ptInvested').textContent;
+  const holdings=_portfolio.map(h=>h.sym).join(', ');
+  const text=`💼 Portofoliul meu crypto LIVE pe Romania Crypto Signals!\n\n${invested}\nValoare actuală: ${total}\nMonede: ${holdings}\n\nCalculează și tu pe:\nromaniacryptosignals.up.railway.app/portfolio.html\n\n#crypto #portfolio #bitcoin #romania #investitii`;
+  navigator.clipboard.writeText(text).then(()=>alert('✅ Copiat! Lipeste pe TikTok cu un screen recording!'));
+}
+
+// Particles
+(function(){const c=document.getElementById('bgCanvas');if(!c)return;const ctx=c.getContext('2d');let w,h,pts;function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;pts=Array.from({length:35},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.2+.4}));}resize();window.addEventListener('resize',resize);(function draw(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(90,130,255,.35)';ctx.fill();}requestAnimationFrame(draw);})();})();
+
+renderPortfolio();
+fetchPrices();
+setInterval(fetchPrices, 30000);
+</script>
+</body>
+</html>
