@@ -18,6 +18,62 @@
   --r:      14px;
 }
 
+/* ── Light mode ── */
+body.light-mode {
+  --bg:     #f0f4ff;
+  --bg2:    #e4eaf8;
+  --card:   #ffffff;
+  --border: rgba(42,99,255,0.12);
+  --text:   #0d1322;
+  --muted:  #5a6a8e;
+  --blue:   #2a63ff;
+  --blue2:  #5082ff;
+  --green:  #00a863;
+  --red:    #e0002a;
+  --gold:   #c87000;
+  --gold2:  #e08800;
+}
+body.light-mode #bgCanvas { opacity: 0.08; }
+body.light-mode .navbar { background: rgba(240,244,255,0.95); border-bottom-color: rgba(42,99,255,0.1); }
+body.light-mode .ticker-bar { background: rgba(240,244,255,0.98); }
+body.light-mode .price-card { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+/* ── Scroll reveal animations ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.reveal-left {
+  opacity: 0;
+  transform: translateX(-28px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.reveal-left.visible { opacity:1; transform:translateX(0); }
+.reveal-right {
+  opacity: 0;
+  transform: translateX(28px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.reveal-right.visible { opacity:1; transform:translateX(0); }
+
+/* ── Position calculator ── */
+.pos-calc { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:24px; margin-bottom:20px; }
+.pc-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+.pc-field { display:flex; flex-direction:column; gap:5px; }
+.pc-field label { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+.pc-field input, .pc-field select { background:rgba(0,0,0,.25); border:1px solid var(--border); border-radius:9px; padding:10px 12px; color:var(--text); font-size:14px; font-family:inherit; outline:none; transition:border-color .2s; width:100%; }
+.pc-field input:focus, .pc-field select:focus { border-color:var(--blue2); }
+.pc-results { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+.pc-res { background:rgba(0,0,0,.2); border-radius:10px; padding:12px; text-align:center; }
+.pc-res-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:4px; }
+.pc-res-val { font-size:16px; font-weight:800; font-family:'JetBrains Mono',monospace; }
+@media(max-width:560px){ .pc-grid{grid-template-columns:1fr;} .pc-results{grid-template-columns:1fr 1fr;} }
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
 body {
@@ -1041,3 +1097,54 @@ body {
   .nav-actions .btn-discord { display: none; }
   .hero-h1 { letter-spacing: -1px; }
 }
+
+/* ── Theme toggle button ── */
+.theme-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all .2s;
+  font-family: inherit;
+}
+.theme-toggle-btn:hover { color: var(--text); border-color: var(--blue2); }
+
+/* ── Light mode ── */
+body.light-mode {
+  --bg:     #f0f4ff;
+  --bg2:    #e4eaf8;
+  --card:   #ffffff;
+  --border: rgba(42,99,255,0.12);
+  --text:   #0d1322;
+  --muted:  #5a6a8e;
+  --green:  #00a863;
+  --red:    #e0002a;
+  --gold:   #c87000;
+}
+body.light-mode #bgCanvas { opacity: 0.08; }
+body.light-mode .navbar { background: rgba(240,244,255,0.95); }
+body.light-mode .ticker-bar { background: rgba(240,244,255,0.98); }
+
+/* ── Scroll reveal animations ── */
+.reveal { opacity:0; transform:translateY(28px); transition:opacity .55s ease,transform .55s ease; }
+.reveal.visible { opacity:1; transform:translateY(0); }
+.reveal-left { opacity:0; transform:translateX(-28px); transition:opacity .55s ease,transform .55s ease; }
+.reveal-left.visible { opacity:1; transform:translateX(0); }
+.reveal-right { opacity:0; transform:translateX(28px); transition:opacity .55s ease,transform .55s ease; }
+.reveal-right.visible { opacity:1; transform:translateX(0); }
+
+/* ── Position calculator ── */
+.pos-calc{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;margin-bottom:20px}
+.pc-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.pc-field{display:flex;flex-direction:column;gap:5px}
+.pc-field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.pc-field input,.pc-field select{background:rgba(0,0,0,.25);border:1px solid var(--border);border-radius:9px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s;width:100%}
+.pc-field input:focus,.pc-field select:focus{border-color:var(--blue2)}
+.pc-results{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pc-res{background:rgba(0,0,0,.2);border-radius:10px;padding:12px;text-align:center}
+.pc-res-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.pc-res-val{font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace}
+@media(max-width:560px){.pc-grid{grid-template-columns:1fr}.pc-results{grid-template-columns:1fr 1fr}}

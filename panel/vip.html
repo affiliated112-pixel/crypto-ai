@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>VIP — Romania Crypto Signals</title>
+  <meta name="description" content="Semnale crypto VIP cu entry precis, TP1/TP2/TP3 și Stop Loss calculat AI. 30+ monede. Doar $25/lună."/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#05080f;--card:#0d1322;--border:rgba(70,100,200,0.18);--text:#e8efff;--muted:#6b7a9e;--blue:#2a63ff;--blue2:#5082ff;--green:#00d47e;--red:#ff2d55;--gold:#f5a800;--gold2:#ffc840}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.35}
+    .wrap{position:relative;z-index:1;max-width:960px;margin:0 auto;padding:32px 20px 80px}
+    /* Nav */
+    .top-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:56px}
+    .back{display:flex;align-items:center;gap:8px;color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;transition:color .2s}
+    .back:hover{color:var(--text)}
+    .nav-btns{display:flex;gap:10px}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;transition:all .2s;border:none;cursor:pointer;font-family:inherit}
+    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted)}
+    .btn-ghost:hover{border-color:var(--blue2);color:var(--text)}
+    .btn-gold{background:linear-gradient(135deg,#f5a800,#ffc840);color:#0a0600}
+    .btn-gold:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(245,168,0,.4)}
+    /* Hero */
+    .hero{text-align:center;margin-bottom:64px}
+    .vip-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(245,168,0,.1);border:1px solid rgba(245,168,0,.3);color:var(--gold);font-size:12px;font-weight:800;padding:6px 16px;border-radius:999px;margin-bottom:20px;letter-spacing:1px;text-transform:uppercase}
+    h1{font-size:clamp(32px,6vw,60px);font-weight:900;letter-spacing:-2px;line-height:1.1;margin-bottom:16px}
+    .grad-gold{background:linear-gradient(90deg,#f5a800,#ffc840,#ff9500);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .hero-sub{font-size:17px;color:var(--muted);max-width:560px;margin:0 auto 32px;line-height:1.7}
+    .hero-price{font-size:48px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--gold);margin-bottom:6px}
+    .hero-period{font-size:14px;color:var(--muted);margin-bottom:28px}
+    .cta-big{display:inline-flex;align-items:center;gap:10px;padding:18px 40px;border-radius:14px;font-size:18px;font-weight:800;background:linear-gradient(135deg,#f5a800,#ffc840);color:#0a0600;text-decoration:none;transition:all .25s;border:none;cursor:pointer;font-family:inherit}
+    .cta-big:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(245,168,0,.5)}
+    .hero-note{font-size:12px;color:var(--muted);margin-top:12px}
+    /* Stats bar */
+    .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:64px}
+    .stat-cell{background:var(--card);padding:20px;text-align:center}
+    .stat-num{font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;color:var(--gold)}
+    .stat-lbl{font-size:12px;color:var(--muted);margin-top:4px;font-weight:600}
+    @media(max-width:600px){.stats-bar{grid-template-columns:repeat(2,1fr)}}
+    /* Features */
+    .section-title{font-size:28px;font-weight:900;margin-bottom:6px}
+    .section-sub{color:var(--muted);font-size:15px;margin-bottom:32px}
+    .features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:64px}
+    .feat-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;transition:all .25s}
+    .feat-card:hover{border-color:rgba(245,168,0,.3);transform:translateY(-4px)}
+    .feat-ic{font-size:36px;margin-bottom:12px}
+    .feat-title{font-size:16px;font-weight:800;margin-bottom:6px}
+    .feat-desc{font-size:13px;color:var(--muted);line-height:1.6}
+    @media(max-width:700px){.features-grid{grid-template-columns:1fr 1fr}}
+    @media(max-width:480px){.features-grid{grid-template-columns:1fr}}
+    /* Signal preview */
+    .preview-section{margin-bottom:64px}
+    .signal-preview{background:var(--card);border:1px solid rgba(245,168,0,.2);border-radius:20px;padding:28px;position:relative;overflow:hidden}
+    .sp-blur{position:absolute;inset:0;backdrop-filter:blur(6px);background:rgba(5,8,15,.55);display:flex;align-items:center;justify-content:center;z-index:2;flex-direction:column;gap:16px}
+    .sp-lock{font-size:48px}
+    .sp-msg{font-size:16px;font-weight:700;color:var(--gold);text-align:center}
+    .sig-row-vip{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .sig-coin-big{font-size:24px;font-weight:900;font-family:'JetBrains Mono',monospace}
+    .sig-badge-buy{background:rgba(0,212,126,.15);color:var(--green);border:1px solid rgba(0,212,126,.3);padding:6px 14px;border-radius:999px;font-size:13px;font-weight:800}
+    .sig-details{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;filter:blur(4px)}
+    .sd-item{background:rgba(0,0,0,.3);border-radius:10px;padding:12px;text-align:center}
+    .sd-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+    .sd-val{font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .sd-val.green{color:var(--green)} .sd-val.red{color:var(--red)} .sd-val.gold{color:var(--gold)}
+    /* Testimonials */
+    .testi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:64px}
+    .testi-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px}
+    .testi-stars{color:var(--gold);font-size:14px;margin-bottom:10px}
+    .testi-text{font-size:14px;color:var(--text);line-height:1.7;margin-bottom:14px;font-style:italic}
+    .testi-author{display:flex;align-items:center;gap:10px}
+    .testi-av{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+    .testi-name{font-size:14px;font-weight:700}
+    .testi-role{font-size:12px;color:var(--muted)}
+    @media(max-width:700px){.testi-grid{grid-template-columns:1fr}}
+    /* FAQ */
+    .faq-list{display:flex;flex-direction:column;gap:12px;margin-bottom:64px}
+    .faq-item{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    .faq-q{padding:18px 20px;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;user-select:none}
+    .faq-q:hover{color:var(--gold)}
+    .faq-arr{transition:transform .25s;font-size:12px;color:var(--muted)}
+    .faq-a{font-size:14px;color:var(--muted);line-height:1.7;padding:0 20px 18px;display:none}
+    .faq-item.open .faq-arr{transform:rotate(180deg)}
+    .faq-item.open .faq-a{display:block}
+    /* Bottom CTA */
+    .bottom-cta{text-align:center;background:linear-gradient(135deg,rgba(245,168,0,.08),rgba(255,200,64,.04));border:1px solid rgba(245,168,0,.2);border-radius:24px;padding:56px 32px}
+    .bc-title{font-size:clamp(24px,4vw,40px);font-weight:900;margin-bottom:12px}
+    .bc-sub{font-size:16px;color:var(--muted);margin-bottom:28px}
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="wrap">
+
+  <!-- Nav -->
+  <nav class="top-nav">
+    <a href="/" class="back">← Înapoi la site</a>
+    <div class="nav-btns">
+      <a href="/admin.html" class="btn btn-ghost">🔐 Login</a>
+      <a href="https://discord.gg/romaniacrypto" target="_blank" class="btn btn-gold">Discord</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="vip-badge">⭐ VIP Premium</div>
+    <h1>Semnale crypto <span class="grad-gold">care fac bani</span></h1>
+    <p class="hero-sub">Entry exact, TP1/TP2/TP3 și Stop Loss calculat de AI. 30+ monede scanate 24/7. Trimis pe Discord înainte să ratezi mișcarea.</p>
+    <div class="hero-price">$25</div>
+    <div class="hero-period">per lună · anulezi oricând</div>
+    <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-big">💎 Vreau acces VIP →</a>
+    <div class="hero-note">⚡ Acces instant după confirmare · Fără abonament automat</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat-cell"><div class="stat-num">30+</div><div class="stat-lbl">Monede scanate</div></div>
+    <div class="stat-cell"><div class="stat-num" id="vipWr">—%</div><div class="stat-lbl">Win rate</div></div>
+    <div class="stat-cell"><div class="stat-num" id="vipSig">—</div><div class="stat-lbl">Semnale trimise</div></div>
+    <div class="stat-cell"><div class="stat-num">24/7</div><div class="stat-lbl">Monitorizare live</div></div>
+  </div>
+
+  <!-- Features -->
+  <h2 class="section-title">Ce primești în <span class="grad-gold">VIP</span></h2>
+  <p class="section-sub">Tot ce ai nevoie pentru a tranzacționa cu încredere</p>
+  <div class="features-grid">
+    <div class="feat-card"><div class="feat-ic">🎯</div><div class="feat-title">Entry Precis</div><div class="feat-desc">Prețul exact de intrare calculat pe baza suportului, rezistenței și volumului.</div></div>
+    <div class="feat-card"><div class="feat-ic">✅</div><div class="feat-title">TP1 / TP2 / TP3</div><div class="feat-desc">3 ținte de profit pentru a maximiza câștigul. Poți ieși parțial la fiecare nivel.</div></div>
+    <div class="feat-card"><div class="feat-ic">🛡️</div><div class="feat-title">Stop Loss Automat</div><div class="feat-desc">Stop loss calculat din ATR — protejează capitalul indiferent de volatilitate.</div></div>
+    <div class="feat-card"><div class="feat-ic">🤖</div><div class="feat-title">AI Score</div><div class="feat-desc">Scor de încredere 0-100 din 12 indicatori tehnici: RSI, MACD, Bollinger, EMA...</div></div>
+    <div class="feat-card"><div class="feat-ic">⚡</div><div class="feat-title">Alertă Instant</div><div class="feat-desc">Primit pe Discord înainte ca prețul să miște. 0 delay față de email sau SMS.</div></div>
+    <div class="feat-card"><div class="feat-ic">📊</div><div class="feat-title">Risk/Reward</div><div class="feat-desc">Raportul risc/profit calculat automat. Intri doar în semnale cu R:R minim 2:1.</div></div>
+    <div class="feat-card"><div class="feat-ic">📱</div><div class="feat-title">Canal Privat</div><div class="feat-desc">Canal Discord exclusiv VIP cu discuții de piață, analize și suport prioritar.</div></div>
+    <div class="feat-card"><div class="feat-ic">🔄</div><div class="feat-title">Update Live</div><div class="feat-desc">Bot-ul actualizează semnalul dacă piața se schimbă — nu rămâi cu date vechi.</div></div>
+    <div class="feat-card"><div class="feat-ic">📈</div><div class="feat-title">Track Record Real</div><div class="feat-desc">Fiecare semnal înregistrat public. Win rate calculat din date reale, nu inventate.</div></div>
+  </div>
+
+  <!-- Signal preview -->
+  <div class="preview-section">
+    <h2 class="section-title" style="margin-bottom:6px">Cum arată un semnal <span class="grad-gold">VIP</span></h2>
+    <p class="section-sub">Exemplu real — datele exacte sunt vizibile doar pentru membri VIP</p>
+    <div class="signal-preview">
+      <div class="sig-row-vip">
+        <span class="sig-coin-big">BTC / USDT</span>
+        <span class="sig-badge-buy">📈 BUY</span>
+      </div>
+      <div class="sig-details">
+        <div class="sd-item"><div class="sd-lbl">Entry</div><div class="sd-val">$██,███</div></div>
+        <div class="sd-item"><div class="sd-lbl">Stop Loss</div><div class="sd-val red">$██,███</div></div>
+        <div class="sd-item"><div class="sd-lbl">AI Score</div><div class="sd-val gold">██/100</div></div>
+        <div class="sd-item"><div class="sd-lbl">TP1</div><div class="sd-val green">$██,███</div></div>
+        <div class="sd-item"><div class="sd-lbl">TP2</div><div class="sd-val green">$██,███</div></div>
+        <div class="sd-item"><div class="sd-lbl">TP3</div><div class="sd-val green">$██,███</div></div>
+      </div>
+      <div class="sp-blur">
+        <div class="sp-lock">🔒</div>
+        <div class="sp-msg">Deblochează VIP pentru a vedea datele complete</div>
+        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-big" style="font-size:15px;padding:14px 28px">💎 Vreau acces VIP</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Testimonials -->
+  <h2 class="section-title" style="margin-bottom:6px">Ce spun <span class="grad-gold">membrii VIP</span></h2>
+  <p class="section-sub">Feedback real din comunitate</p>
+  <div class="testi-grid">
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testi-text">"Am prins SOL la $142 cu TP3 la $168. Cel mai bun semnal luat vreodată. Bot-ul a văzut mișcarea cu 2 ore înainte."</p>
+      <div class="testi-author"><div class="testi-av">A</div><div><div class="testi-name">Alexandru M.</div><div class="testi-role">Trader activ · 6 luni VIP</div></div></div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-stars">★★★★★</div>
+      <p class="testi-text">"$25/lună e nimic față de cât câștig. Primul semnal mi-a recuperat costul de 3 ori. Stop loss-ul m-a salvat de două ori."</p>
+      <div class="testi-author"><div class="testi-av">R</div><div><div class="testi-name">Radu C.</div><div class="testi-role">Investitor · 3 luni VIP</div></div></div>
+    </div>
+    <div class="testi-card">
+      <div class="testi-stars">★★★★☆</div>
+      <p class="testi-text">"Eram sceptic la început, dar AI score-ul chiar funcționează. Semnalele cu scor peste 75 au ieșit aproape toate în profit."</p>
+      <div class="testi-author"><div class="testi-av">M</div><div><div class="testi-name">Mihai T.</div><div class="testi-role">Crypto enthusiast · 2 luni VIP</div></div></div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <h2 class="section-title" style="margin-bottom:6px">Întrebări <span class="grad-gold">frecvente</span></h2>
+  <p class="section-sub">Tot ce vrei să știi despre VIP</p>
+  <div class="faq-list">
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Cum plătesc? <span class="faq-arr">▼</span></div><div class="faq-a">Plata se face direct pe Discord prin bot sau transfer. Intri pe server, dai /vip și primești instrucțiunile complete.</div></div>
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Pot anula oricând? <span class="faq-arr">▼</span></div><div class="faq-a">Da, absolut. Nu există contract sau abonament automat. Plătești lunar și tu decizi dacă continui.</div></div>
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Câte semnale primesc pe zi? <span class="faq-arr">▼</span></div><div class="faq-a">Bot-ul trimite între 3-10 semnale pe zi în funcție de condițiile pieței. Nu forțăm semnale dacă piața nu e favorabilă.</div></div>
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Funcționează și pe Binance.US? <span class="faq-arr">▼</span></div><div class="faq-a">Da, toate perechile sunt USDT standard disponibile atât pe Binance Global cât și Binance.US și alte exchange-uri majore.</div></div>
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Ce capital am nevoie minim? <span class="faq-arr">▼</span></div><div class="faq-a">Nu există un minim impus. Poți tranzacționa și cu $100, dar recomandat $500+ pentru a diversifica pe mai multe semnale.</div></div>
+    <div class="faq-item"><div class="faq-q" onclick="toggleFaq(this)">Sunt garantate profiturile? <span class="faq-arr">▼</span></div><div class="faq-a">Nu. Niciun semnal nu e 100% sigur — crypto e volatil. Semnalele noastre au un win rate ridicat DAR folosește întotdeauna stop loss și nu risca mai mult decât îți permiți să pierzi.</div></div>
+  </div>
+
+  <!-- Bottom CTA -->
+  <div class="bottom-cta">
+    <h2 class="bc-title">Gata să <span class="grad-gold">câștigezi</span> cu crypto?</h2>
+    <p class="bc-sub">Alătură-te a sute de traderi care primesc semnale VIP în timp real</p>
+    <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-big">💎 Vreau acces VIP — $25/lună →</a>
+    <p style="font-size:12px;color:var(--muted);margin-top:16px">⚠️ Semnalele nu sunt sfaturi financiare. Tranzacționați responsabil.</p>
+  </div>
+
+</div>
+
+<script>
+function toggleFaq(el) {
+  const item = el.parentElement;
+  item.classList.toggle('open');
+}
+// Load live stats
+(async function() {
+  try {
+    const r = await fetch('/api/stats', {cache:'no-store'});
+    const d = await r.json();
+    const wr = d.performance?.win_rate;
+    const sig = d.signals?.total;
+    if (wr != null) document.getElementById('vipWr').textContent = Math.round(+wr) + '%';
+    if (sig != null) document.getElementById('vipSig').textContent = Number(sig).toLocaleString('ro-RO');
+  } catch(_) {}
+})();
+// Canvas bg
+(function(){
+  const c=document.getElementById('bgCanvas'); if(!c) return;
+  const ctx=c.getContext('2d'); let w,h,pts;
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;pts=Array.from({length:50},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.2+.4}));}
+  resize(); window.addEventListener('resize',resize,{passive:true});
+  (function draw(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(245,168,0,.3)';ctx.fill();for(let j=i+1;j<pts.length;j++){const q=pts[j],dx=p.x-q.x,dy=p.y-q.y,dist=Math.hypot(dx,dy);if(dist<100){ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.strokeStyle=`rgba(245,168,0,${.08*(1-dist/100)})`;ctx.lineWidth=1;ctx.stroke();}}}requestAnimationFrame(draw);})();
+})();
+</script>
+</body>
+</html>

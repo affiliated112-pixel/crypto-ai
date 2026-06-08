@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Profilul meu — Romania Crypto Signals</title>
+  <meta name="robots" content="noindex,nofollow"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#05080f;--card:#0d1322;--border:rgba(70,100,200,0.18);--text:#e8efff;--muted:#6b7a9e;--blue:#2a63ff;--blue2:#5082ff;--green:#00d47e;--red:#ff2d55;--gold:#f5a800}
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.3}
+    .wrap{position:relative;z-index:1;max-width:860px;margin:0 auto;padding:32px 20px 80px}
+    .top-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:40px}
+    .back{color:var(--muted);text-decoration:none;font-size:14px;font-weight:600;transition:color .2s}
+    .back:hover{color:var(--text)}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:10px;font-size:14px;font-weight:700;text-decoration:none;border:none;cursor:pointer;font-family:inherit;transition:all .2s}
+    .btn-danger{background:rgba(255,45,85,.1);border:1px solid rgba(255,45,85,.25);color:#ff6a76}
+    .btn-danger:hover{background:rgba(255,45,85,.2)}
+    .btn-primary{background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(42,99,255,.4)}
+    /* Avatar card */
+    .profile-header{display:flex;align-items:center;gap:24px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;margin-bottom:24px}
+    .avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue2));display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:900;flex-shrink:0;box-shadow:0 8px 24px rgba(42,99,255,.3)}
+    .profile-info h2{font-size:22px;font-weight:900;margin-bottom:4px}
+    .role-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700}
+    .role-master{background:rgba(245,168,0,.15);color:var(--gold);border:1px solid rgba(245,168,0,.3)}
+    .role-admin{background:rgba(42,99,255,.15);color:var(--blue2);border:1px solid rgba(42,99,255,.3)}
+    .role-user{background:rgba(107,122,158,.15);color:var(--muted);border:1px solid rgba(107,122,158,.3)}
+    .profile-joined{font-size:13px;color:var(--muted);margin-top:6px}
+    /* Grid */
+    .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    @media(max-width:640px){.profile-grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px}
+    .card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:18px}
+    /* Stats */
+    .stat-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+    .stat-row:last-child{border-bottom:none}
+    .stat-lbl{font-size:14px;color:var(--muted)}
+    .stat-val{font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace}
+    /* Change password */
+    .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+    .field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+    .field input{background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit;outline:none;transition:border-color .2s;width:100%}
+    .field input:focus{border-color:var(--blue2)}
+    .msg{font-size:13px;padding:10px 14px;border-radius:9px;margin-top:8px;display:none}
+    .msg.ok{background:rgba(0,212,126,.1);color:var(--green);border:1px solid rgba(0,212,126,.2)}
+    .msg.err{background:rgba(255,45,85,.1);color:#ff6a76;border:1px solid rgba(255,45,85,.2)}
+    /* Leaderboard preview */
+    .lb-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+    .lb-row:last-child{border-bottom:none}
+    .lb-rank{width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;flex-shrink:0}
+    .lb-rank.gold{background:rgba(245,168,0,.2);color:var(--gold)}
+    .lb-rank.silver{background:rgba(180,180,180,.15);color:#ccc}
+    .lb-rank.bronze{background:rgba(180,100,40,.15);color:#cd7f32}
+    .lb-name{flex:1;font-size:14px;font-weight:600}
+    .lb-pnl{font-size:14px;font-weight:800;font-family:'JetBrains Mono',monospace}
+    .pos{color:var(--green)} .neg{color:var(--red)}
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="wrap">
+  <nav class="top-nav">
+    <a href="/" class="back">← Înapoi la site</a>
+    <button class="btn btn-danger" id="logoutBtn">Deconectare</button>
+  </nav>
+
+  <!-- Not logged in -->
+  <div id="notAuth" style="display:none;text-align:center;padding:80px 20px">
+    <div style="font-size:64px;margin-bottom:20px">🔐</div>
+    <h2 style="font-size:24px;font-weight:900;margin-bottom:10px">Trebuie să fii autentificat</h2>
+    <p style="color:var(--muted);margin-bottom:24px">Conectează-te pentru a-ți vedea profilul.</p>
+    <a href="/admin.html" class="btn btn-primary">Login →</a>
+  </div>
+
+  <!-- Profile content -->
+  <div id="profileContent" style="display:none">
+    <div class="profile-header">
+      <div class="avatar" id="userAvatar">?</div>
+      <div class="profile-info">
+        <h2 id="userName">—</h2>
+        <span class="role-badge role-user" id="userRole">user</span>
+        <div class="profile-joined" id="userJoined"></div>
+      </div>
+    </div>
+
+    <div class="profile-grid">
+      <!-- Paper trading stats -->
+      <div class="card">
+        <div class="card-title">📊 Paper Trading — Statistici</div>
+        <div id="ptStats">
+          <div class="stat-row"><span class="stat-lbl">Balanță</span><span class="stat-val" id="ptBal">—</span></div>
+          <div class="stat-row"><span class="stat-lbl">PnL Total</span><span class="stat-val" id="ptPnlVal">—</span></div>
+          <div class="stat-row"><span class="stat-lbl">Win Rate</span><span class="stat-val" id="ptWrVal">—</span></div>
+          <div class="stat-row"><span class="stat-lbl">Tranzacții</span><span class="stat-val" id="ptTradesVal">—</span></div>
+          <div class="stat-row"><span class="stat-lbl">Wins / Losses</span><span class="stat-val" id="ptWLVal">—</span></div>
+        </div>
+      </div>
+
+      <!-- Change password -->
+      <div class="card">
+        <div class="card-title">🔑 Schimbă parola</div>
+        <div class="field"><label>Parola nouă</label><input type="password" id="newPass" placeholder="minim 6 caractere"/></div>
+        <div class="field"><label>Confirmă parola</label><input type="password" id="confPass" placeholder="repetă parola"/></div>
+        <button class="btn btn-primary" style="width:100%" onclick="changePassword()">Salvează parola</button>
+        <div class="msg" id="passMsg"></div>
+      </div>
+
+      <!-- Leaderboard -->
+      <div class="card" style="grid-column:1/-1">
+        <div class="card-title">🏆 Leaderboard Paper Trading — Top 10</div>
+        <div id="leaderboard">
+          <div style="color:var(--muted);font-size:14px;text-align:center;padding:20px">Se calculează din datele locale…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmtUsd = v => v==null?'—':'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const PT_KEY = 'rcb_pt_v4';
+
+// Load session
+(async function init() {
+  try {
+    const r = await fetch('/api/me', {cache:'no-store'});
+    const d = await r.json();
+    if (!d.authenticated) { $('notAuth').style.display='block'; return; }
+    $('profileContent').style.display='block';
+    const u = d.username || '?';
+    $('userName').textContent = u;
+    $('userAvatar').textContent = u.charAt(0).toUpperCase();
+    const roleBadge = $('userRole');
+    roleBadge.textContent = d.role || 'user';
+    roleBadge.className = 'role-badge role-' + (d.role || 'user');
+    loadPTStats();
+    buildLeaderboard();
+  } catch(_) { $('notAuth').style.display='block'; }
+})();
+
+// Paper trading stats from localStorage
+function loadPTStats() {
+  try {
+    const pt = JSON.parse(localStorage.getItem(PT_KEY)) || {};
+    const cash = pt.cash ?? 10000;
+    const pnl = cash + (pt.positions||[]).reduce((s,p)=>s+p.amt,0) - 10000;
+    const closed = (pt.wins||0) + (pt.losses||0);
+    $('ptBal').textContent = fmtUsd(cash);
+    const pnlEl = $('ptPnlVal');
+    pnlEl.textContent = (pnl>=0?'+':'')+fmtUsd(pnl);
+    pnlEl.className = 'stat-val ' + (pnl>=0?'pos':'neg');
+    $('ptWrVal').textContent = closed>0 ? Math.round((pt.wins||0)/closed*100)+'%' : '—';
+    $('ptTradesVal').textContent = pt.trades || 0;
+    $('ptWLVal').textContent = (pt.wins||0)+' / '+(pt.losses||0);
+  } catch(_) {}
+}
+
+// Build leaderboard from all PT keys in localStorage
+function buildLeaderboard() {
+  const entries = [];
+  // Collect our own
+  try {
+    const pt = JSON.parse(localStorage.getItem(PT_KEY)) || {};
+    const total = (pt.cash||10000) + (pt.positions||[]).reduce((s,p)=>s+p.amt,0);
+    const pnl = total - 10000;
+    const closed = (pt.wins||0)+(pt.losses||0);
+    entries.push({name: 'Tu', pnl, wr: closed>0?Math.round((pt.wins||0)/closed*100):0, trades: pt.trades||0, isSelf:true});
+  } catch(_) {}
+
+  // Demo entries to fill leaderboard
+  const demo = [
+    {name:'CryptoKing',pnl:4820,wr:74,trades:31},{name:'BullRun2025',pnl:3210,wr:68,trades:24},
+    {name:'SatoshiFan',pnl:2940,wr:71,trades:19},{name:'AltcoinHunter',pnl:1850,wr:62,trades:28},
+    {name:'MoonTrader',pnl:1340,wr:58,trades:16},{name:'DiamondHands',pnl:980,wr:60,trades:12},
+    {name:'DeFiWizard',pnl:720,wr:55,trades:9},{name:'WhaleCatcher',pnl:310,wr:52,trades:8},
+    {name:'CryptoNewbie',pnl:-120,wr:44,trades:7},
+  ];
+  entries.push(...demo);
+  entries.sort((a,b)=>b.pnl-a.pnl);
+
+  const medals = ['🥇','🥈','🥉'];
+  const rankCls = ['gold','silver','bronze'];
+  $('leaderboard').innerHTML = entries.slice(0,10).map((e,i)=>`
+    <div class="lb-row" style="${e.isSelf?'background:rgba(42,99,255,.06);border-radius:8px;padding:10px 8px;margin:-2px -4px':''}">
+      <div class="lb-rank ${rankCls[i]||''}">${medals[i]||i+1}</div>
+      <div class="lb-name">${e.name}${e.isSelf?' <span style="font-size:11px;color:var(--blue2);">(tu)</span>':''}</div>
+      <div style="font-size:12px;color:var(--muted);margin-right:12px">${e.wr}% WR · ${e.trades} trades</div>
+      <div class="lb-pnl ${e.pnl>=0?'pos':'neg'}">${e.pnl>=0?'+':''}${fmtUsd(e.pnl)}</div>
+    </div>`).join('');
+}
+
+// Change password
+async function changePassword() {
+  const np = $('newPass').value, cp = $('confPass').value;
+  const msg = $('passMsg');
+  msg.style.display='none';
+  if (np.length < 6) { showMsg(msg,'Parola trebuie să aibă minim 6 caractere.','err'); return; }
+  if (np !== cp) { showMsg(msg,'Parolele nu coincid.','err'); return; }
+  try {
+    const r = await fetch('/api/change-password', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({new_password:np})});
+    const d = await r.json();
+    if (d.ok) showMsg(msg,'✅ Parola schimbată cu succes!','ok');
+    else showMsg(msg,'❌ '+(d.error||'Eroare'),'err');
+  } catch(_) { showMsg(msg,'❌ Eroare de conexiune.','err'); }
+}
+function showMsg(el, txt, cls) { el.textContent=txt; el.className='msg '+cls; el.style.display='block'; }
+
+// Logout
+$('logoutBtn').addEventListener('click', async () => {
+  try { await fetch('/api/logout',{method:'POST'}); } catch(_) {}
+  window.location.href='/admin.html';
+});
+
+// Canvas bg
+(function(){const c=document.getElementById('bgCanvas');if(!c)return;const ctx=c.getContext('2d');let w,h,pts;function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;pts=Array.from({length:40},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.2+.4}));}resize();window.addEventListener('resize',resize,{passive:true});(function draw(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(90,130,255,.4)';ctx.fill();}requestAnimationFrame(draw);})();})();
+</script>
+</body>
+</html>

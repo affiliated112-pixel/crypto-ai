@@ -167,46 +167,109 @@ document.addEventListener('click',async e=>{
 });
 
 // ══════════════════════════════════════════════════════
-// NEWS FEED  (CoinGecko / RSS via allorigins proxy)
+// NEWS FEED — multi-source cu fallback în cascadă
 // ══════════════════════════════════════════════════════
 const NEWS_FEEDS = [
-  'https://www.coindesk.com/arc/outboundfeeds/rss/',
-  'https://cointelegraph.com/rss',
-  'https://decrypt.co/feed',
+  { url:'https://cointelegraph.com/rss', name:'CoinTelegraph' },
+  { url:'https://www.coindesk.com/arc/outboundfeeds/rss/', name:'CoinDesk' },
+  { url:'https://decrypt.co/feed', name:'Decrypt' },
+];
+// Proxy-uri CORS în ordinea preferinței
+const _RSS_PROXIES = [
+  u => `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(u)}&api_key=&count=5`,
+  u => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
+  u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
 ];
 let _newsLoaded = false;
+
+async function _fetchRssFeed(feedUrl, feedName) {
+  // Proxy 1: rss2json (returnează JSON direct — cel mai fiabil)
+  try {
+    const r = await fetch(_RSS_PROXIES[0](feedUrl), {signal:AbortSignal.timeout(7000)});
+    const j = await r.json();
+    if (j.status === 'ok' && j.items?.length) {
+      return j.items.slice(0,4).map(it => ({
+        title: it.title?.trim(),
+        link:  it.link,
+        pub:   it.pubDate,
+        desc:  (it.description||'').replace(/<[^>]+>/g,'').trim().slice(0,120),
+        source: feedName,
+      })).filter(a => a.title && a.link);
+    }
+  } catch(_) {}
+
+  // Proxy 2: allorigins (XML)
+  try {
+    const r = await fetch(_RSS_PROXIES[1](feedUrl), {signal:AbortSignal.timeout(7000)});
+    const j = await r.json();
+    const doc = new DOMParser().parseFromString(j.contents || '', 'text/xml');
+    const items = [...doc.querySelectorAll('item')].slice(0,4);
+    const out = items.map(it => ({
+      title: it.querySelector('title')?.textContent?.trim(),
+      link:  it.querySelector('link')?.textContent?.trim(),
+      pub:   it.querySelector('pubDate')?.textContent?.trim(),
+      desc:  (it.querySelector('description')?.textContent||'').replace(/<[^>]+>/g,'').trim().slice(0,120),
+      source: feedName,
+    })).filter(a => a.title && a.link);
+    if (out.length) return out;
+  } catch(_) {}
+
+  // Proxy 3: corsproxy.io (XML)
+  try {
+    const r = await fetch(_RSS_PROXIES[2](feedUrl), {signal:AbortSignal.timeout(7000)});
+    const txt = await r.text();
+    const doc = new DOMParser().parseFromString(txt, 'text/xml');
+    const items = [...doc.querySelectorAll('item')].slice(0,4);
+    return items.map(it => ({
+      title: it.querySelector('title')?.textContent?.trim(),
+      link:  it.querySelector('link')?.textContent?.trim(),
+      pub:   it.querySelector('pubDate')?.textContent?.trim(),
+      desc:  (it.querySelector('description')?.textContent||'').replace(/<[^>]+>/g,'').trim().slice(0,120),
+      source: feedName,
+    })).filter(a => a.title && a.link);
+  } catch(_) {}
+
+  return [];
+}
+
+async function _fetchCoinGeckoNews() {
+  // CoinGecko news API — fallback final fără proxy
+  try {
+    const r = await fetch('https://api.coingecko.com/api/v3/news', {signal:AbortSignal.timeout(7000)});
+    const j = await r.json();
+    return (j.data||[]).slice(0,6).map(n => ({
+      title: n.title,
+      link:  n.url,
+      pub:   n.updated_at ? new Date(n.updated_at*1000).toUTCString() : '',
+      desc:  (n.description||'').slice(0,120),
+      source: n.author || 'CoinGecko',
+    })).filter(a => a.title && a.link);
+  } catch(_) { return []; }
+}
 
 async function loadNews(force) {
   const grid=$('newsGrid'); if(!grid) return;
   if(_newsLoaded && !force) return;
   grid.innerHTML='<div class="news-skel"></div>'.repeat(6);
-  const articles=[];
-  for(const feed of NEWS_FEEDS){
-    try{
-      const proxy=`https://api.allorigins.win/get?url=${encodeURIComponent(feed)}`;
-      const res=await fetch(proxy,{signal:AbortSignal.timeout(8000)});
-      const j=await res.json();
-      const parser=new DOMParser();
-      const doc=parser.parseFromString(j.contents,'text/xml');
-      const items=[...doc.querySelectorAll('item')].slice(0,4);
-      let source='Crypto News';
-      try{source=new URL(feed).hostname.replace('www.','').split('.')[0];source=source.charAt(0).toUpperCase()+source.slice(1);}catch(_){}
-      items.forEach(item=>{
-        const title=item.querySelector('title')?.textContent?.trim();
-        const link=item.querySelector('link')?.textContent?.trim();
-        const pub=item.querySelector('pubDate')?.textContent?.trim();
-        const desc=item.querySelector('description')?.textContent?.replace(/<[^>]+>/g,'')?.trim()?.slice(0,120);
-        if(title&&link) articles.push({title,link,pub,desc,source});
-      });
-    }catch(_){}
-  }
-  if(!articles.length){
-    grid.innerHTML=`<div class="news-error">📰 Știrile se vor încărca în câteva secunde — încearcă din nou.</div>`;
+
+  // Fetch toate feed-urile în paralel
+  const results = await Promise.all(NEWS_FEEDS.map(f => _fetchRssFeed(f.url, f.name)));
+  let articles = results.flat();
+
+  // Fallback la CoinGecko dacă RSS-urile au picat complet
+  if (!articles.length) articles = await _fetchCoinGeckoNews();
+
+  if (!articles.length) {
+    grid.innerHTML=`<div class="news-error">📰 Știrile nu sunt disponibile momentan. Încearcă din nou în câteva minute.</div>`;
     return;
   }
+
+  // Sortează după dată, cele mai noi primele
+  articles.sort((a,b) => new Date(b.pub||0) - new Date(a.pub||0));
+
   grid.innerHTML=articles.slice(0,6).map(a=>{
     const ts=a.pub?new Date(a.pub).toLocaleString('ro-RO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
-    return `<a class="news-card" href="${a.link}" target="_blank" rel="noopener">
+    return `<a class="news-card" href="${a.link}" target="_blank" rel="noopener noreferrer">
       <div class="news-source">📰 ${a.source||'Crypto News'}</div>
       <div class="news-title">${a.title}</div>
       <div class="news-desc">${a.desc||''}</div>

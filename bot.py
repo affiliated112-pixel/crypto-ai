@@ -7187,6 +7187,18 @@ class _PingHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": ok, "message": msg}, status=200 if ok else 400)
             return
 
+        # ── CHANGE PASSWORD ──
+        if path == "/api/change-password":
+            caller = _panel_current_user(self)
+            if not caller:
+                self._send_json({"ok": False, "error": "neautentificat"}, status=401)
+                return
+            data = self._read_json_body()
+            new_password = str(data.get("new_password", ""))[:128]
+            ok, msg = panel_auth.change_password(caller["u"], new_password)
+            self._send_json({"ok": ok, "message": msg} if ok else {"ok": False, "error": msg})
+            return
+
         # ── LOGOUT ──
         if path == "/api/logout":
             cookie = panel_auth.make_clear_cookie(secure=secure)
