@@ -4,95 +4,102 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Romania Crypto Signals — AI Trading Platform</title>
-  <meta name="description" content="Cea mai avansată platformă de semnale crypto din România. AI-powered, live charts, paper trading, Fear & Greed Index."/>
-  <meta property="og:title" content="Romania Crypto Signals — AI Trading Platform"/>
-  <meta property="og:description" content="Semnale crypto AI live, TradingView charts, paper trading demo, comunitate Discord activă."/>
-  <meta property="og:image" content="/assets/rcb-logo.png"/>
-  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="description" content="Cea mai avansată platformă de semnale crypto din România. AI-powered, TradingView live, paper trading, Fear & Greed Index, news live."/>
   <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..900;1,14..32,300..900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="/assets/styles.css"/>
 </head>
 <body>
 <canvas id="bgCanvas"></canvas>
-<div class="noise-overlay"></div>
 
-<!-- ══ LIVE TICKER ══ -->
-<div class="ticker-bar" id="tickerBar">
-  <div class="ticker-label">LIVE</div>
-  <div class="ticker-scroll"><div class="ticker-track" id="tickerTrack">
-    <span class="tick-item">BTC <b>—</b></span>
-    <span class="tick-item">ETH <b>—</b></span>
-    <span class="tick-item">SOL <b>—</b></span>
-  </div></div>
+<!-- ══ TICKER ══ -->
+<div class="ticker-bar">
+  <div class="ticker-label">⚡ LIVE</div>
+  <div class="ticker-scroll">
+    <div class="ticker-track" id="tickerTrack">
+      <span class="tick-item">BTC <b id="t-BTC">—</b></span>
+      <span class="tick-item">ETH <b id="t-ETH">—</b></span>
+      <span class="tick-item">SOL <b id="t-SOL">—</b></span>
+      <span class="tick-item">BNB <b id="t-BNB">—</b></span>
+      <span class="tick-item">XRP <b id="t-XRP">—</b></span>
+      <span class="tick-item">AVAX <b id="t-AVAX">—</b></span>
+      <span class="tick-item">DOGE <b id="t-DOGE">—</b></span>
+      <span class="tick-item">ADA <b id="t-ADA">—</b></span>
+      <span class="tick-item">BTC <b id="t-BTC2">—</b></span>
+      <span class="tick-item">ETH <b id="t-ETH2">—</b></span>
+      <span class="tick-item">SOL <b id="t-SOL2">—</b></span>
+      <span class="tick-item">BNB <b id="t-BNB2">—</b></span>
+      <span class="tick-item">XRP <b id="t-XRP2">—</b></span>
+      <span class="tick-item">AVAX <b id="t-AVAX2">—</b></span>
+      <span class="tick-item">DOGE <b id="t-DOGE2">—</b></span>
+      <span class="tick-item">ADA <b id="t-ADA2">—</b></span>
+    </div>
+  </div>
 </div>
 
 <!-- ══ NAVBAR ══ -->
 <header class="navbar" id="navbar">
   <div class="navbar-inner">
     <a class="brand" href="#hero">
-      <div class="brand-glow"></div>
       <img src="/assets/rcb-logo.png" alt="RCB" class="brand-logo"/>
-      <div class="brand-info">
+      <div>
         <span class="brand-name">Romania Crypto</span>
         <span class="brand-sub">Signals · AI Bot</span>
       </div>
     </a>
-    <nav class="nav-menu">
+    <nav class="nav-menu" id="navMenu">
       <a href="#market" class="nav-item">📊 Piață</a>
-      <a href="#chart" class="nav-item">📈 Chart Live</a>
+      <a href="#chart" class="nav-item">📈 Chart</a>
       <a href="#signals" class="nav-item">📡 Semnale</a>
-      <a href="#paper" class="nav-item">🎮 Demo Trading</a>
-      <a href="#performance" class="nav-item">🏆 Performanță</a>
+      <a href="#paper" class="nav-item">🎮 Trading</a>
+      <a href="#news" class="nav-item">📰 News</a>
+      <a href="#performance" class="nav-item">🏆 Track</a>
     </nav>
     <div class="nav-actions">
-      <div class="status-chip" id="statusChip">
+      <div class="status-chip">
         <span class="status-dot" id="statusDot"></span>
         <span id="statusText">Conectare…</span>
       </div>
       <a href="https://discord.gg/romaniacrypto" target="_blank" class="btn-discord">
-        <svg width="18" height="18" viewBox="0 0 71 55" fill="currentColor"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.7a.2.2 0 0 0-.2.1 40.8 40.8 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.8a.2.2 0 0 0-.2-.1 58.4 58.4 0 0 0-14.6 4.2.2.2 0 0 0-.1.1C1.6 18.7-.9 32.1.3 45.4a.2.2 0 0 0 .1.1 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 41.9 41.9 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.9a.2.2 0 0 1 .2 0c11.6 5.3 24.1 5.3 35.5 0a.2.2 0 0 1 .2 0l1.1.9a.2.2 0 0 1 0 .4 36.2 36.2 0 0 1-5.5 2.6.2.2 0 0 0-.1.3c1 2 2.2 4 3.6 5.9a.2.2 0 0 0 .2.1A58.6 58.6 0 0 0 70.6 45.5a.2.2 0 0 0 .1-.1c1.5-15.3-2.5-28.6-10.5-40.4a.2.2 0 0 0-.1-.1zM23.7 37.5c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
+        <svg width="16" height="16" viewBox="0 0 71 55" fill="currentColor"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.7a.2.2 0 0 0-.2.1 40.8 40.8 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.8a.2.2 0 0 0-.2-.1 58.4 58.4 0 0 0-14.6 4.2.2.2 0 0 0-.1.1C1.6 18.7-.9 32.1.3 45.4a.2.2 0 0 0 .1.1 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 41.9 41.9 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.9a.2.2 0 0 1 .2 0c11.6 5.3 24.1 5.3 35.5 0a.2.2 0 0 1 .2 0l1.1.9a.2.2 0 0 1 0 .4 36.2 36.2 0 0 1-5.5 2.6.2.2 0 0 0-.1.3c1 2 2.2 4 3.6 5.9a.2.2 0 0 0 .2.1A58.6 58.6 0 0 0 70.6 45.5a.2.2 0 0 0 .1-.1c1.5-15.3-2.5-28.6-10.5-40.4a.2.2 0 0 0-.1-.1zM23.7 37.5c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
         Discord
       </a>
-      <a href="#vip" class="btn-vip-nav">💎 $25/lună VIP</a>
-      <a href="/admin.html" class="btn-admin-nav" title="Login">🔐</a>
+      <a href="#vip-section" class="btn-vip-nav">💎 VIP $25/lună</a>
+      <a href="/admin.html" class="btn-admin-nav" title="Login / Cont">🔐</a>
+      <button class="nav-mobile-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
     </div>
   </div>
 </header>
 
-<!-- ══ ADMIN BANNER ══ -->
+<!-- Admin banner -->
 <div class="admin-banner hidden" id="adminBanner">
-  <span>🔓 Sesiune admin activă — <b id="adminName">admin</b> &nbsp;<a href="/dashboard.html">→ Dashboard</a></span>
+  <span>🔓 Admin activ — <b id="adminName">—</b> &nbsp;<a href="/dashboard.html">→ Dashboard</a></span>
   <button id="adminLogout" class="admin-logout-btn">Deconectare</button>
 </div>
 
 <!-- ══ HERO ══ -->
 <section class="hero" id="hero">
-  <div class="hero-particles" id="heroParticles"></div>
   <div class="hero-content">
     <div class="hero-eyebrow">
-      <span class="eyebrow-flag">🇷🇴</span>
-      <span>România · AI-Powered · Real-time Signals</span>
+      <span>🇷🇴 România</span>
       <span class="eyebrow-sep">·</span>
-      <span class="eyebrow-live"><span class="pulse-dot"></span> LIVE</span>
+      <span>AI-Powered</span>
+      <span class="eyebrow-sep">·</span>
+      <span class="eyebrow-live"><span class="pulse-dot"></span>LIVE 24/7</span>
     </div>
     <h1 class="hero-h1">
       Semnale Crypto<br/>
-      <span class="h1-highlight">Inteligente</span> &amp;
-      <span class="h1-red">Precise</span>
+      <span class="h1-blue">AI Inteligente</span><br/>
+      <span class="h1-red">& Precise</span>
     </h1>
-    <p class="hero-desc">Bot AI care scanează 30+ monede 24/7 — RSI, MACD, Bollinger Bands, volume profile. Entry precis, TP și SL calculat. Trimis direct pe Discord înainte să ratezi mișcarea.</p>
+    <p class="hero-desc">Bot AI care scanează 30+ monede 24/7 cu RSI, MACD, Bollinger Bands. Entry exact, TP și SL calculat automat. Trimis pe Discord înainte să ratezi mișcarea.</p>
     <div class="hero-actions">
       <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-primary">
-        <svg width="20" height="20" viewBox="0 0 71 55" fill="currentColor"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.7a.2.2 0 0 0-.2.1 40.8 40.8 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.8a.2.2 0 0 0-.2-.1 58.4 58.4 0 0 0-14.6 4.2.2.2 0 0 0-.1.1C1.6 18.7-.9 32.1.3 45.4a.2.2 0 0 0 .1.1 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 41.9 41.9 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.9a.2.2 0 0 1 .2 0c11.6 5.3 24.1 5.3 35.5 0a.2.2 0 0 1 .2 0l1.1.9a.2.2 0 0 1 0 .4 36.2 36.2 0 0 1-5.5 2.6.2.2 0 0 0-.1.3c1 2 2.2 4 3.6 5.9a.2.2 0 0 0 .2.1A58.6 58.6 0 0 0 70.6 45.5a.2.2 0 0 0 .1-.1c1.5-15.3-2.5-28.6-10.5-40.4a.2.2 0 0 0-.1-.1zM23.7 37.5c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
-        Intră Gratuit pe Discord
+        <svg width="18" height="18" viewBox="0 0 71 55" fill="currentColor"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.7a.2.2 0 0 0-.2.1 40.8 40.8 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.8a.2.2 0 0 0-.2-.1 58.4 58.4 0 0 0-14.6 4.2.2.2 0 0 0-.1.1C1.6 18.7-.9 32.1.3 45.4a.2.2 0 0 0 .1.1 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 41.9 41.9 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.9a.2.2 0 0 1 .2 0c11.6 5.3 24.1 5.3 35.5 0a.2.2 0 0 1 .2 0l1.1.9a.2.2 0 0 1 0 .4 36.2 36.2 0 0 1-5.5 2.6.2.2 0 0 0-.1.3c1 2 2.2 4 3.6 5.9a.2.2 0 0 0 .2.1A58.6 58.6 0 0 0 70.6 45.5a.2.2 0 0 0 .1-.1c1.5-15.3-2.5-28.6-10.5-40.4a.2.2 0 0 0-.1-.1zM23.7 37.5c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
+        Discord Gratuit
       </a>
-      <a href="#chart" class="cta-secondary">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Chart Live
-      </a>
+      <a href="#chart" class="cta-secondary">📈 Chart Live</a>
       <a href="#paper" class="cta-ghost">🎮 Demo Trading</a>
     </div>
     <div class="hero-counters">
@@ -104,9 +111,8 @@
       <div class="hcounter-sep"></div>
       <div class="hcounter"><span class="hc-val" id="hcOnline">—</span><span class="hc-lbl">Online acum</span></div>
     </div>
-    <div class="next-scan-chip">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Următor scan AI în <span class="countdown-val" id="scanTimer">15:00</span>
+    <div class="scan-chip">
+      🤖 Următor scan AI în <span class="countdown-val" id="scanTimer">15:00</span>
     </div>
   </div>
   <div class="hero-visual">
@@ -121,61 +127,58 @@
   </div>
 </section>
 
-<!-- ══ STATS ROW ══ -->
-<section class="stats-strip" id="statsStrip">
+<!-- ══ STATS STRIP ══ -->
+<div class="stats-strip">
   <div class="strip-inner">
-    <div class="strip-stat s-blue"><span class="ss-ic">👥</span><div><span class="ss-val" id="ssMembers">—</span><span class="ss-lbl">Membri totali</span></div></div>
-    <div class="strip-stat s-green"><span class="ss-ic">🟢</span><div><span class="ss-val" id="ssOnline">—</span><span class="ss-lbl">Online acum</span></div></div>
-    <div class="strip-stat s-gold"><span class="ss-ic">⭐</span><div><span class="ss-val" id="ssVip">—</span><span class="ss-lbl">Membri VIP</span></div></div>
-    <div class="strip-stat s-red"><span class="ss-ic">📡</span><div><span class="ss-val" id="ssSignals">—</span><span class="ss-lbl">Semnale total</span></div></div>
-    <div class="strip-stat"><span class="ss-ic">✅</span><div><span class="ss-val" id="ssBuy">—</span><span class="ss-lbl">Semnale BUY</span></div></div>
-    <div class="strip-stat"><span class="ss-ic">❌</span><div><span class="ss-val" id="ssSell">—</span><span class="ss-lbl">Semnale SELL</span></div></div>
-    <div class="strip-stat"><span class="ss-ic">🪙</span><div><span class="ss-val" id="ssCoins">30+</span><span class="ss-lbl">Monede VIP</span></div></div>
-    <div class="strip-stat"><span class="ss-ic">📅</span><div><span class="ss-val" id="ssToday">—</span><span class="ss-lbl">Semnale azi</span></div></div>
+    <div class="strip-stat s-blue"><span class="ss-ic">👥</span><div><b class="ss-val" id="ssMembers">—</b><small class="ss-lbl">Membri</small></div></div>
+    <div class="strip-stat s-green"><span class="ss-ic">🟢</span><div><b class="ss-val" id="ssOnline">—</b><small class="ss-lbl">Online</small></div></div>
+    <div class="strip-stat s-gold"><span class="ss-ic">💎</span><div><b class="ss-val" id="ssVip">—</b><small class="ss-lbl">VIP</small></div></div>
+    <div class="strip-stat s-red"><span class="ss-ic">📡</span><div><b class="ss-val" id="ssSignals">—</b><small class="ss-lbl">Semnale total</small></div></div>
+    <div class="strip-stat"><span class="ss-ic">🟢</span><div><b class="ss-val" id="ssBuy">—</b><small class="ss-lbl">BUY</small></div></div>
+    <div class="strip-stat"><span class="ss-ic">🔴</span><div><b class="ss-val" id="ssSell">—</b><small class="ss-lbl">SELL</small></div></div>
+    <div class="strip-stat"><span class="ss-ic">🪙</span><div><b class="ss-val">30+</b><small class="ss-lbl">Monede VIP</small></div></div>
+    <div class="strip-stat"><span class="ss-ic">📅</span><div><b class="ss-val" id="ssToday">—</b><small class="ss-lbl">Azi</small></div></div>
   </div>
-</section>
+</div>
 
-<!-- ══ MARKET OVERVIEW ══ -->
+<!-- ══ MARKET ══ -->
 <section class="section" id="market">
   <div class="container">
     <div class="section-header">
       <div>
         <h2 class="section-title">Piața <span class="live-tag"><span class="live-dot"></span>LIVE</span></h2>
-        <p class="section-sub">Prețuri actualizate automat · Fear &amp; Greed Index · Grafice 24h</p>
+        <p class="section-sub">Prețuri actualizate la 15s · Fear &amp; Greed · Sparklines 24h</p>
       </div>
       <span class="updated-at" id="updatedAt">—</span>
     </div>
     <div class="market-grid">
-      <!-- Fear & Greed -->
       <div class="fng-widget">
-        <div class="fng-title">Fear &amp; Greed</div>
+        <div class="fng-title">😱 Fear &amp; Greed Index</div>
         <div class="fng-gauge-wrap">
           <svg class="fng-svg" viewBox="0 0 220 130">
             <path d="M20 110 A90 90 0 0 1 200 110" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="16" stroke-linecap="round"/>
-            <path id="fngArc" d="M20 110 A90 90 0 0 1 200 110" fill="none" stroke="url(#fngG)" stroke-width="16" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
+            <path id="fngArc" d="M20 110 A90 90 0 0 1 200 110" fill="none" stroke="url(#fngGrad)" stroke-width="16" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
             <defs>
-              <linearGradient id="fngG" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="#ff2d3f"/>
-                <stop offset="40%" stop-color="#ff9800"/>
-                <stop offset="70%" stop-color="#ffd02e"/>
-                <stop offset="100%" stop-color="#21d07a"/>
+              <linearGradient id="fngGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stop-color="#ff2d55"/>
+                <stop offset="35%" stop-color="#f5a800"/>
+                <stop offset="65%" stop-color="#ffd02e"/>
+                <stop offset="100%" stop-color="#00d47e"/>
               </linearGradient>
             </defs>
-            <text id="fngNum" x="110" y="108" text-anchor="middle" font-size="36" font-weight="800" fill="#eaf0ff" font-family="JetBrains Mono, monospace">—</text>
+            <text id="fngNum" x="110" y="106" text-anchor="middle" font-size="38" font-weight="800" fill="#e8efff" font-family="JetBrains Mono,monospace">—</text>
           </svg>
         </div>
-        <div class="fng-class" id="fngClass">Sentiment piață</div>
-        <div class="fng-labels"><span>Frică Extremă</span><span>Lăcomie Extremă</span></div>
+        <div class="fng-class" id="fngClass">Se încarcă…</div>
+        <div class="fng-labels"><span>Frică Extremă</span><span>Lăcomie</span></div>
+        <div class="fng-hint">Valoare 0-100 · actualizat zilnic</div>
       </div>
-      <!-- Prices -->
       <div class="prices-area" id="pricesArea">
         <div class="price-skel"></div><div class="price-skel"></div>
         <div class="price-skel"></div><div class="price-skel"></div>
         <div class="price-skel"></div><div class="price-skel"></div>
       </div>
     </div>
-    <!-- VIP tease -->
-    <div class="vip-tease-row" id="vipTeaseRow"></div>
   </div>
 </section>
 
@@ -184,26 +187,44 @@
   <div class="container">
     <div class="section-header">
       <div>
-        <h2 class="section-title">Chart <span class="grad-blue">TradingView</span> Live</h2>
-        <p class="section-sub">Grafic profesional cu RSI, MACD, Bollinger Bands — exact ca pe Binance.</p>
+        <h2 class="section-title">📈 Chart <span style="background:linear-gradient(90deg,#2962ff,#1565c0);-webkit-background-clip:text;background-clip:text;color:transparent">TradingView</span> Live</h2>
+        <p class="section-sub">Aceiași indicatori ca în semnalele VIP — RSI, MACD, Bollinger Bands, EMA 50/200, Volume</p>
       </div>
       <div class="chart-controls">
-        <select id="chartSymbol" class="chart-select" onchange="changeChartSymbol()">
-          <option value="BINANCE:BTCUSDT">BTC/USDT</option>
-          <option value="BINANCE:ETHUSDT">ETH/USDT</option>
-          <option value="BINANCE:SOLUSDT">SOL/USDT</option>
+        <select id="chartSymbol" class="chart-select" onchange="changeChartSymbol(this.value)">
+          <option value="BINANCE:BTCUSDT">₿ BTC/USDT</option>
+          <option value="BINANCE:ETHUSDT">Ξ ETH/USDT</option>
+          <option value="BINANCE:SOLUSDT">◎ SOL/USDT</option>
           <option value="BINANCE:BNBUSDT">BNB/USDT</option>
           <option value="BINANCE:XRPUSDT">XRP/USDT</option>
           <option value="BINANCE:ADAUSDT">ADA/USDT</option>
           <option value="BINANCE:DOGEUSDT">DOGE/USDT</option>
           <option value="BINANCE:AVAXUSDT">AVAX/USDT</option>
           <option value="BINANCE:DOTUSDT">DOT/USDT</option>
+          <option value="BINANCE:LINKUSDT">LINK/USDT</option>
           <option value="BINANCE:MATICUSDT">MATIC/USDT</option>
+          <option value="BINANCE:LTCUSDT">LTC/USDT</option>
         </select>
+        <div class="chart-interval-btns">
+          <button class="ci-btn active" onclick="setInterval_('15')">15m</button>
+          <button class="ci-btn" onclick="setInterval_('60')">1h</button>
+          <button class="ci-btn" onclick="setInterval_('240')">4h</button>
+          <button class="ci-btn" onclick="setInterval_('D')">1D</button>
+        </div>
       </div>
     </div>
+    <!-- TradingView Iframe Widget — exact aceiași indicatori ca VIP -->
     <div class="tv-chart-wrap">
-      <div id="tvWidget" class="tv-widget"></div>
+      <div id="tvContainer"></div>
+    </div>
+    <div class="chart-indicators-info">
+      <span class="ind-chip ind-rsi">RSI 14</span>
+      <span class="ind-chip ind-macd">MACD 12/26/9</span>
+      <span class="ind-chip ind-bb">Bollinger Bands 20</span>
+      <span class="ind-chip ind-ema">EMA 50</span>
+      <span class="ind-chip ind-ema">EMA 200</span>
+      <span class="ind-chip ind-vol">Volume</span>
+      <span class="ind-note">✅ Aceiași indicatori folosiți de bot-ul AI pentru semnale VIP</span>
     </div>
   </div>
 </section>
@@ -212,55 +233,55 @@
 <section class="section" id="signals">
   <div class="container">
     <!-- FREE -->
-    <div class="signals-block">
-      <div class="signals-block-header">
+    <div class="sig-block">
+      <div class="sig-block-hdr">
         <div>
-          <h2 class="section-title">Semnale <span class="grad-green">FREE</span></h2>
-          <p class="section-sub">Entry, Scor AI și R:R vizibile gratuit. Primești pe Discord instant.</p>
+          <h2 class="section-title">📡 Semnale <span style="color:var(--green)">FREE</span></h2>
+          <p class="section-sub">Acces gratuit · Entry + Scor AI + R:R · Trimise instant pe Discord</p>
         </div>
-        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-primary cta-sm">📲 Discord Gratuit</a>
+        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-primary cta-sm">📲 Intră pe Discord</a>
       </div>
       <div class="signal-grid" id="freeSignalGrid">
-        <div class="sig-empty">Se încarcă semnale…</div>
+        <div class="sig-empty">🤖 Bot-ul scanează piața… primul semnal FREE apare în curând.</div>
       </div>
     </div>
 
     <!-- VIP -->
-    <div class="signals-block vip-signals-block" id="vipSection">
-      <div class="vip-glow-bg"></div>
-      <div class="signals-block-header">
+    <div class="sig-block" id="vip-section">
+      <div class="vip-block-bg"></div>
+      <div class="sig-block-hdr">
         <div>
-          <h2 class="section-title">Semnale <span class="grad-gold">VIP</span> <span class="locked-pill">🔒 Premium</span></h2>
-          <p class="section-sub">Entry precis · TP1/TP2/TP3 · Stop Loss · 30+ monede</p>
+          <h2 class="section-title">⭐ Semnale <span style="color:var(--gold)">VIP</span> <span class="locked-pill">🔒 Premium</span></h2>
+          <p class="section-sub">Entry precis · TP1/TP2/TP3 · Stop Loss · 30+ monede · Leverage Alerts</p>
         </div>
-        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip">💎 Deblochează — $25/lună</a>
+        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip">💎 Deblochează VIP — $25/lună</a>
       </div>
       <div class="signal-grid" id="vipSignalGrid">
         <div class="sig-empty">Se încarcă semnale VIP…</div>
       </div>
       <!-- VIP Benefits -->
       <div class="vip-benefits-grid">
-        <div class="vip-benefit"><span>🎯</span><div><b>Entry + TP1/TP2/TP3 + SL</b><p>Plan complet pentru fiecare semnal premium.</p></div></div>
-        <div class="vip-benefit"><span>🪙</span><div><b>30+ monede scanate</b><p>Acces la toate perechile VIP monitorizate.</p></div></div>
-        <div class="vip-benefit"><span>⚡</span><div><b>Semnale prioritare</b><p>Primești primul — timing-ul contează enorm.</p></div></div>
-        <div class="vip-benefit"><span>🤖</span><div><b>Scor AI detaliat</b><p>Calitate, R:R și rationale pentru fiecare semnal.</p></div></div>
+        <div class="vip-benefit"><span>🎯</span><div><b>Entry + TP1/TP2/TP3 + SL</b><p>Plan complet pentru fiecare trade.</p></div></div>
+        <div class="vip-benefit"><span>🪙</span><div><b>30+ monede scanate</b><p>Toate altcoin-urile importante.</p></div></div>
+        <div class="vip-benefit"><span>⚡</span><div><b>Leverage Alerts</b><p>Semnale futures cu risc calculat.</p></div></div>
+        <div class="vip-benefit"><span>🤖</span><div><b>Scor AI detaliat</b><p>Calitate, R:R și justificare completă.</p></div></div>
       </div>
-      <!-- Price banner -->
+      <!-- Price -->
       <div class="vip-price-card">
         <div class="vpc-left">
-          <div class="vpc-badge">🌟 VIP MEMBERSHIP</div>
+          <div class="vpc-badge">💎 VIP MEMBERSHIP</div>
           <div class="vpc-price">$25<span>/lună</span></div>
-          <div class="vpc-desc">Acces complet la toate semnalele premium + canal Discord privat VIP.</div>
+          <div class="vpc-desc">Acces complet · Canal Discord VIP privat · Semnale complete</div>
         </div>
         <div class="vpc-right">
           <ul class="vpc-list">
-            <li>✅ Semnale complete cu Entry, TP, SL</li>
-            <li>✅ 30+ monede monitorizate</li>
+            <li>✅ Entry exact + TP1/TP2/TP3 + Stop Loss</li>
+            <li>✅ 30+ monede monitorizate 24/7</li>
             <li>✅ Canal Discord VIP privat</li>
             <li>✅ Leverage alerts prioritare</li>
             <li>✅ Suport direct din comunitate</li>
           </ul>
-          <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip cta-lg">💎 Vreau VIP acum</a>
+          <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip cta-lg">💎 Vreau VIP acum →</a>
         </div>
       </div>
     </div>
@@ -272,43 +293,44 @@
   <div class="container">
     <div class="section-header">
       <div>
-        <h2 class="section-title">🎮 Demo <span class="grad-blue">Paper Trading</span></h2>
-        <p class="section-sub">Tranzacționezi cu <b>$10,000 virtuali</b> la prețuri reale — zero risc, experiență reală.</p>
+        <h2 class="section-title">🎮 Demo <span style="color:var(--blue2)">Paper Trading</span></h2>
+        <p class="section-sub">Tranzacționează cu <b>$10,000 virtuali</b> la prețuri reale. Zero risc, experiență reală.</p>
       </div>
-      <button class="cta-secondary" onclick="resetPaperTrading()">🔄 Reset Portofoliu</button>
+      <button class="cta-secondary" onclick="resetPT()">🔄 Reset ($10,000)</button>
     </div>
     <div class="paper-grid">
-      <!-- Portfolio summary -->
-      <div class="paper-card paper-portfolio">
-        <div class="paper-card-title">💰 Portofoliu</div>
-        <div class="portfolio-balance">
-          <div class="pb-total">
-            <span class="pb-label">Valoare totală</span>
-            <span class="pb-value" id="ptTotal">$10,000.00</span>
+      <!-- Portfolio -->
+      <div class="paper-card">
+        <div class="pc-title">💰 Portofoliu Virtual</div>
+        <div class="pt-balance">
+          <div class="pt-bal-row">
+            <span class="pt-bal-lbl">Valoare totală</span>
+            <span class="pt-bal-val" id="ptTotal">$10,000.00</span>
           </div>
-          <div class="pb-pnl">
-            <span class="pb-label">PnL</span>
-            <span class="pb-pnl-val" id="ptPnl">$0.00</span>
+          <div class="pt-bal-row">
+            <span class="pt-bal-lbl">PnL</span>
+            <span class="pt-bal-pnl" id="ptPnl">$0.00</span>
           </div>
         </div>
-        <div class="portfolio-breakdown">
-          <div class="pb-row"><span>Cash disponibil</span><b id="ptCash">$10,000.00</b></div>
-          <div class="pb-row"><span>Valoare poziții</span><b id="ptPositionsVal">$0.00</b></div>
-          <div class="pb-row"><span>Tranzacții totale</span><b id="ptTrades">0</b></div>
-          <div class="pb-row"><span>Win rate</span><b id="ptWinrate">—</b></div>
+        <div class="pt-rows">
+          <div class="pt-row"><span>Cash disponibil</span><b id="ptCash">$10,000.00</b></div>
+          <div class="pt-row"><span>Valoare poziții</span><b id="ptPosVal">$0.00</b></div>
+          <div class="pt-row"><span>Total tranzacții</span><b id="ptTrades">0</b></div>
+          <div class="pt-row"><span>Win rate</span><b id="ptWR">—</b></div>
         </div>
-        <div class="paper-card-title" style="margin-top:1.25rem">📦 Poziții deschise</div>
-        <div class="positions-list" id="ptPositions">
+        <div class="pc-title" style="margin-top:16px">📦 Poziții deschise</div>
+        <div class="pt-pos-list" id="ptPositions">
           <div class="pt-empty">Nicio poziție deschisă</div>
         </div>
       </div>
-      <!-- Trade panel -->
-      <div class="paper-card paper-trade">
-        <div class="paper-card-title">⚡ Deschide Poziție</div>
+
+      <!-- Trade form -->
+      <div class="paper-card">
+        <div class="pc-title">⚡ Deschide Poziție</div>
         <div class="trade-form">
-          <div class="tf-row">
+          <div class="tf-field">
             <label>Monedă</label>
-            <select id="ptCoin" class="tf-select" onchange="updatePaperPrice()">
+            <select id="ptCoin" class="tf-input" onchange="onCoinChange()">
               <option value="BTC">Bitcoin (BTC)</option>
               <option value="ETH">Ethereum (ETH)</option>
               <option value="SOL">Solana (SOL)</option>
@@ -319,58 +341,77 @@
               <option value="AVAX">Avalanche (AVAX)</option>
             </select>
           </div>
-          <div class="tf-price-display">
-            <span>Preț curent:</span>
+          <div class="tf-price-box">
+            <span>Preț curent</span>
             <span class="tf-live-price" id="tfPrice">—</span>
           </div>
-          <div class="tf-row">
+          <div class="tf-field">
             <label>Direcție</label>
-            <div class="tf-side-btns">
-              <button class="tf-side-btn active" id="btnLong" onclick="setSide('LONG')">📈 LONG</button>
-              <button class="tf-side-btn" id="btnShort" onclick="setSide('SHORT')">📉 SHORT</button>
+            <div class="tf-sides">
+              <button class="tf-side long-active" id="btnLong" onclick="setSide('LONG')">📈 LONG</button>
+              <button class="tf-side" id="btnShort" onclick="setSide('SHORT')">📉 SHORT</button>
             </div>
           </div>
-          <div class="tf-row">
-            <label>Sumă investită ($)</label>
-            <input type="number" id="ptAmount" class="tf-input" value="500" min="10" max="10000" step="10"/>
+          <div class="tf-field">
+            <label>Sumă ($)</label>
+            <input type="number" id="ptAmt" class="tf-input" value="500" min="10" max="10000" step="50" oninput="updateSummary()"/>
           </div>
-          <div class="tf-row">
+          <div class="tf-field">
             <label>Leverage</label>
-            <div class="leverage-btns">
-              <button class="lev-btn active" onclick="setLev(1)">1x</button>
-              <button class="lev-btn" onclick="setLev(2)">2x</button>
-              <button class="lev-btn" onclick="setLev(5)">5x</button>
-              <button class="lev-btn" onclick="setLev(10)">10x</button>
-              <button class="lev-btn" onclick="setLev(20)">20x</button>
+            <div class="lev-btns">
+              <button class="lev-btn lev-active" onclick="setLev(this,1)">1x</button>
+              <button class="lev-btn" onclick="setLev(this,2)">2x</button>
+              <button class="lev-btn" onclick="setLev(this,5)">5x</button>
+              <button class="lev-btn" onclick="setLev(this,10)">10x</button>
+              <button class="lev-btn" onclick="setLev(this,20)">20x</button>
             </div>
           </div>
           <div class="tf-summary">
-            <div class="tfs-row"><span>Mărime poziție</span><b id="tfSize">—</b></div>
-            <div class="tfs-row"><span>Liquidation est.</span><b id="tfLiq" class="neg">—</b></div>
+            <div class="tfs-r"><span>Mărime poziție</span><b id="tfSize">—</b></div>
+            <div class="tfs-r"><span>Preț lichidare</span><b id="tfLiq" class="neg">—</b></div>
           </div>
           <button class="tf-submit" id="tfSubmit" onclick="openPosition()">
-            <span id="tfSubmitLabel">📈 Deschide LONG</span>
+            <span id="tfLabel">📈 Deschide LONG</span>
           </button>
         </div>
       </div>
-      <!-- Trade history -->
-      <div class="paper-card paper-history">
-        <div class="paper-card-title">📋 Istoricul tranzacțiilor</div>
+
+      <!-- History -->
+      <div class="paper-card">
+        <div class="pc-title">📋 Istoricul tranzacțiilor</div>
         <div class="history-list" id="ptHistory">
-          <div class="pt-empty">Nicio tranzacție încă</div>
+          <div class="pt-empty">Nicio tranzacție încă. Deschide prima ta poziție!</div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- ══ NEWS LIVE ══ -->
+<section class="section" id="news">
+  <div class="container">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">📰 Crypto News <span class="live-tag"><span class="live-dot"></span>LIVE</span></h2>
+        <p class="section-sub">Ultimele știri din piața crypto — CoinDesk, CoinTelegraph, Decrypt</p>
+      </div>
+      <button class="cta-secondary" onclick="loadNews()">🔄 Actualizează</button>
+    </div>
+    <div class="news-grid" id="newsGrid">
+      <div class="news-skel"></div><div class="news-skel"></div>
+      <div class="news-skel"></div><div class="news-skel"></div>
+      <div class="news-skel"></div><div class="news-skel"></div>
+    </div>
+  </div>
+</section>
+
 <!-- ══ PERFORMANCE ══ -->
-<section class="section" id="performance">
+<section class="section section-dark" id="performance">
   <div class="container">
     <div class="section-header">
       <div>
         <h2 class="section-title">🏆 Track Record</h2>
-        <p class="section-sub">Performanță reală din ultimele 30 zile — fără cifre inventate.</p>
+        <p class="section-sub">Performanță reală din ultimele 30 zile — date live din bot.</p>
       </div>
     </div>
     <div class="perf-layout">
@@ -381,63 +422,62 @@
             <span class="wr-lbl">Win Rate</span>
           </div>
         </div>
+        <div style="text-align:center;margin-top:12px;font-size:13px;color:var(--muted)">Ultimele 30 zile</div>
       </div>
       <div class="perf-stats-card">
         <div class="ps-row"><span>Semnale închise</span><b id="perfClosed">—</b></div>
-        <div class="ps-row"><span>Câștigătoare</span><b class="pos" id="perfWins">—</b></div>
-        <div class="ps-row"><span>Pierzătoare</span><b class="neg" id="perfLosses">—</b></div>
+        <div class="ps-row"><span>Câștigătoare ✅</span><b class="pos" id="perfWins">—</b></div>
+        <div class="ps-row"><span>Pierzătoare ❌</span><b class="neg" id="perfLosses">—</b></div>
         <div class="ps-row"><span>Semnale active</span><b id="perfOpen">—</b></div>
-        <div class="ps-row"><span>PnL mediu / semnal</span><b id="perfPnl">—</b></div>
+        <div class="ps-row"><span>PnL mediu</span><b id="perfAvgPnl">—</b></div>
       </div>
       <div class="perf-activity-card">
-        <div class="paper-card-title">📊 Activitate semnale</div>
+        <div class="pc-title">📊 Activitate semnale</div>
         <div class="act-bars">
-          <div class="act-b"><div class="act-label"><span>BUY total</span><b id="aLblBuy">—</b></div><div class="act-track"><div class="act-fill fill-green" id="aBarBuy"></div></div></div>
-          <div class="act-b"><div class="act-label"><span>SELL total</span><b id="aLblSell">—</b></div><div class="act-track"><div class="act-fill fill-red" id="aBarSell"></div></div></div>
-          <div class="act-b"><div class="act-label"><span>FREE azi</span><b id="aLblFree">—</b></div><div class="act-track"><div class="act-fill fill-blue" id="aBarFree"></div></div></div>
-          <div class="act-b"><div class="act-label"><span>VIP azi</span><b id="aLblVip">—</b></div><div class="act-track"><div class="act-fill fill-gold" id="aBarVip"></div></div></div>
+          <div class="act-b"><div class="act-lbl"><span>BUY total</span><b id="aLBuy">—</b></div><div class="act-track"><div class="act-fill fill-green" id="aBBuy"></div></div></div>
+          <div class="act-b"><div class="act-lbl"><span>SELL total</span><b id="aLSell">—</b></div><div class="act-track"><div class="act-fill fill-red" id="aBSell"></div></div></div>
+          <div class="act-b"><div class="act-lbl"><span>FREE azi</span><b id="aLFree">—</b></div><div class="act-track"><div class="act-fill fill-blue" id="aBFree"></div></div></div>
+          <div class="act-b"><div class="act-lbl"><span>VIP azi</span><b id="aLVip">—</b></div><div class="act-track"><div class="act-fill fill-gold" id="aBVip"></div></div></div>
         </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ══ DISCORD SECTION ══ -->
-<section class="section section-dark" id="discord-section">
+<!-- ══ DISCORD ══ -->
+<section class="section" id="discord-section">
   <div class="container">
     <div class="section-header">
       <div>
-        <h2 class="section-title">Discord <span class="live-tag"><span class="live-dot"></span>LIVE</span></h2>
-        <p class="section-sub">Date sincronizate direct din serverul nostru.</p>
+        <h2 class="section-title">💬 Comunitate Discord</h2>
+        <p class="section-sub">1000+ traderi activi. Semnale live. Discuții de piață în timp real.</p>
       </div>
       <a href="https://discord.gg/romaniacrypto" target="_blank" class="btn-discord">Intră pe Discord →</a>
     </div>
     <div class="discord-panels">
       <div class="dc-panel">
-        <div class="dc-panel-title">🏠 Server Info</div>
-        <div class="dc-rows" id="dcRows">
-          <div class="dc-r"><span>👥 Membri totali</span><b id="dcMembers">—</b></div>
-          <div class="dc-r"><span>🟢 Online acum</span><b id="dcOnline">—</b></div>
-          <div class="dc-r"><span>⭐ Membri VIP</span><b id="dcVip">—</b></div>
-          <div class="dc-r"><span>🤖 Boturi</span><b id="dcBots">—</b></div>
-          <div class="dc-r"><span>💬 Canale text</span><b id="dcText">—</b></div>
-          <div class="dc-r"><span>🔊 Canale voce</span><b id="dcVoice">—</b></div>
-          <div class="dc-r"><span>🚀 Boosturi</span><b id="dcBoosts">—</b></div>
-        </div>
+        <div class="pc-title">🏠 Server Info</div>
+        <div class="dc-r"><span>👥 Membri totali</span><b id="dcMembers">—</b></div>
+        <div class="dc-r"><span>🟢 Online acum</span><b id="dcOnline">—</b></div>
+        <div class="dc-r"><span>💎 Membri VIP</span><b id="dcVip">—</b></div>
+        <div class="dc-r"><span>🤖 Boturi</span><b id="dcBots">—</b></div>
+        <div class="dc-r"><span>💬 Canale text</span><b id="dcText">—</b></div>
+        <div class="dc-r"><span>🔊 Canale voce</span><b id="dcVoice">—</b></div>
+        <div class="dc-r"><span>🚀 Boosturi</span><b id="dcBoosts">—</b></div>
       </div>
       <div class="dc-panel">
-        <div class="dc-panel-title">🆕 Membri noi (24h)</div>
-        <div class="dc-join-list" id="dcJoins"><div class="dc-empty">—</div></div>
+        <div class="pc-title">🆕 Membri noi (24h)</div>
+        <div id="dcJoins"><div class="pt-empty">—</div></div>
       </div>
-      <div class="dc-panel dc-cta-panel">
-        <div class="dc-cta-icon">💬</div>
+      <div class="dc-panel dc-cta">
+        <div style="font-size:40px;margin-bottom:10px">💬</div>
         <h3>Comunitatea ta crypto</h3>
-        <p>1000+ traderi activi. Semnale live. Discuții de piață în timp real. Totul pe Discord.</p>
-        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-primary" style="margin-top:1.5rem;justify-content:center">Intră Gratuit →</a>
-        <div class="dc-divider"></div>
+        <p>1000+ traderi activi. Semnale live. Discuții de piață în timp real. Join gratuit.</p>
+        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-primary" style="margin-top:16px;width:100%;justify-content:center">Intră Gratuit →</a>
+        <div class="dc-div"></div>
         <h3 style="color:var(--gold)">💎 Upgrade VIP</h3>
-        <p>Semnale complete, entry precis, TP/SL, canal privat. Doar <b>$25/lună</b>.</p>
-        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip" style="margin-top:1rem;justify-content:center">Deblochează VIP →</a>
+        <p>Entry precis, TP/SL, canal privat. Doar <b>$25/lună</b>.</p>
+        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip" style="margin-top:12px;width:100%;justify-content:center">Deblochează VIP →</a>
       </div>
     </div>
   </div>
@@ -451,22 +491,78 @@
         <img src="/assets/rcb-logo.png" alt="RCB"/>
         <div>
           <div class="footer-name">Romania Crypto Signals</div>
-          <div class="footer-sub">AI Trading Bot · RCB</div>
+          <div class="footer-sub">AI Trading Bot · RCB · 2025</div>
         </div>
       </div>
       <div class="footer-links">
         <a href="https://discord.gg/romaniacrypto" target="_blank">Discord</a>
         <a href="#chart">Chart Live</a>
         <a href="#paper">Demo Trading</a>
+        <a href="#news">News</a>
         <a href="/admin.html">Login VIP</a>
       </div>
     </div>
-    <div class="footer-disclaimer">⚠️ Semnalele nu sunt sfaturi financiare. Tranzacționați responsabil. · Romania Crypto Signals © 2025</div>
+    <div class="footer-disc">⚠️ Semnalele nu sunt sfaturi financiare. Tranzacționați responsabil. · Romania Crypto Signals © 2025</div>
   </div>
 </footer>
 
-<!-- ══ TOASTS ══ -->
 <div id="toastContainer" class="toast-container"></div>
+
+<script>
+// ══════════════════════════════════════════
+// TradingView — Exact indicatori VIP
+// ══════════════════════════════════════════
+let _tvSymbol = 'BINANCE:BTCUSDT';
+let _tvInterval = '60';
+let _tvLoaded = false;
+
+function buildTVWidget() {
+  const cont = document.getElementById('tvContainer');
+  if (!cont) return;
+  cont.innerHTML = `
+    <iframe
+      id="tvFrame"
+      src="https://s.tradingview.com/widgetembed/?frameElementId=tvFrame
+        &symbol=${encodeURIComponent(_tvSymbol)}
+        &interval=${_tvInterval}
+        &hidesidetoolbar=0
+        &hidetoptoolbar=0
+        &symboledit=1
+        &saveimage=0
+        &toolbarbg=0d1322
+        &studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FBollingerBands%40tv-basicstudies%1FEMA%40tv-basicstudies%1FEMA%40tv-basicstudies
+        &studiesOverrides=%7B%22ema.length%22%3A50%2C%22ema.2.length%22%3A200%7D
+        &theme=dark
+        &style=1
+        &timezone=Europe%2FBucharest
+        &locale=ro
+        &withdateranges=1
+        &allow_symbol_change=1
+        &show_popup_button=1
+        &popup_width=1000
+        &popup_height=650"
+      style="width:100%;height:540px;border:none;"
+      allowtransparency="true"
+      frameborder="0"
+      scrolling="no"
+    ></iframe>`;
+}
+
+function changeChartSymbol(sym) {
+  _tvSymbol = sym;
+  buildTVWidget();
+}
+
+function setInterval_(iv) {
+  _tvInterval = iv;
+  document.querySelectorAll('.ci-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+  buildTVWidget();
+}
+
+// Build on load
+document.addEventListener('DOMContentLoaded', buildTVWidget);
+</script>
 
 <script src="/assets/app.js"></script>
 </body>

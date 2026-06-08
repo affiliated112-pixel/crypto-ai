@@ -3,57 +3,117 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Cont · Romania Crypto Signals</title>
+  <title>Login · Romania Crypto Signals</title>
   <meta name="robots" content="noindex,nofollow"/>
   <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="/assets/styles.css"/>
   <style>
-    body{display:grid;place-items:center;min-height:100vh;padding:16px}
+    :root {
+      --bg:#05080f; --bg2:#0a0e1a; --card:#0d1322; --border:rgba(70,100,200,0.18);
+      --text:#e8efff; --muted:#6b7a9e; --blue:#2a63ff; --blue2:#5082ff;
+      --green:#00d47e; --red:#ff2d55; --gold:#f5a800; --yellow:#ffd02e;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{
+      font-family:'Inter',system-ui,sans-serif;
+      background:var(--bg); color:var(--text);
+      min-height:100vh; display:grid; place-items:center;
+      padding:24px; overflow-x:hidden;
+    }
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.4}
     .auth-wrap{width:100%;max-width:420px;position:relative;z-index:1}
-    .auth-card{background:var(--card);border:1px solid var(--card-border);border-radius:22px;padding:28px;backdrop-filter:blur(16px)}
-    .auth-brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);margin-bottom:22px}
-    .auth-brand img{width:48px;height:48px;border-radius:12px;box-shadow:0 6px 18px rgba(47,107,255,.35)}
-    .auth-brand-text b{display:block;font-size:16px;font-weight:800}
-    .auth-brand-text span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
-    .tabs{display:flex;background:rgba(0,0,0,.2);padding:4px;border-radius:12px;margin-bottom:20px;gap:4px}
-    .tab{flex:1;padding:10px;border:none;background:transparent;color:var(--muted);font-weight:700;font-size:14px;border-radius:9px;cursor:pointer;transition:all .2s;font-family:inherit}
-    .tab.active{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(47,107,255,.4)}
+    .auth-card{
+      background:rgba(13,19,34,0.9);
+      border:1px solid var(--border);
+      border-radius:20px; padding:32px;
+      backdrop-filter:blur(20px);
+      box-shadow:0 24px 64px rgba(0,0,0,0.6);
+    }
+    .auth-brand{
+      display:flex;align-items:center;gap:12px;
+      text-decoration:none;color:var(--text);margin-bottom:24px;
+    }
+    .auth-brand img{width:48px;height:48px;border-radius:12px;box-shadow:0 6px 18px rgba(42,99,255,.4)}
+    .auth-brand b{display:block;font-size:15px;font-weight:800}
+    .auth-brand span{display:block;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+    .tabs{display:flex;background:rgba(0,0,0,0.3);padding:4px;border-radius:12px;margin-bottom:22px;gap:4px}
+    .tab{
+      flex:1;padding:10px;border:none;background:transparent;
+      color:var(--muted);font-weight:700;font-size:13px;
+      border-radius:9px;cursor:pointer;transition:all .2s;font-family:inherit;
+    }
+    .tab.active{background:var(--blue);color:#fff;box-shadow:0 4px 14px rgba(42,99,255,.4)}
     .auth-form{display:flex;flex-direction:column;gap:14px}
-    .auth-form.hidden{display:none}
-    label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
-    input[type=text],input[type=password]{background:rgba(0,0,0,.25);border:1px solid var(--card-border);border-radius:11px;padding:13px 15px;color:var(--text);font-size:15px;font-family:inherit;transition:border-color .2s;-webkit-appearance:none}
-    input:focus{outline:none;border-color:var(--blue-soft)}
+    .auth-form.hidden{display:none!important}
+    .fld{display:flex;flex-direction:column;gap:6px}
+    .fld label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px}
+    .fld input{
+      background:rgba(0,0,0,0.3);border:1px solid var(--border);
+      border-radius:10px;padding:12px 14px;color:var(--text);
+      font-size:14px;font-family:inherit;transition:border-color .2s;outline:none;width:100%;
+    }
+    .fld input:focus{border-color:var(--blue2)}
     .pw-wrap{position:relative}
-    .pw-wrap input{width:100%;padding-right:48px}
-    .pw-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);padding:0}
-    .auth-submit{width:100%;margin-top:4px}
-    .auth-msg{font-size:13px;font-weight:600;text-align:center;min-height:18px;padding:8px;border-radius:8px}
-    .auth-msg.ok{color:var(--green);background:rgba(33,208,122,.08);border:1px solid rgba(33,208,122,.2)}
-    .auth-msg.err{color:var(--red);background:rgba(255,45,63,.08);border:1px solid rgba(255,45,63,.2)}
-    .pw-strength{height:4px;border-radius:2px;margin-top:4px;background:rgba(255,255,255,.08);overflow:hidden}
+    .pw-wrap input{padding-right:46px}
+    .pw-toggle{
+      position:absolute;right:12px;top:50%;transform:translateY(-50%);
+      background:none;border:none;cursor:pointer;font-size:17px;
+      color:var(--muted);padding:4px;transition:color .2s;
+    }
+    .pw-toggle:hover{color:var(--text)}
+    .pw-strength{height:3px;background:rgba(255,255,255,0.06);border-radius:2px;margin-top:6px;overflow:hidden}
     .pw-bar{height:100%;width:0;border-radius:2px;transition:width .3s,background .3s}
-    .pw-hint{font-size:11px;color:var(--muted);margin-top:2px}
-    .auth-footer{text-align:center;color:var(--muted);font-size:12px;margin-top:16px;padding:0 8px;line-height:1.6}
-    .auth-back{display:block;text-align:center;color:var(--muted);text-decoration:none;font-size:13px;margin-top:14px;transition:color .2s}
+    .pw-hint{font-size:11px;color:var(--muted);margin-top:3px;min-height:14px}
+    .auth-submit{
+      width:100%;padding:13px;border-radius:11px;border:none;
+      background:linear-gradient(135deg,var(--blue),var(--blue2));
+      color:white;font-size:14px;font-weight:800;
+      cursor:pointer;font-family:inherit;transition:all .2s;
+      box-shadow:0 6px 20px rgba(42,99,255,.35);margin-top:4px;
+    }
+    .auth-submit:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(42,99,255,.5)}
+    .auth-submit.vip-btn{
+      background:linear-gradient(135deg,var(--gold),#ffc840);
+      color:#1a0800;box-shadow:0 6px 20px rgba(245,168,0,.3);
+    }
+    .auth-submit.vip-btn:hover{box-shadow:0 10px 28px rgba(245,168,0,.45)}
+    .auth-msg{
+      font-size:13px;font-weight:600;text-align:center;
+      padding:9px;border-radius:9px;min-height:20px;
+    }
+    .auth-msg.ok{color:var(--green);background:rgba(0,212,126,.08);border:1px solid rgba(0,212,126,.2)}
+    .auth-msg.err{color:var(--red);background:rgba(255,45,85,.08);border:1px solid rgba(255,45,85,.2)}
+    .auth-info{
+      font-size:12px;color:var(--muted);text-align:center;
+      line-height:1.6;padding:10px;background:rgba(42,99,255,.06);
+      border:1px solid rgba(42,99,255,.12);border-radius:9px;
+    }
+    .auth-back{
+      display:block;text-align:center;color:var(--muted);
+      text-decoration:none;font-size:13px;margin-top:18px;transition:color .2s;
+    }
     .auth-back:hover{color:var(--text)}
-    .security-badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
-    .badge-sec{font-size:11px;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);padding:4px 10px;border-radius:999px}
+    .sec-badges{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:16px}
+    .sec-badge{
+      font-size:10px;color:var(--muted);
+      background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);
+      padding:4px 10px;border-radius:999px;
+    }
+    .divider{height:1px;background:var(--border);margin:6px 0}
   </style>
 </head>
 <body>
 <canvas id="bgCanvas"></canvas>
-<div class="bg-glow glow-blue"></div>
-<div class="bg-glow glow-red"></div>
 
 <div class="auth-wrap">
   <div class="auth-card">
     <a class="auth-brand" href="/">
       <img src="/assets/rcb-logo.png" alt="RCB"/>
-      <div class="auth-brand-text">
+      <div>
         <b>Romania Crypto Signals</b>
-        <span>Cont utilizator</span>
+        <span>Cont utilizator · VIP Access</span>
       </div>
     </a>
 
@@ -62,103 +122,117 @@
       <button class="tab" data-tab="register">✨ Cont nou</button>
     </div>
 
-    <!-- LOGIN -->
+    <!-- ── LOGIN ── -->
     <form id="loginForm" class="auth-form" autocomplete="on">
-      <label>Username
-        <input type="text" id="loginUser" autocomplete="username" required placeholder="ex: marius"/>
-      </label>
-      <label>Parolă
+      <div class="fld">
+        <label>Username</label>
+        <input type="text" id="loginUser" autocomplete="username" required placeholder="username-ul tău"/>
+      </div>
+      <div class="fld">
+        <label>Parolă</label>
         <div class="pw-wrap">
           <input type="password" id="loginPass" autocomplete="current-password" required placeholder="••••••••"/>
           <button type="button" class="pw-toggle" data-target="loginPass">👁</button>
         </div>
-      </label>
-      <button type="submit" class="btn btn-primary auth-submit">🔐 Intră în cont</button>
+      </div>
+      <button type="submit" class="auth-submit">🔐 Intră în cont</button>
       <div class="auth-msg" id="loginMsg"></div>
     </form>
 
-    <!-- REGISTER -->
+    <!-- ── REGISTER ── -->
     <form id="registerForm" class="auth-form hidden" autocomplete="off">
-      <label>Username (3-32 caractere)
-        <input type="text" id="regUser" autocomplete="off" required placeholder="ex: marius_crypto"
-               pattern="[A-Za-z0-9._\-]{3,32}" title="Litere, cifre, _, -, ."/>
-      </label>
-      <label>Parolă (minim 6 caractere)
+      <div class="fld">
+        <label>Username (3-32 caractere)</label>
+        <input type="text" id="regUser" autocomplete="off" required
+               placeholder="ex: marius_crypto"
+               pattern="[A-Za-z0-9._\-]{3,32}"
+               title="Litere, cifre, _, -, . — 3 până la 32 caractere"/>
+      </div>
+      <div class="fld">
+        <label>Parolă (minim 6 caractere)</label>
         <div class="pw-wrap">
           <input type="password" id="regPass" autocomplete="new-password" required placeholder="••••••••"/>
           <button type="button" class="pw-toggle" data-target="regPass">👁</button>
         </div>
         <div class="pw-strength"><div class="pw-bar" id="pwBar"></div></div>
-        <span class="pw-hint" id="pwHint"></span>
-      </label>
-      <label>Confirmă parola
+        <div class="pw-hint" id="pwHint"></div>
+      </div>
+      <div class="fld">
+        <label>Confirmă parola</label>
         <div class="pw-wrap">
           <input type="password" id="regPass2" autocomplete="new-password" required placeholder="••••••••"/>
           <button type="button" class="pw-toggle" data-target="regPass2">👁</button>
         </div>
-      </label>
-      <button type="submit" class="btn btn-vip auth-submit">✨ Creează cont</button>
+      </div>
+      <button type="submit" class="auth-submit vip-btn">✨ Creează cont gratuit</button>
       <div class="auth-msg" id="registerMsg"></div>
-      <p style="font-size:12px;color:var(--muted);text-align:center;line-height:1.5">
+      <div class="auth-info">
         ⏳ Contul nou este <b>în așteptare</b> până la aprobarea unui administrator.<br/>
-        Vei putea vedea semnalele VIP odată aprobat.
-      </p>
+        Odată aprobat, poți vedea semnalele VIP.
+      </div>
     </form>
 
-    <a class="auth-back" href="/">← Înapoi la site</a>
+    <a class="auth-back" href="/">← Înapoi la site principal</a>
 
-    <div class="security-badges">
-      <span class="badge-sec">🔒 HTTPS</span>
-      <span class="badge-sec">🛡 Parole hash-uite</span>
-      <span class="badge-sec">⏱ 6 încercări max</span>
-      <span class="badge-sec">🍪 HttpOnly cookie</span>
+    <div class="sec-badges">
+      <span class="sec-badge">🔒 HTTPS</span>
+      <span class="sec-badge">🛡 Parole criptate</span>
+      <span class="sec-badge">⏱ 6 încercări max</span>
+      <span class="sec-badge">🍪 Cookie HttpOnly</span>
     </div>
   </div>
-  <p class="auth-footer">Contul nou necesită aprobarea adminului · Sesiuni expiră după 8h</p>
 </div>
 
 <script>
 'use strict';
 const $ = id => document.getElementById(id);
 
-/* tabs */
+/* ── tabs ── */
 document.querySelectorAll('.tab').forEach(t => {
   t.addEventListener('click', () => {
     document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
     t.classList.add('active');
-    const which = t.dataset.tab;
-    $('loginForm').classList.toggle('hidden', which !== 'login');
-    $('registerForm').classList.toggle('hidden', which !== 'register');
+    const w = t.dataset.tab;
+    $('loginForm').classList.toggle('hidden', w !== 'login');
+    $('registerForm').classList.toggle('hidden', w !== 'register');
+    $('loginMsg').textContent = '';
+    $('registerMsg').textContent = '';
   });
 });
 
-/* show/hide password */
+/* ── show/hide password ── */
 document.querySelectorAll('.pw-toggle').forEach(btn => {
   btn.addEventListener('click', () => {
     const inp = $(btn.dataset.target);
-    const isHidden = inp.type === 'password';
-    inp.type = isHidden ? 'text' : 'password';
-    btn.textContent = isHidden ? '🙈' : '👁';
+    const hide = inp.type === 'password';
+    inp.type = hide ? 'text' : 'password';
+    btn.textContent = hide ? '🙈' : '👁';
   });
 });
 
-/* password strength */
+/* ── password strength ── */
 $('regPass').addEventListener('input', () => {
   const v = $('regPass').value;
   const bar = $('pwBar'), hint = $('pwHint');
-  let score = 0, label = '', color = '';
+  let score = 0;
   if (v.length >= 6) score++;
   if (v.length >= 10) score++;
   if (/[A-Z]/.test(v)) score++;
   if (/[0-9]/.test(v)) score++;
   if (/[^A-Za-z0-9]/.test(v)) score++;
-  if (score <= 1) { label = 'Slabă'; color = 'var(--red)'; }
-  else if (score <= 3) { label = 'Medie'; color = 'var(--yellow)'; }
-  else { label = 'Puternică ✓'; color = 'var(--green)'; }
+  const levels = [
+    {label:'Prea scurtă',color:'#4b5563'},
+    {label:'Slabă 😟',color:'#ff2d55'},
+    {label:'OK',color:'#f5a800'},
+    {label:'Bună 👍',color:'#22c55e'},
+    {label:'Puternică 💪',color:'#00d47e'},
+    {label:'Excelentă! ✓',color:'#00d47e'},
+  ];
+  const lv = levels[Math.min(score, 5)];
   bar.style.width = (score / 5 * 100) + '%';
-  bar.style.background = color;
-  hint.textContent = label;
-  hint.style.color = color;
+  bar.style.background = lv.color;
+  hint.textContent = lv.label;
+  hint.style.color = lv.color;
 });
 
 function showMsg(el, text, ok) {
@@ -166,7 +240,7 @@ function showMsg(el, text, ok) {
   el.className = 'auth-msg ' + (ok ? 'ok' : 'err');
 }
 
-/* check already logged in */
+/* ── check already logged in ── */
 (async () => {
   try {
     const d = await (await fetch('/api/me', { cache: 'no-store' })).json();
@@ -176,68 +250,107 @@ function showMsg(el, text, ok) {
   } catch(_) {}
 })();
 
-/* LOGIN */
+/* ── LOGIN ── */
 $('loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = $('loginMsg');
-  showMsg(msg, 'Se verifică…', true);
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  showMsg(msg, '⏳ Se verifică…', true);
   try {
     const res = await fetch('/api/login', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username: $('loginUser').value, password: $('loginPass').value }),
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        username: $('loginUser').value.trim(),
+        password: $('loginPass').value,
+      }),
     });
     const d = await res.json();
     if (d.ok) {
-      showMsg(msg, '✅ Autentificat! Redirecționare…', true);
+      showMsg(msg, '✅ Autentificat! Se redirecționează…', true);
       setTimeout(() => {
         window.location.href = d.role === 'master' ? '/dashboard.html' : '/signals.html';
-      }, 600);
+      }, 700);
     } else {
       const left = d.attempts_left !== undefined ? ` (${d.attempts_left} încercări rămase)` : '';
-      showMsg(msg, '❌ ' + (d.error || 'Eroare') + left, false);
+      showMsg(msg, '❌ ' + (d.error || 'Date incorecte.') + left, false);
+      btn.disabled = false;
     }
-  } catch(_) { showMsg($('loginMsg'), '❌ Eroare conexiune.', false); }
+  } catch(_) {
+    showMsg(msg, '❌ Eroare de conexiune. Încearcă din nou.', false);
+    btn.disabled = false;
+  }
 });
 
-/* REGISTER */
+/* ── REGISTER ── */
 $('registerForm').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = $('registerMsg');
-  if ($('regPass').value !== $('regPass2').value) {
-    showMsg(msg, '❌ Parolele nu coincid.', false); return;
-  }
-  showMsg(msg, 'Se creează contul…', true);
+  const pass = $('regPass').value;
+  const pass2 = $('regPass2').value;
+  const user = $('regUser').value.trim();
+
+  if (!user || user.length < 3) { showMsg(msg, '❌ Username prea scurt (minim 3 caractere).', false); return; }
+  if (pass.length < 6) { showMsg(msg, '❌ Parola prea scurtă (minim 6 caractere).', false); return; }
+  if (pass !== pass2) { showMsg(msg, '❌ Parolele nu coincid!', false); return; }
+
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  showMsg(msg, '⏳ Se creează contul…', true);
+
   try {
     const res = await fetch('/api/register', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ username: $('regUser').value, password: $('regPass').value }),
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username: user, password: pass }),
     });
     const d = await res.json();
     if (d.ok) {
-      showMsg(msg, '✅ ' + d.message, true);
-      $('regUser').value = ''; $('regPass').value = ''; $('regPass2').value = '';
+      showMsg(msg, '✅ ' + (d.message || 'Cont creat! Așteaptă aprobarea adminului.'), true);
+      $('regUser').value = '';
+      $('regPass').value = '';
+      $('regPass2').value = '';
+      $('pwBar').style.width = '0';
+      $('pwHint').textContent = '';
     } else {
-      showMsg(msg, '❌ ' + (d.message || d.error || 'Eroare'), false);
+      showMsg(msg, '❌ ' + (d.message || d.error || 'Eroare la creare cont.'), false);
     }
-  } catch(_) { showMsg($('registerMsg'), '❌ Eroare conexiune.', false); }
+    btn.disabled = false;
+  } catch(_) {
+    showMsg(msg, '❌ Eroare de conexiune. Încearcă din nou.', false);
+    btn.disabled = false;
+  }
 });
 
-/* particle bg */
+/* ── particle background ── */
 (function(){
-  const c = document.getElementById('bgCanvas');
-  if (!c) return;
+  const c = $('bgCanvas'); if (!c) return;
   const ctx = c.getContext('2d'); let w, h, pts;
-  function resize(){ w=c.width=window.innerWidth; h=c.height=window.innerHeight;
-    pts=Array.from({length:Math.min(45,Math.floor(w/28))},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4,r:Math.random()*1.5+.5})); }
-  resize(); window.addEventListener('resize',resize);
-  (function tick(){ ctx.clearRect(0,0,w,h);
-    for(let i=0;i<pts.length;i++){ const p=pts[i]; p.x+=p.vx; p.y+=p.vy;
+  function resize(){
+    w = c.width = window.innerWidth; h = c.height = window.innerHeight;
+    pts = Array.from({length: Math.min(50, Math.floor(w/26))}, () => ({
+      x: Math.random()*w, y: Math.random()*h,
+      vx: (Math.random()-.5)*.4, vy: (Math.random()-.5)*.4,
+      r: Math.random()*1.5+.5,
+    }));
+  }
+  resize(); window.addEventListener('resize', resize);
+  (function tick(){
+    ctx.clearRect(0,0,w,h);
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i]; p.x+=p.vx; p.y+=p.vy;
       if(p.x<0||p.x>w)p.vx*=-1; if(p.y<0||p.y>h)p.vy*=-1;
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle='rgba(120,150,240,.5)'; ctx.fill();
-      for(let j=i+1;j<pts.length;j++){ const q=pts[j],dx=p.x-q.x,dy=p.y-q.y,d=Math.hypot(dx,dy);
-        if(d<130){ ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
-          ctx.strokeStyle=`rgba(80,120,220,${.12*(1-d/130)})`;ctx.stroke(); } }
-    } requestAnimationFrame(tick); })();
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(100,140,255,.45)'; ctx.fill();
+      for(let j=i+1;j<pts.length;j++){
+        const q=pts[j], dx=p.x-q.x, dy=p.y-q.y, d=Math.hypot(dx,dy);
+        if(d<120){ ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle=`rgba(70,110,220,${.12*(1-d/120)})`; ctx.lineWidth=1; ctx.stroke(); }
+      }
+    }
+    requestAnimationFrame(tick);
+  })();
 })();
 </script>
 </body>
