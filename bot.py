@@ -41,7 +41,28 @@ try:
 except Exception:
     _coins_config = None
 
+try:
+    import feeds as _feeds
+except Exception:
+    _feeds = None
+
 HTTP_HEADERS = {"User-Agent": "crypto-ai-bot/2026 (+https://discord.com)"}
+
+def get_fear_greed():
+    """Return (value, classification) of the crypto Fear & Greed index.
+
+    Uses the free alternative.me feed via feeds.py. Falls back to a safe
+    ("N/A", "Unknown") tuple so callers never crash.
+    """
+    if _feeds is None:
+        return "N/A", "Unknown"
+    try:
+        data = _feeds.fear_greed_index()
+        if isinstance(data, dict) and "value" in data:
+            return int(data.get("value", 0)), str(data.get("classification", "Unknown"))
+    except Exception:
+        pass
+    return "N/A", "Unknown"
 
 CONFIG_PATH = Path(__file__).with_name("config.json")
 CONFIG = {}
@@ -6852,6 +6873,8 @@ def _panel_stats_payload() -> dict:
             all_symbols=ALL_SYMBOLS,
             vip_role_name=VIP_ROLE_NAME,
             started_at=runtime_state.STATE.get("started_at"),
+            discord_invite=_env("DISCORD_INVITE_URL", ""),
+            vip_price=_env("VIP_PRICE", ""),
         )
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:400]}
