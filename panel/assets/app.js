@@ -87,6 +87,11 @@ function toggleMobileMenu(){
   const m=$('navMenu');
   if(m) m.classList.toggle('mobile-open');
 }
+// Close the mobile menu after tapping a navigation link.
+document.addEventListener('click',e=>{
+  const link=e.target.closest('.nav-menu .nav-item');
+  if(link){const m=$('navMenu');if(m) m.classList.remove('mobile-open');}
+});
 
 // ── Logout ───────────────────────────────────────────
 document.addEventListener('click',async e=>{
@@ -102,12 +107,13 @@ document.addEventListener('click',async e=>{
 const NEWS_FEEDS = [
   'https://www.coindesk.com/arc/outboundfeeds/rss/',
   'https://cointelegraph.com/rss',
+  'https://decrypt.co/feed',
 ];
 let _newsLoaded = false;
 
-async function loadNews() {
+async function loadNews(force) {
   const grid=$('newsGrid'); if(!grid) return;
-  if(_newsLoaded) return;
+  if(_newsLoaded && !force) return;
   grid.innerHTML='<div class="news-skel"></div>'.repeat(6);
   const articles=[];
   for(const feed of NEWS_FEEDS){
@@ -118,12 +124,14 @@ async function loadNews() {
       const parser=new DOMParser();
       const doc=parser.parseFromString(j.contents,'text/xml');
       const items=[...doc.querySelectorAll('item')].slice(0,4);
+      let source='Crypto News';
+      try{source=new URL(feed).hostname.replace('www.','').split('.')[0];source=source.charAt(0).toUpperCase()+source.slice(1);}catch(_){}
       items.forEach(item=>{
         const title=item.querySelector('title')?.textContent?.trim();
         const link=item.querySelector('link')?.textContent?.trim();
         const pub=item.querySelector('pubDate')?.textContent?.trim();
         const desc=item.querySelector('description')?.textContent?.replace(/<[^>]+>/g,'')?.trim()?.slice(0,120);
-        if(title&&link) articles.push({title,link,pub,desc});
+        if(title&&link) articles.push({title,link,pub,desc,source});
       });
     }catch(_){}
   }
@@ -134,7 +142,7 @@ async function loadNews() {
   grid.innerHTML=articles.slice(0,6).map(a=>{
     const ts=a.pub?new Date(a.pub).toLocaleString('ro-RO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'';
     return `<a class="news-card" href="${a.link}" target="_blank" rel="noopener">
-      <div class="news-source">📰 Crypto News</div>
+      <div class="news-source">📰 ${a.source||'Crypto News'}</div>
       <div class="news-title">${a.title}</div>
       <div class="news-desc">${a.desc||''}</div>
       <div class="news-time">${ts}</div>
@@ -151,7 +159,30 @@ let _pt=loadPT(), _ptSide='LONG', _ptLev=1;
 
 function loadPT(){ try{return JSON.parse(localStorage.getItem(PT_KEY))||newPT();}catch{return newPT();} }
 function newPT(){ return{cash:PT_INIT,positions:[],history:[],trades:0,wins:0,losses:0}; }
-function savePT(){ localStorage.setItem(PT_KEY,JSON.stringify(_pt)); }
+function savePT(){
+  localStorage.setItem(PT_KEY,JSON.stringify(_pt));
+  // Mirror to the user's account when logged in (debounced inside Sync).
+  if(typeof Sync!=='undefined'&&Sync.isAuthed()) Sync.push({paper:_pt});
+}
+
+// On load, if the user is authenticated and has account data, prefer it over localStorage.
+if(typeof Sync!=='undefined'){
+  Sync.onReady(async (authed)=>{
+    if(!authed) return;
+    const remote=await Sync.pull();
+    if(remote&&remote.paper&&typeof remote.paper==='object'){
+      _pt=remote.paper;
+      localStorage.setItem(PT_KEY,JSON.stringify(_pt));
+      if(typeof renderPT==='function') renderPT();
+    } else {
+      // First login on this account — seed the account with local data.
+      Sync.push({paper:_pt});
+    }
+    // Show a small badge that sync is active.
+    const chip=document.getElementById('syncChip');
+    if(chip){chip.textContent='☁️ Sincronizat cu contul';chip.style.display='inline-flex';}
+  });
+}
 
 function resetPT(){
   if(!confirm('Resetezi portofoliul la $10,000. Ești sigur?')) return;
@@ -160,6 +191,9 @@ function resetPT(){
 }
 
 function getPrice(coin){
+  // Prefer the live websocket price (realtime.js) when available, fall back to REST market data.
+  const live=(typeof window!=='undefined'&&window.RT_PRICES&&window.RT_PRICES[coin])?window.RT_PRICES[coin].price:null;
+  if(live!=null&&!isNaN(live)) return +live;
   const p=(_market.prices||[]).find(x=>x.name===coin||x.name.startsWith(coin));
   return p?+p.price:null;
 }
@@ -206,7 +240,7 @@ function openPosition(){
   _pt.positions.push({id:Date.now(),coin,side:_ptSide,lev:_ptLev,amt,entry:price,qty:(amt*_ptLev)/price,openedAt:Date.now()});
   _pt.trades++;
   savePT(); renderPT();
-  toast('🚀',`LONG ${coin} deschis!`,`${fmtUsd(amt)} · ${_ptLev}x · Entry: ${fmtUsd(price)}`,_ptSide==='LONG'?'toast-buy':'toast-sell');
+  toast(_ptSide==='LONG'?'📈':'📉',`${_ptSide} ${coin} deschis!`,`${fmtUsd(amt)} · ${_ptLev}x · Entry: ${fmtUsd(price)}`,_ptSide==='LONG'?'toast-buy':'toast-sell');
 }
 
 function closePosition(id){
@@ -446,8 +480,10 @@ function renderPerformance(d){
     const col=wr>=60?'var(--green)':wr>=40?'var(--gold)':'var(--red)';
     ring.style.background=`conic-gradient(${col} ${deg}deg, rgba(255,255,255,0.05) ${deg}deg)`;
   }
-  const total=Math.max(+(sig.buy||0)++(sig.sell||0),1);
-  const todMax=Math.max(+(sig.today_free||0)++(sig.today_vip||0),1);
+  if(p.win_rate!=null) recordPerfHistory(wr);
+  renderPerfChart();
+  const total=Math.max((+(sig.buy||0))+(+(sig.sell||0)),1);
+  const todMax=Math.max((+(sig.today_free||0))+(+(sig.today_vip||0)),1);
   function setBar(bId,lId,val,mx){const b=$(bId);if(b)b.style.width=Math.min(100,Math.round((+val/mx)*100))+'%';set(lId,fmt(val));}
   setBar('aBBuy','aLBuy',sig.buy||0,total);
   setBar('aBSell','aLSell',sig.sell||0,total);
@@ -471,6 +507,49 @@ function renderAdmin(d){
   const b=$('adminBanner'); if(!b) return;
   if(d.is_admin){b.classList.remove('hidden');set('adminName',d.admin_user||'admin');}
   else b.classList.add('hidden');
+}
+
+// ══════════════════════════════════════════════════════
+// PERFORMANCE HISTORY (30-day win-rate trend)
+// ══════════════════════════════════════════════════════
+const PERF_KEY='rcb_perf_hist_v1';
+function loadPerfHist(){ try{return JSON.parse(localStorage.getItem(PERF_KEY))||[];}catch{return [];} }
+function savePerfHist(h){ localStorage.setItem(PERF_KEY,JSON.stringify(h)); }
+
+/** Store at most one win-rate sample per calendar day, keep last 30. */
+function recordPerfHistory(wr){
+  if(isNaN(wr)) return;
+  const hist=loadPerfHist();
+  const today=new Date().toISOString().slice(0,10);
+  const last=hist[hist.length-1];
+  if(last&&last.d===today){ last.wr=wr; }
+  else { hist.push({d:today,wr:Math.round(wr)}); }
+  while(hist.length>30) hist.shift();
+  savePerfHist(hist);
+}
+
+/** Draw the win-rate trend as an inline SVG line chart in #perfChart. */
+function renderPerfChart(){
+  const el=$('perfChart'); if(!el) return;
+  const hist=loadPerfHist();
+  if(hist.length<2){ el.innerHTML='<div class="pt-empty">Graficul apare după câteva zile de date 📈</div>'; return; }
+  const pts=hist.map(x=>x.wr);
+  const W=520,H=160,pad=24;
+  const mn=Math.min(...pts,0),mx=Math.max(...pts,100),rng=(mx-mn)||1;
+  const stepX=(W-pad*2)/(pts.length-1);
+  const xy=pts.map((p,i)=>[pad+i*stepX,(H-pad)-((p-mn)/rng)*(H-pad*2)]);
+  const d=xy.map((c,i)=>`${i?'L':'M'}${c[0].toFixed(1)},${c[1].toFixed(1)}`).join(' ');
+  const fill=d+` L${xy[xy.length-1][0].toFixed(1)},${H-pad} L${pad},${H-pad} Z`;
+  const lastWr=pts[pts.length-1];
+  const col=lastWr>=60?'#00d47e':lastWr>=40?'#f5a800':'#ff2d55';
+  const grid=[0,25,50,75,100].map(v=>{const y=(H-pad)-((v-mn)/rng)*(H-pad*2);if(v<mn||v>mx)return '';return `<line x1="${pad}" y1="${y.toFixed(1)}" x2="${W-pad}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.05)"/><text x="4" y="${(y+3).toFixed(1)}" font-size="9" fill="var(--muted)">${v}</text>`;}).join('');
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:160px;display:block" preserveAspectRatio="none">
+    <defs><linearGradient id="perfGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity=".25"/><stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}
+    <path d="${fill}" fill="url(#perfGrad)"/>
+    <path d="${d}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${xy[xy.length-1][0].toFixed(1)}" cy="${xy[xy.length-1][1].toFixed(1)}" r="4" fill="${col}"/>
+  </svg>`;
 }
 
 // ══════════════════════════════════════════════════════

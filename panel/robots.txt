@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin.html
+Disallow: /dashboard.html
+Disallow: /signals.html
+
+Sitemap: https://romaniacrypto.app/sitemap.xml

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 # Matplotlib on Railway/Nixpacks — before pyplot import
 os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
@@ -6860,6 +6861,9 @@ except Exception as _e:  # pragma: no cover
 
 PANEL_DIR = Path(__file__).with_name("panel")
 
+# Per-IP registration throttle: { ip: [timestamps] } (last hour).
+_REGISTER_HITS: dict[str, list] = {}
+
 _PANEL_CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -6871,6 +6875,9 @@ _PANEL_CONTENT_TYPES = {
     ".ico": "image/x-icon",
     ".json": "application/json; charset=utf-8",
     ".woff2": "font/woff2",
+    ".webmanifest": "application/manifest+json; charset=utf-8",
+    ".xml": "application/xml; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
 }
 
 def _panel_stats_payload(is_admin: bool = False) -> dict:
@@ -6939,8 +6946,9 @@ class _PingHandler(BaseHTTPRequestHandler):
 
     def _read_json_body(self) -> dict:
         try:
+            max_len = getattr(self, "_max_body", 8192)
             length = int(self.headers.get("Content-Length", 0))
-            if length <= 0 or length > 8192:
+            if length <= 0 or length > max_len:
                 return {}
             raw = self.rfile.read(length)
             return json.loads(raw.decode("utf-8"))
@@ -6997,6 +7005,19 @@ class _PingHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "authenticated": bool(session),
                              "username": session.get("u") if session else None,
                              "role": session.get("r") if session else None})
+            return
+
+        # ── Load per-user saved data (paper trading / portfolio / alerts) ──
+        if path == "/api/userdata":
+            session = _panel_current_user(self)
+            if not session:
+                self._send_json({"ok": False, "error": "neautentificat"}, status=401)
+                return
+            if panel_userdata is None:
+                self._send_json({"ok": False, "error": "stocare indisponibilă"}, status=503)
+                return
+            data = panel_userdata.get_user_data(session.get("u"))
+            self._send_json({"ok": True, "data": data})
             return
 
         # ── Static panel assets ──
@@ -7092,6 +7113,14 @@ class _PingHandler(BaseHTTPRequestHandler):
 
         # ── REGISTER (open — cont trimis la PENDING, admin aprobă) ──
         if path == "/api/register":
+            # Simple per-IP throttle to prevent registration spam/abuse.
+            now = time.time()
+            window = _REGISTER_HITS.setdefault(ip, [])
+            window[:] = [t for t in window if now - t < 3600]
+            if len(window) >= 5:
+                self._send_json({"ok": False, "message": "Prea multe înregistrări. Încearcă din nou peste o oră."}, status=429)
+                return
+            window.append(now)
             data = self._read_json_body()
             ok, msg = panel_auth.register_user(
                 str(data.get("username", ""))[:64],
@@ -7141,6 +7170,21 @@ class _PingHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "Permisiune insuficientă."}, status=403)
                 return
             self._send_json({"ok": True, "users": panel_auth.list_accounts()})
+            return
+
+        # ── Save per-user data (paper trading / portfolio / alerts) ──
+        if path == "/api/userdata":
+            session = _panel_current_user(self)
+            if not session:
+                self._send_json({"ok": False, "error": "neautentificat"}, status=401)
+                return
+            if panel_userdata is None:
+                self._send_json({"ok": False, "error": "stocare indisponibilă"}, status=503)
+                return
+            self._max_body = 64 * 1024  # allow larger payloads for portfolio/paper data
+            data = self._read_json_body()
+            ok, msg = panel_userdata.save_user_data(session.get("u"), data)
+            self._send_json({"ok": ok, "message": msg}, status=200 if ok else 400)
             return
 
         # ── LOGOUT ──

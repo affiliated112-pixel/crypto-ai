@@ -4,8 +4,21 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>Romania Crypto Signals — AI Trading Platform</title>
-  <meta name="description" content="Cea mai avansată platformă de semnale crypto din România. AI-powered, TradingView live, paper trading, Fear & Greed Index, news live."/>
+  <meta name="description" content="Cea mai avansată platformă de semnale crypto din România. AI-powered, TradingView live, paper trading, Fear & Greed Index, news live, alerte de preț."/>
+  <link rel="canonical" href="https://romaniacrypto.app/"/>
+  <meta name="theme-color" content="#05080f"/>
+  <!-- Open Graph / social share -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="Romania Crypto Signals — AI Trading Platform"/>
+  <meta property="og:description" content="Semnale crypto AI 24/7, TradingView live, paper trading, alerte de preț și news live. Intră gratuit pe Discord."/>
+  <meta property="og:image" content="/assets/rcb-logo.png"/>
+  <meta property="og:locale" content="ro_RO"/>
+  <meta name="twitter:card" content="summary_large_image"/>
+  <meta name="twitter:title" content="Romania Crypto Signals — AI Trading Platform"/>
+  <meta name="twitter:description" content="Semnale crypto AI 24/7, TradingView live, paper trading, alerte de preț și news live."/>
+  <meta name="twitter:image" content="/assets/rcb-logo.png"/>
   <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="manifest" href="/manifest.webmanifest"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="/assets/styles.css"/>
@@ -49,12 +62,13 @@
       </div>
     </a>
     <nav class="nav-menu" id="navMenu">
-      <a href="#market" class="nav-item">📊 Piață</a>
-      <a href="#chart" class="nav-item">📈 Chart</a>
-      <a href="#signals" class="nav-item">📡 Semnale</a>
-      <a href="#paper" class="nav-item">🎮 Trading</a>
-      <a href="#news" class="nav-item">📰 News</a>
-      <a href="#performance" class="nav-item">🏆 Track</a>
+      <a href="#market" class="nav-item" data-i18n="nav_market">📊 Piață</a>
+      <a href="#chart" class="nav-item" data-i18n="nav_chart">📈 Chart</a>
+      <a href="#signals" class="nav-item" data-i18n="nav_signals">📡 Semnale</a>
+      <a href="#paper" class="nav-item" data-i18n="nav_trading">🎮 Trading</a>
+      <a href="#alerts" class="nav-item">🔔 Alerte</a>
+      <a href="#news" class="nav-item" data-i18n="nav_news">📰 News</a>
+      <a href="#performance" class="nav-item" data-i18n="nav_track">🏆 Track</a>
     </nav>
     <div class="nav-actions">
       <div class="status-chip">
@@ -66,6 +80,7 @@
         Discord
       </a>
       <a href="#vip-section" class="btn-vip-nav">💎 VIP $25/lună</a>
+      <button class="lang-toggle" id="langToggle" onclick="toggleLang()" title="Language">🇷🇴 RO</button>
       <a href="/admin.html" class="btn-admin-nav" title="Login / Cont">🔐</a>
       <button class="nav-mobile-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()">☰</button>
     </div>
@@ -93,7 +108,7 @@
       <span class="h1-blue">AI Inteligente</span><br/>
       <span class="h1-red">& Precise</span>
     </h1>
-    <p class="hero-desc">Bot AI care scanează 30+ monede 24/7 cu RSI, MACD, Bollinger Bands. Entry exact, TP și SL calculat automat. Trimis pe Discord înainte să ratezi mișcarea.</p>
+    <p class="hero-desc" data-i18n="hero_desc">Bot AI care scanează 30+ monede 24/7 cu RSI, MACD, Bollinger Bands. Entry exact, TP și SL calculat automat. Trimis pe Discord înainte să ratezi mișcarea.</p>
     <div class="hero-actions">
       <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-primary">
         <svg width="18" height="18" viewBox="0 0 71 55" fill="currentColor"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.7a.2.2 0 0 0-.2.1 40.8 40.8 0 0 0-1.8 3.7 54 54 0 0 0-16.2 0A37.6 37.6 0 0 0 25.4.8a.2.2 0 0 0-.2-.1 58.4 58.4 0 0 0-14.6 4.2.2.2 0 0 0-.1.1C1.6 18.7-.9 32.1.3 45.4a.2.2 0 0 0 .1.1 58.8 58.8 0 0 0 17.7 9 .2.2 0 0 0 .2-.1 41.9 41.9 0 0 0 3.6-5.9.2.2 0 0 0-.1-.3 38.7 38.7 0 0 1-5.5-2.6.2.2 0 0 1 0-.4c.4-.3.7-.6 1.1-.9a.2.2 0 0 1 .2 0c11.6 5.3 24.1 5.3 35.5 0a.2.2 0 0 1 .2 0l1.1.9a.2.2 0 0 1 0 .4 36.2 36.2 0 0 1-5.5 2.6.2.2 0 0 0-.1.3c1 2 2.2 4 3.6 5.9a.2.2 0 0 0 .2.1A58.6 58.6 0 0 0 70.6 45.5a.2.2 0 0 0 .1-.1c1.5-15.3-2.5-28.6-10.5-40.4a.2.2 0 0 0-.1-.1zM23.7 37.5c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.7 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.3 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
@@ -147,7 +162,7 @@
     <div class="section-header">
       <div>
         <h2 class="section-title">Piața <span class="live-tag"><span class="live-dot"></span>LIVE</span></h2>
-        <p class="section-sub">Prețuri actualizate la 15s · Fear &amp; Greed · Sparklines 24h</p>
+        <p class="section-sub" data-i18n="market_sub">Prețuri actualizate live · Fear &amp; Greed · Sparklines 24h</p>
       </div>
       <span class="updated-at" id="updatedAt">—</span>
     </div>
@@ -206,10 +221,10 @@
           <option value="BINANCE:LTCUSDT">LTC/USDT</option>
         </select>
         <div class="chart-interval-btns">
-          <button class="ci-btn active" onclick="setInterval_('15')">15m</button>
-          <button class="ci-btn" onclick="setInterval_('60')">1h</button>
-          <button class="ci-btn" onclick="setInterval_('240')">4h</button>
-          <button class="ci-btn" onclick="setInterval_('D')">1D</button>
+          <button class="ci-btn" onclick="setInterval_('15',this)">15m</button>
+          <button class="ci-btn active" onclick="setInterval_('60',this)">1h</button>
+          <button class="ci-btn" onclick="setInterval_('240',this)">4h</button>
+          <button class="ci-btn" onclick="setInterval_('D',this)">1D</button>
         </div>
       </div>
     </div>
@@ -323,13 +338,63 @@
   </div>
 </section>
 
+<!-- ══ PRICE ALERTS ══ -->
+<section class="section" id="alerts">
+  <div class="container">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title" data-i18n="alerts_title">🔔 Alerte de preț</h2>
+        <p class="section-sub" data-i18n="alerts_sub">Primește o notificare în browser când prețul atinge ținta ta.</p>
+      </div>
+    </div>
+    <div class="alerts-layout">
+      <div class="paper-card">
+        <div class="pc-title" data-i18n="alerts_add">➕ Adaugă alertă</div>
+        <div class="trade-form">
+          <div class="tf-field">
+            <label data-i18n="alerts_coin">Monedă</label>
+            <select id="alertCoin" class="tf-input">
+              <option value="BTC">Bitcoin (BTC)</option>
+              <option value="ETH">Ethereum (ETH)</option>
+              <option value="SOL">Solana (SOL)</option>
+              <option value="BNB">BNB</option>
+              <option value="XRP">XRP</option>
+              <option value="AVAX">Avalanche (AVAX)</option>
+              <option value="DOGE">Dogecoin (DOGE)</option>
+              <option value="ADA">Cardano (ADA)</option>
+            </select>
+          </div>
+          <div class="tf-field">
+            <label data-i18n="alerts_when">Condiție</label>
+            <select id="alertDir" class="tf-input">
+              <option value="above" data-i18n="above">▲ Peste</option>
+              <option value="below" data-i18n="below">▼ Sub</option>
+            </select>
+          </div>
+          <div class="tf-field">
+            <label data-i18n="alerts_target">Preț țintă ($)</label>
+            <input type="number" id="alertPrice" class="tf-input" placeholder="ex: 75000" step="any" min="0"/>
+          </div>
+          <button class="tf-submit" id="alertAddBtn"><span data-i18n="alerts_add">➕ Adaugă alertă</span></button>
+        </div>
+      </div>
+      <div class="paper-card">
+        <div class="pc-title">🔔 Alerte active</div>
+        <div class="alerts-list" id="alertsList">
+          <div class="pt-empty" data-i18n="alerts_empty">Nicio alertă activă. Adaugă una mai sus 👆</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ══ PAPER TRADING ══ -->
 <section class="section section-dark" id="paper">
   <div class="container">
     <div class="section-header">
       <div>
         <h2 class="section-title">🎮 Demo <span style="color:var(--blue2)">Paper Trading</span></h2>
-        <p class="section-sub">Tranzacționează cu <b>$10,000 virtuali</b> la prețuri reale. Zero risc, experiență reală.</p>
+        <p class="section-sub">Tranzacționează cu <b>$10,000 virtuali</b> la prețuri reale. Zero risc, experiență reală. <span id="syncChip" class="sync-chip" style="display:none">☁️ Sincronizat cu contul</span></p>
       </div>
       <button class="cta-secondary" onclick="resetPT()">🔄 Reset ($10,000)</button>
     </div>
@@ -430,7 +495,7 @@
         <h2 class="section-title">📰 Crypto News <span class="live-tag"><span class="live-dot"></span>LIVE</span></h2>
         <p class="section-sub">Ultimele știri din piața crypto — CoinDesk, CoinTelegraph, Decrypt</p>
       </div>
-      <button class="cta-secondary" onclick="loadNews()">🔄 Actualizează</button>
+      <button class="cta-secondary" onclick="loadNews(true)">🔄 Actualizează</button>
     </div>
     <div class="news-grid" id="newsGrid">
       <div class="news-skel"></div><div class="news-skel"></div>
@@ -465,6 +530,10 @@
         <div class="ps-row"><span>Pierzătoare ❌</span><b class="neg" id="perfLosses">—</b></div>
         <div class="ps-row"><span>Semnale active</span><b id="perfOpen">—</b></div>
         <div class="ps-row"><span>PnL mediu</span><b id="perfAvgPnl">—</b></div>
+      </div>
+      <div class="perf-chart-card">
+        <div class="pc-title" data-i18n="perf_chart_title">📈 Evoluție Win Rate (30 zile)</div>
+        <div id="perfChart"><div class="pt-empty">Graficul apare după câteva zile de date 📈</div></div>
       </div>
       <div class="perf-activity-card">
         <div class="pc-title">📊 Activitate semnale</div>
@@ -543,6 +612,19 @@
 
 <div id="toastContainer" class="toast-container"></div>
 
+<!-- JSON-LD structured data for SEO -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Romania Crypto Signals",
+  "url": "https://romaniacrypto.app/",
+  "logo": "https://romaniacrypto.app/assets/rcb-logo.png",
+  "description": "AI-powered crypto trading signals, live TradingView charts, paper trading and price alerts.",
+  "sameAs": ["https://discord.gg/romaniacrypto"]
+}
+</script>
+
 <script>
 // ══════════════════════════════════════════
 // TradingView — Exact indicatori VIP
@@ -554,33 +636,29 @@ let _tvLoaded = false;
 function buildTVWidget() {
   const cont = document.getElementById('tvContainer');
   if (!cont) return;
-  cont.innerHTML = `
-    <iframe
-      id="tvFrame"
-      src="https://s.tradingview.com/widgetembed/?frameElementId=tvFrame
-        &symbol=${encodeURIComponent(_tvSymbol)}
-        &interval=${_tvInterval}
-        &hidesidetoolbar=0
-        &hidetoptoolbar=0
-        &symboledit=1
-        &saveimage=0
-        &toolbarbg=0d1322
-        &studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FBollingerBands%40tv-basicstudies%1FEMA%40tv-basicstudies%1FEMA%40tv-basicstudies
-        &studiesOverrides=%7B%22ema.length%22%3A50%2C%22ema.2.length%22%3A200%7D
-        &theme=dark
-        &style=1
-        &timezone=Europe%2FBucharest
-        &locale=ro
-        &withdateranges=1
-        &allow_symbol_change=1
-        &show_popup_button=1
-        &popup_width=1000
-        &popup_height=650"
-      style="width:100%;height:540px;border:none;"
-      allowtransparency="true"
-      frameborder="0"
-      scrolling="no"
-    ></iframe>`;
+  const params = [
+    'frameElementId=tvFrame',
+    'symbol=' + encodeURIComponent(_tvSymbol),
+    'interval=' + encodeURIComponent(_tvInterval),
+    'hidesidetoolbar=0',
+    'hidetoptoolbar=0',
+    'symboledit=1',
+    'saveimage=0',
+    'toolbarbg=0d1322',
+    'studies=RSI%40tv-basicstudies%1FMACD%40tv-basicstudies%1FBollingerBands%40tv-basicstudies%1FEMA%40tv-basicstudies',
+    'studiesOverrides=%7B%22ema.length%22%3A50%7D',
+    'theme=dark',
+    'style=1',
+    'timezone=Europe%2FBucharest',
+    'locale=ro',
+    'withdateranges=1',
+    'allow_symbol_change=1',
+    'show_popup_button=1',
+    'popup_width=1000',
+    'popup_height=650'
+  ].join('&');
+  const src = 'https://s.tradingview.com/widgetembed/?' + params;
+  cont.innerHTML = `<iframe id="tvFrame" src="${src}" style="width:100%;height:540px;border:none;" allowtransparency="true" frameborder="0" scrolling="no"></iframe>`;
 }
 
 function changeChartSymbol(sym) {
@@ -588,10 +666,10 @@ function changeChartSymbol(sym) {
   buildTVWidget();
 }
 
-function setInterval_(iv) {
+function setInterval_(iv, btn) {
   _tvInterval = iv;
   document.querySelectorAll('.ci-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
   buildTVWidget();
 }
 
@@ -599,6 +677,15 @@ function setInterval_(iv) {
 document.addEventListener('DOMContentLoaded', buildTVWidget);
 </script>
 
+<script src="/assets/sync.js"></script>
 <script src="/assets/app.js"></script>
+<script src="/assets/i18n.js"></script>
+<script src="/assets/realtime.js"></script>
+<script>
+// Register the service worker for PWA / offline support.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+</script>
 </body>
 </html>

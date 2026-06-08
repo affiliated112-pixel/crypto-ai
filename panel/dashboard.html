@@ -105,6 +105,14 @@
 
     <!-- RIGHT: Discord info + VIP signals -->
     <div>
+      <!-- Pending account approvals -->
+      <div class="dash-panel" style="margin-bottom:20px">
+        <h3>⏳ Conturi în așteptare <span id="pendingBadge" style="font-size:12px;color:var(--gold);font-weight:700;margin-left:6px">—</span></h3>
+        <div id="pendingList" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+          <div style="color:var(--muted);font-size:14px;padding:10px 0">Se încarcă…</div>
+        </div>
+      </div>
+
       <div class="dash-panel" style="margin-bottom:20px">
         <h3>🤖 Status Discord Bot</h3>
         <div class="dc-rows">
@@ -235,7 +243,7 @@ async function load() {
 
 async function loadPendingUsers() {
   try {
-    const res = await fetch('/api/admin/users', { cache: 'no-store' });
+    const res = await fetch('/api/admin/users', { method: 'POST', cache: 'no-store', headers: {'Content-Type':'application/json'}, body: '{}' });
     const d = await res.json();
     const users = (d.users || []);
     const pending = users.filter(u => u.status === 'pending');

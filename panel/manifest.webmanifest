@@ -1,0 +1,17 @@
+{
+  "name": "Romania Crypto Signals",
+  "short_name": "RCB Signals",
+  "description": "AI-powered crypto trading signals, live charts, paper trading and price alerts.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#05080f",
+  "theme_color": "#05080f",
+  "lang": "ro",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "/assets/rcb-logo.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/assets/rcb-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

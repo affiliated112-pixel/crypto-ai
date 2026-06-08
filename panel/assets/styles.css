@@ -626,7 +626,32 @@ body {
 .dc-cta h3 { font-size:15px; font-weight:800; margin-bottom:5px; }
 .dc-cta p { color:var(--muted); font-size:13px; line-height:1.6; }
 .nav-mobile-btn { display:none; background:none; border:1px solid var(--border); border-radius:8px; padding:6px 10px; color:var(--text); font-size:18px; cursor:pointer; font-family:inherit; }
-@media(max-width:860px){.nav-mobile-btn{display:flex;} .nav-menu{display:none; position:absolute; top:64px; left:0; right:0; background:var(--bg2); border-bottom:1px solid var(--border); flex-direction:column; padding:12px 24px; gap:4px; z-index:99;} .nav-menu.mobile-open{display:flex;} .news-grid{grid-template-columns:1fr 1fr;}}
+
+/* ══ Language toggle ══ */
+.lang-toggle { background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:999px; padding:6px 12px; color:var(--text); font-size:12px; font-weight:700; cursor:pointer; font-family:inherit; transition:all .2s; white-space:nowrap; }
+.lang-toggle:hover { border-color:var(--blue2); background:rgba(42,99,255,.12); }
+
+/* ══ Account sync badge ══ */
+.sync-chip { display:inline-flex; align-items:center; gap:5px; background:rgba(0,212,126,.1); border:1px solid rgba(0,212,126,.25); color:var(--green); font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; margin-left:8px; vertical-align:middle; }
+
+/* ══ Price alerts ══ */
+.alerts-layout { display:grid; grid-template-columns:380px 1fr; gap:20px; align-items:start; }
+.alerts-list { display:flex; flex-direction:column; gap:10px; max-height:420px; overflow:auto; }
+.alert-item { display:flex; align-items:center; justify-content:space-between; gap:12px; background:rgba(0,0,0,.25); border:1px solid var(--border); border-radius:12px; padding:12px 14px; }
+.alert-item.alert-fired { opacity:.6; }
+.alert-info { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.alert-coin { font-weight:800; font-family:'JetBrains Mono',monospace; }
+.alert-cond { font-size:13px; color:var(--muted); }
+.alert-cond b { color:var(--text); }
+.alert-tag { font-size:11px; font-weight:700; color:var(--muted); }
+.alert-tag.live { color:var(--green); }
+.alert-del { background:rgba(255,45,85,.1); border:1px solid rgba(255,45,85,.25); color:#ff6a76; border-radius:8px; width:28px; height:28px; cursor:pointer; font-family:inherit; flex-shrink:0; }
+.alert-del:hover { background:rgba(255,45,85,.2); }
+
+/* ══ Performance trend chart ══ */
+.perf-chart-card { background:var(--card); border:1px solid var(--border); border-radius:18px; padding:20px; grid-column:1 / -1; }
+#perfChart { width:100%; min-height:160px; }
+@media(max-width:860px){.nav-mobile-btn{display:flex;} .nav-menu{display:none; position:absolute; top:64px; left:0; right:0; background:var(--bg2); border-bottom:1px solid var(--border); flex-direction:column; padding:12px 24px; gap:4px; z-index:99;} .nav-menu.mobile-open{display:flex;} .news-grid{grid-template-columns:1fr 1fr;} .alerts-layout{grid-template-columns:1fr;}}
 @media(max-width:560px){.news-grid{grid-template-columns:1fr;}}
 
 /* ══════════════════════════════════════════════
