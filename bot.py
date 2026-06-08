@@ -6912,8 +6912,8 @@ def _panel_client_ip(handler) -> str:
     except Exception:
         return "unknown"
 
-def _panel_current_user(handler):
-    """Return the logged-in admin username from the session cookie, or None."""
+def _panel_current_user(handler) -> dict | None:
+    """Return {u, r} from the session cookie, or None if invalid/missing."""
     if panel_auth is None:
         return None
     try:
@@ -6982,17 +6982,21 @@ class _PingHandler(BaseHTTPRequestHandler):
 
         # ── Web panel API ──
         if path == "/api/stats":
-            user = _panel_current_user(self)
-            payload = _panel_stats_payload(is_admin=bool(user))
-            if user:
-                payload["admin_user"] = user
+            session = _panel_current_user(self)
+            is_admin = bool(session)
+            payload = _panel_stats_payload(is_admin=is_admin)
+            if session:
+                payload["admin_user"] = session.get("u")
+                payload["admin_role"] = session.get("r")
             self._send_json(payload)
             return
 
-        # ── Who am I (is the session a logged-in admin?) ──
+        # ── Who am I ──
         if path == "/api/me":
-            user = _panel_current_user(self)
-            self._send_json({"ok": True, "authenticated": bool(user), "username": user})
+            session = _panel_current_user(self)
+            self._send_json({"ok": True, "authenticated": bool(session),
+                             "username": session.get("u") if session else None,
+                             "role": session.get("r") if session else None})
             return
 
         # ── Static panel assets ──
@@ -7067,39 +7071,76 @@ class _PingHandler(BaseHTTPRequestHandler):
             data = self._read_json_body()
             username = str(data.get("username", ""))[:64]
             password = str(data.get("password", ""))[:128]
-            success = panel_auth.check_credentials(username, password)
+            ok_cred, role = panel_auth.check_credentials(username, password)
             if panel_analytics is not None:
                 try:
-                    panel_analytics.record_login(username, ip, success)
+                    panel_analytics.record_login(username, ip, bool(ok_cred))
                 except Exception:
                     pass
-            if success:
+            if ok_cred:
                 panel_auth.reset_attempts(ip)
-                token = panel_auth.create_token(username.strip().lower())
+                token = panel_auth.create_token(username.strip().lower(), role=role)
                 cookie = panel_auth.make_set_cookie(token, secure=secure)
-                print(f"[panel] admin login OK: {username} from {ip}", flush=True)
-                self._send_json({"ok": True, "username": username}, extra_headers={"Set-Cookie": cookie})
+                print(f"[panel] login OK: {username} role={role} from {ip}", flush=True)
+                self._send_json({"ok": True, "username": username, "role": role}, extra_headers={"Set-Cookie": cookie})
             else:
                 panel_auth.record_failure(ip)
                 left = panel_auth.attempts_left(ip)
-                print(f"[panel] admin login FAIL: {username} from {ip} ({left} left)", flush=True)
-                self._send_json({"ok": False, "error": "Date de autentificare greșite.", "attempts_left": left}, status=401)
+                print(f"[panel] login FAIL: {username} from {ip} ({left} left)", flush=True)
+                self._send_json({"ok": False, "error": "Date greșite sau cont neaprobat.", "attempts_left": left}, status=401)
             return
 
-        # ── REGISTER (requires ADMIN_REGISTER_CODE) ──
+        # ── REGISTER (open — cont trimis la PENDING, admin aprobă) ──
         if path == "/api/register":
-            if panel_auth.is_locked(ip):
-                self._send_json({"ok": False, "error": "Prea multe încercări. Încearcă mai târziu."}, status=429)
-                return
             data = self._read_json_body()
-            ok, msg = panel_auth.register_admin(
+            ok, msg = panel_auth.register_user(
                 str(data.get("username", ""))[:64],
                 str(data.get("password", ""))[:128],
-                str(data.get("code", ""))[:128],
+                ip=ip,
             )
-            if not ok:
-                panel_auth.record_failure(ip)
             self._send_json({"ok": ok, "message": msg}, status=200 if ok else 400)
+            return
+
+        # ── APPROVE user (master only) ──
+        if path == "/api/admin/approve":
+            caller = _panel_current_user(self)
+            if not caller or caller.get("r") != "master":
+                self._send_json({"ok": False, "error": "Permisiune insuficientă."}, status=403)
+                return
+            data = self._read_json_body()
+            ok, msg = panel_auth.approve_user(str(data.get("username", "")), caller["u"])
+            self._send_json({"ok": ok, "message": msg})
+            return
+
+        # ── REJECT user (master only) ──
+        if path == "/api/admin/reject":
+            caller = _panel_current_user(self)
+            if not caller or caller.get("r") != "master":
+                self._send_json({"ok": False, "error": "Permisiune insuficientă."}, status=403)
+                return
+            data = self._read_json_body()
+            ok, msg = panel_auth.reject_user(str(data.get("username", "")), caller["u"])
+            self._send_json({"ok": ok, "message": msg})
+            return
+
+        # ── DELETE user (master only) ──
+        if path == "/api/admin/delete":
+            caller = _panel_current_user(self)
+            if not caller or caller.get("r") != "master":
+                self._send_json({"ok": False, "error": "Permisiune insuficientă."}, status=403)
+                return
+            data = self._read_json_body()
+            ok, msg = panel_auth.delete_user(str(data.get("username", "")))
+            self._send_json({"ok": ok, "message": msg})
+            return
+
+        # ── LIST users (master only) ──
+        if path == "/api/admin/users":
+            caller = _panel_current_user(self)
+            if not caller or caller.get("r") != "master":
+                self._send_json({"ok": False, "error": "Permisiune insuficientă."}, status=403)
+                return
+            self._send_json({"ok": True, "users": panel_auth.list_accounts()})
             return
 
         # ── LOGOUT ──

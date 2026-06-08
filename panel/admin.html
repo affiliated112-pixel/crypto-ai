@@ -1,69 +1,244 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin · Romania Crypto Signals</title>
-  <meta name="robots" content="noindex, nofollow" />
-  <link rel="icon" type="image/png" href="/assets/rcb-logo.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/styles.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Cont · Romania Crypto Signals</title>
+  <meta name="robots" content="noindex,nofollow"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/assets/styles.css"/>
+  <style>
+    body{display:grid;place-items:center;min-height:100vh;padding:16px}
+    .auth-wrap{width:100%;max-width:420px;position:relative;z-index:1}
+    .auth-card{background:var(--card);border:1px solid var(--card-border);border-radius:22px;padding:28px;backdrop-filter:blur(16px)}
+    .auth-brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:var(--text);margin-bottom:22px}
+    .auth-brand img{width:48px;height:48px;border-radius:12px;box-shadow:0 6px 18px rgba(47,107,255,.35)}
+    .auth-brand-text b{display:block;font-size:16px;font-weight:800}
+    .auth-brand-text span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+    .tabs{display:flex;background:rgba(0,0,0,.2);padding:4px;border-radius:12px;margin-bottom:20px;gap:4px}
+    .tab{flex:1;padding:10px;border:none;background:transparent;color:var(--muted);font-weight:700;font-size:14px;border-radius:9px;cursor:pointer;transition:all .2s;font-family:inherit}
+    .tab.active{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(47,107,255,.4)}
+    .auth-form{display:flex;flex-direction:column;gap:14px}
+    .auth-form.hidden{display:none}
+    label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600;color:var(--muted)}
+    input[type=text],input[type=password]{background:rgba(0,0,0,.25);border:1px solid var(--card-border);border-radius:11px;padding:13px 15px;color:var(--text);font-size:15px;font-family:inherit;transition:border-color .2s;-webkit-appearance:none}
+    input:focus{outline:none;border-color:var(--blue-soft)}
+    .pw-wrap{position:relative}
+    .pw-wrap input{width:100%;padding-right:48px}
+    .pw-toggle{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:18px;color:var(--muted);padding:0}
+    .auth-submit{width:100%;margin-top:4px}
+    .auth-msg{font-size:13px;font-weight:600;text-align:center;min-height:18px;padding:8px;border-radius:8px}
+    .auth-msg.ok{color:var(--green);background:rgba(33,208,122,.08);border:1px solid rgba(33,208,122,.2)}
+    .auth-msg.err{color:var(--red);background:rgba(255,45,63,.08);border:1px solid rgba(255,45,63,.2)}
+    .pw-strength{height:4px;border-radius:2px;margin-top:4px;background:rgba(255,255,255,.08);overflow:hidden}
+    .pw-bar{height:100%;width:0;border-radius:2px;transition:width .3s,background .3s}
+    .pw-hint{font-size:11px;color:var(--muted);margin-top:2px}
+    .auth-footer{text-align:center;color:var(--muted);font-size:12px;margin-top:16px;padding:0 8px;line-height:1.6}
+    .auth-back{display:block;text-align:center;color:var(--muted);text-decoration:none;font-size:13px;margin-top:14px;transition:color .2s}
+    .auth-back:hover{color:var(--text)}
+    .security-badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+    .badge-sec{font-size:11px;color:var(--muted);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);padding:4px 10px;border-radius:999px}
+  </style>
 </head>
-<body class="auth-body">
-  <canvas id="bgCanvas"></canvas>
-  <div class="bg-glow glow-blue"></div>
-  <div class="bg-glow glow-red"></div>
+<body>
+<canvas id="bgCanvas"></canvas>
+<div class="bg-glow glow-blue"></div>
+<div class="bg-glow glow-red"></div>
 
-  <div class="auth-wrap">
-    <div class="auth-card">
-      <a href="/" class="auth-brand">
-        <img src="/assets/rcb-logo.png" alt="RCB" />
-        <div>
-          <span class="auth-title">Romania Crypto Signals</span>
-          <span class="auth-sub">Panou Administrare</span>
-        </div>
-      </a>
-
-      <!-- TABS -->
-      <div class="auth-tabs">
-        <button class="auth-tab active" data-tab="login">Autentificare</button>
-        <button class="auth-tab" data-tab="register">Înregistrare</button>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <a class="auth-brand" href="/">
+      <img src="/assets/rcb-logo.png" alt="RCB"/>
+      <div class="auth-brand-text">
+        <b>Romania Crypto Signals</b>
+        <span>Cont utilizator</span>
       </div>
+    </a>
 
-      <!-- LOGIN -->
-      <form id="loginForm" class="auth-form">
-        <label>Username
-          <input type="text" id="loginUser" autocomplete="username" required placeholder="admin" />
-        </label>
-        <label>Parolă
-          <input type="password" id="loginPass" autocomplete="current-password" required placeholder="••••••••" />
-        </label>
-        <button type="submit" class="btn btn-primary auth-submit">🔐 Intră în panou</button>
-        <div class="auth-msg" id="loginMsg"></div>
-      </form>
-
-      <!-- REGISTER -->
-      <form id="registerForm" class="auth-form hidden">
-        <label>Username nou
-          <input type="text" id="regUser" autocomplete="username" required placeholder="ex: marius" />
-        </label>
-        <label>Parolă (min 6 caractere)
-          <input type="password" id="regPass" autocomplete="new-password" required placeholder="••••••••" />
-        </label>
-        <label>Cod de înregistrare
-          <input type="password" id="regCode" required placeholder="cod secret admin" />
-        </label>
-        <button type="submit" class="btn btn-vip auth-submit">✨ Creează cont admin</button>
-        <div class="auth-msg" id="registerMsg"></div>
-        <p class="auth-hint">Înregistrarea necesită codul secret <b>ADMIN_REGISTER_CODE</b> setat în server.</p>
-      </form>
-
-      <a href="/" class="auth-back">← Înapoi la site</a>
+    <div class="tabs">
+      <button class="tab active" data-tab="login">🔐 Intră în cont</button>
+      <button class="tab" data-tab="register">✨ Cont nou</button>
     </div>
-    <p class="auth-footer">🔒 Conexiune securizată · Sesiuni semnate · Protecție brute-force</p>
-  </div>
 
-  <script src="/assets/auth.js"></script>
+    <!-- LOGIN -->
+    <form id="loginForm" class="auth-form" autocomplete="on">
+      <label>Username
+        <input type="text" id="loginUser" autocomplete="username" required placeholder="ex: marius"/>
+      </label>
+      <label>Parolă
+        <div class="pw-wrap">
+          <input type="password" id="loginPass" autocomplete="current-password" required placeholder="••••••••"/>
+          <button type="button" class="pw-toggle" data-target="loginPass">👁</button>
+        </div>
+      </label>
+      <button type="submit" class="btn btn-primary auth-submit">🔐 Intră în cont</button>
+      <div class="auth-msg" id="loginMsg"></div>
+    </form>
+
+    <!-- REGISTER -->
+    <form id="registerForm" class="auth-form hidden" autocomplete="off">
+      <label>Username (3-32 caractere)
+        <input type="text" id="regUser" autocomplete="off" required placeholder="ex: marius_crypto"
+               pattern="[A-Za-z0-9._\-]{3,32}" title="Litere, cifre, _, -, ."/>
+      </label>
+      <label>Parolă (minim 6 caractere)
+        <div class="pw-wrap">
+          <input type="password" id="regPass" autocomplete="new-password" required placeholder="••••••••"/>
+          <button type="button" class="pw-toggle" data-target="regPass">👁</button>
+        </div>
+        <div class="pw-strength"><div class="pw-bar" id="pwBar"></div></div>
+        <span class="pw-hint" id="pwHint"></span>
+      </label>
+      <label>Confirmă parola
+        <div class="pw-wrap">
+          <input type="password" id="regPass2" autocomplete="new-password" required placeholder="••••••••"/>
+          <button type="button" class="pw-toggle" data-target="regPass2">👁</button>
+        </div>
+      </label>
+      <button type="submit" class="btn btn-vip auth-submit">✨ Creează cont</button>
+      <div class="auth-msg" id="registerMsg"></div>
+      <p style="font-size:12px;color:var(--muted);text-align:center;line-height:1.5">
+        ⏳ Contul nou este <b>în așteptare</b> până la aprobarea unui administrator.<br/>
+        Vei putea vedea semnalele VIP odată aprobat.
+      </p>
+    </form>
+
+    <a class="auth-back" href="/">← Înapoi la site</a>
+
+    <div class="security-badges">
+      <span class="badge-sec">🔒 HTTPS</span>
+      <span class="badge-sec">🛡 Parole hash-uite</span>
+      <span class="badge-sec">⏱ 6 încercări max</span>
+      <span class="badge-sec">🍪 HttpOnly cookie</span>
+    </div>
+  </div>
+  <p class="auth-footer">Contul nou necesită aprobarea adminului · Sesiuni expiră după 8h</p>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+
+/* tabs */
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const which = t.dataset.tab;
+    $('loginForm').classList.toggle('hidden', which !== 'login');
+    $('registerForm').classList.toggle('hidden', which !== 'register');
+  });
+});
+
+/* show/hide password */
+document.querySelectorAll('.pw-toggle').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const inp = $(btn.dataset.target);
+    const isHidden = inp.type === 'password';
+    inp.type = isHidden ? 'text' : 'password';
+    btn.textContent = isHidden ? '🙈' : '👁';
+  });
+});
+
+/* password strength */
+$('regPass').addEventListener('input', () => {
+  const v = $('regPass').value;
+  const bar = $('pwBar'), hint = $('pwHint');
+  let score = 0, label = '', color = '';
+  if (v.length >= 6) score++;
+  if (v.length >= 10) score++;
+  if (/[A-Z]/.test(v)) score++;
+  if (/[0-9]/.test(v)) score++;
+  if (/[^A-Za-z0-9]/.test(v)) score++;
+  if (score <= 1) { label = 'Slabă'; color = 'var(--red)'; }
+  else if (score <= 3) { label = 'Medie'; color = 'var(--yellow)'; }
+  else { label = 'Puternică ✓'; color = 'var(--green)'; }
+  bar.style.width = (score / 5 * 100) + '%';
+  bar.style.background = color;
+  hint.textContent = label;
+  hint.style.color = color;
+});
+
+function showMsg(el, text, ok) {
+  el.textContent = text;
+  el.className = 'auth-msg ' + (ok ? 'ok' : 'err');
+}
+
+/* check already logged in */
+(async () => {
+  try {
+    const d = await (await fetch('/api/me', { cache: 'no-store' })).json();
+    if (d.authenticated) {
+      window.location.href = d.role === 'master' ? '/dashboard.html' : '/signals.html';
+    }
+  } catch(_) {}
+})();
+
+/* LOGIN */
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('loginMsg');
+  showMsg(msg, 'Se verifică…', true);
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username: $('loginUser').value, password: $('loginPass').value }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      showMsg(msg, '✅ Autentificat! Redirecționare…', true);
+      setTimeout(() => {
+        window.location.href = d.role === 'master' ? '/dashboard.html' : '/signals.html';
+      }, 600);
+    } else {
+      const left = d.attempts_left !== undefined ? ` (${d.attempts_left} încercări rămase)` : '';
+      showMsg(msg, '❌ ' + (d.error || 'Eroare') + left, false);
+    }
+  } catch(_) { showMsg($('loginMsg'), '❌ Eroare conexiune.', false); }
+});
+
+/* REGISTER */
+$('registerForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const msg = $('registerMsg');
+  if ($('regPass').value !== $('regPass2').value) {
+    showMsg(msg, '❌ Parolele nu coincid.', false); return;
+  }
+  showMsg(msg, 'Se creează contul…', true);
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ username: $('regUser').value, password: $('regPass').value }),
+    });
+    const d = await res.json();
+    if (d.ok) {
+      showMsg(msg, '✅ ' + d.message, true);
+      $('regUser').value = ''; $('regPass').value = ''; $('regPass2').value = '';
+    } else {
+      showMsg(msg, '❌ ' + (d.message || d.error || 'Eroare'), false);
+    }
+  } catch(_) { showMsg($('registerMsg'), '❌ Eroare conexiune.', false); }
+});
+
+/* particle bg */
+(function(){
+  const c = document.getElementById('bgCanvas');
+  if (!c) return;
+  const ctx = c.getContext('2d'); let w, h, pts;
+  function resize(){ w=c.width=window.innerWidth; h=c.height=window.innerHeight;
+    pts=Array.from({length:Math.min(45,Math.floor(w/28))},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4,r:Math.random()*1.5+.5})); }
+  resize(); window.addEventListener('resize',resize);
+  (function tick(){ ctx.clearRect(0,0,w,h);
+    for(let i=0;i<pts.length;i++){ const p=pts[i]; p.x+=p.vx; p.y+=p.vy;
+      if(p.x<0||p.x>w)p.vx*=-1; if(p.y<0||p.y>h)p.vy*=-1;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle='rgba(120,150,240,.5)'; ctx.fill();
+      for(let j=i+1;j<pts.length;j++){ const q=pts[j],dx=p.x-q.x,dy=p.y-q.y,d=Math.hypot(dx,dy);
+        if(d<130){ ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle=`rgba(80,120,220,${.12*(1-d/130)})`;ctx.stroke(); } }
+    } requestAnimationFrame(tick); })();
+})();
+</script>
 </body>
 </html>

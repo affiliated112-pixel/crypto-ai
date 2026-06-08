@@ -128,13 +128,23 @@ def check_credentials(username: str, password: str) -> bool:
         return True
     return False
 
-def register_admin(username: str, password: str, code: str) -> tuple[bool, str]:
-    """Create an extra admin. Requires the ADMIN_REGISTER_CODE secret."""
-    expected = os.environ.get("ADMIN_REGISTER_CODE", "").strip()
-    if not expected:
-        return False, "Înregistrarea este dezactivată (lipsește ADMIN_REGISTER_CODE)."
-    if not hmac.compare_digest((code or "").strip().encode(), expected.encode()):
-        return False, "Cod de înregistrare invalid."
+def register_admin(username: str, password: str, code: str = "",
+                   requires_auth: bool = True) -> tuple[bool, str]:
+    """Create an extra admin.
+    When requires_auth=True (default) the caller must already hold a valid session
+    (verified in bot.py before calling this). Code param kept for backward compat.
+    ADMIN_REGISTER_CODE can optionally be used as an alternative to session auth.
+    """
+    if requires_auth:
+        # Caller (bot.py) already verified the session — no code needed.
+        pass
+    else:
+        # Unauthenticated path: need a valid ADMIN_REGISTER_CODE.
+        expected = os.environ.get("ADMIN_REGISTER_CODE", "").strip()
+        if not expected:
+            return False, "Înregistrarea este dezactivată. Loghează-te ca admin mai întâi."
+        if not hmac.compare_digest((code or "").strip().encode(), expected.encode()):
+            return False, "Cod de înregistrare invalid."
     username = (username or "").strip()
     password = password or ""
     if len(username) < 3:

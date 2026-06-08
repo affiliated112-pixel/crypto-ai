@@ -227,7 +227,58 @@ async function load() {
       : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Niciun log disponibil încă.</td></tr>';
 
     setText('dashUpdated', 'Actualizat ' + new Date().toLocaleTimeString('ro-RO'));
+
+    // pending users
+    await loadPendingUsers();
   } catch(e) { console.error('dashboard error', e); }
+}
+
+async function loadPendingUsers() {
+  try {
+    const res = await fetch('/api/admin/users', { cache: 'no-store' });
+    const d = await res.json();
+    const users = (d.users || []);
+    const pending = users.filter(u => u.status === 'pending');
+    const el = $('pendingList'), badge = $('pendingBadge');
+    if (badge) badge.textContent = pending.length > 0 ? `${pending.length} nou` : 'niciunul';
+    if (!el) return;
+    if (!pending.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0">Niciun cont în așteptare 🎉</div>';
+      return;
+    }
+    el.innerHTML = pending.map(u => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.2);border-radius:12px;font-size:14px">
+        <div>
+          <b style="font-size:15px">${u.username}</b>
+          <span style="color:var(--muted);font-size:12px;margin-left:8px">înregistrat ${timeAgo(u.created_at)}</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="approveUser('${u.username}')" style="padding:7px 14px;background:rgba(33,208,122,.15);color:var(--green);border:1px solid rgba(33,208,122,.3);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✅ Aprobă</button>
+          <button onclick="rejectUser('${u.username}')" style="padding:7px 14px;background:rgba(255,45,63,.1);color:#ff6a76;border:1px solid rgba(255,45,63,.25);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">❌ Respinge</button>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.error('pending users error', e); }
+}
+
+async function approveUser(username) {
+  const res = await fetch('/api/admin/approve', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  const d = await res.json();
+  alert(d.ok ? `✅ ${d.message}` : `❌ ${d.message}`);
+  await loadPendingUsers();
+}
+
+async function rejectUser(username) {
+  if (!confirm(`Respinge contul ${username}?`)) return;
+  const res = await fetch('/api/admin/reject', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  const d = await res.json();
+  alert(d.ok ? `✅ ${d.message}` : `❌ ${d.message}`);
+  await loadPendingUsers();
 }
 
 // logout

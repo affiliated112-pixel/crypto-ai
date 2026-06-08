@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Semnale VIP · Romania Crypto Signals</title>
+  <meta name="robots" content="noindex,nofollow"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/assets/styles.css"/>
+  <style>
+    body{min-height:100vh;background:var(--bg)}
+    .sig-header{background:rgba(6,9,18,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--card-border);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:50;flex-wrap:wrap}
+    .sig-header-left{display:flex;align-items:center;gap:10px}
+    .sig-header-left img{width:36px;height:36px;border-radius:9px}
+    .sig-header-left b{font-size:15px;font-weight:800}
+    .sig-header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .user-pill{background:rgba(33,208,122,.1);border:1px solid rgba(33,208,122,.25);color:var(--green);padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700}
+    .logout-btn{background:rgba(255,45,63,.1);border:1px solid rgba(255,45,63,.25);color:#ff6a76;padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
+    .main{max-width:1100px;margin:0 auto;padding:24px 16px}
+    .page-title{font-size:clamp(22px,5vw,34px);font-weight:900;margin-bottom:6px}
+    .page-sub{color:var(--muted);font-size:15px;margin-bottom:24px}
+    .filter-row{display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+    .filter-btn{padding:8px 18px;border-radius:999px;border:1px solid var(--card-border);background:transparent;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s}
+    .filter-btn.active,.filter-btn:hover{background:var(--blue);color:#fff;border-color:var(--blue)}
+    .signals-wrap{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px}
+    .empty{text-align:center;color:var(--muted);padding:60px 20px;background:var(--card);border:1px dashed var(--card-border);border-radius:18px;grid-column:1/-1}
+    .refresh-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+    .refresh-bar span{color:var(--muted);font-size:13px}
+    .refresh-btn{padding:8px 16px;border-radius:10px;border:1px solid var(--card-border);background:transparent;color:var(--muted);font-size:13px;cursor:pointer;font-family:inherit;transition:all .2s}
+    .refresh-btn:hover{color:var(--text);border-color:var(--blue-soft)}
+    /* mobile tweaks */
+    @media(max-width:560px){
+      .signals-wrap{grid-template-columns:1fr}
+      .sig-header{padding:10px 14px}
+      .sig-header-left b{font-size:13px}
+    }
+  </style>
+</head>
+<body>
+<canvas id="bgCanvas"></canvas>
+
+<!-- HEADER -->
+<div class="sig-header">
+  <div class="sig-header-left">
+    <a href="/"><img src="/assets/rcb-logo.png" alt="RCB"/></a>
+    <b>Romania Crypto Signals</b>
+  </div>
+  <div class="sig-header-right">
+    <span class="user-pill">💎 VIP · <span id="userDisplay">—</span></span>
+    <a href="/" style="color:var(--muted);text-decoration:none;font-size:13px">Site</a>
+    <button class="logout-btn" id="logoutBtn">Ieși din cont</button>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="main">
+  <div class="page-title">💎 Semnalele tale VIP</div>
+  <p class="page-sub">Semnale premium cu Entry, TP, SL — actualizate live.</p>
+
+  <div class="refresh-bar">
+    <span>Actualizat <span id="lastUpd">—</span> · se actualizează la 15s</span>
+    <button class="refresh-btn" id="refreshBtn">🔄 Actualizează</button>
+  </div>
+
+  <div class="filter-row">
+    <button class="filter-btn active" data-filter="all">Toate</button>
+    <button class="filter-btn" data-filter="BUY">🟩 BUY</button>
+    <button class="filter-btn" data-filter="SELL">🟥 SELL</button>
+    <button class="filter-btn" data-filter="live">🟡 Deschise</button>
+  </div>
+
+  <div class="signals-wrap" id="signalsWrap">
+    <div class="empty">Se încarcă semnalele…</div>
+  </div>
+</div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let allSignals = [], activeFilter = 'all';
+
+function timeAgo(ts){
+  if(!ts) return '—';
+  const s=Math.floor(Date.now()/1000-Number(ts));
+  if(s<60) return `${s}s în urmă`;
+  if(s<3600) return `${Math.floor(s/60)}m în urmă`;
+  if(s<86400) return `${Math.floor(s/3600)}h în urmă`;
+  return `${Math.floor(s/86400)}z în urmă`;
+}
+function fmtPrice(v){
+  if(v==null||isNaN(v)) return '—';
+  const n=Number(v),d=n>=1000?2:n>=1?3:6;
+  return '$'+n.toLocaleString('en-US',{maximumFractionDigits:d});
+}
+
+function sigCard(r){
+  const buy=r.side==='BUY';
+  const tp=Array.isArray(r.tp)
+    ? r.tp.map((t,i)=>`<div class="sig-r"><span>TP${i+1}</span><b>${fmtPrice(t)}</b></div>`).join('')
+    : r.tp ? `<div class="sig-r"><span>TP</span><b>${fmtPrice(r.tp)}</b></div>` : '';
+  return `<div class="sig-card" style="${buy?'border-color:rgba(33,208,122,.3)':'border-color:rgba(255,45,63,.25)'}">
+    <div class="sig-top">
+      <div class="sig-coin"><b>${r.name||'—'}</b></div>
+      <span class="badge ${buy?'badge-buy':'badge-sell'}">${r.side}</span>
+    </div>
+    <div class="sig-rows">
+      <div class="sig-r"><span>Entry</span><b>${fmtPrice(r.entry)}</b></div>
+      ${tp}
+      <div class="sig-r"><span>Stop Loss</span><b style="color:var(--red)">${r.sl?fmtPrice(r.sl):'—'}</b></div>
+      <div class="sig-r"><span>Scor AI</span><b>${r.score!=null?r.score+'/100':'—'}</b></div>
+      <div class="sig-r"><span>R:R</span><b>${r.rr?Number(r.rr).toFixed(2):'—'}</b></div>
+      <div class="sig-r"><span>Status</span><span class="badge badge-status">${r.status||'—'}</span></div>
+    </div>
+    <div class="sig-time">⏱ ${timeAgo(r.sent_at)}</div>
+  </div>`;
+}
+
+function renderSignals(){
+  const wrap = $('signalsWrap');
+  let list = allSignals;
+  if(activeFilter==='BUY') list=list.filter(r=>r.side==='BUY');
+  else if(activeFilter==='SELL') list=list.filter(r=>r.side==='SELL');
+  else if(activeFilter==='live') list=list.filter(r=>r.status==='live');
+  wrap.innerHTML = list.length ? list.map(sigCard).join('') : '<div class="empty">Niciun semnal disponibil momentan.</div>';
+}
+
+document.querySelectorAll('.filter-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter=btn.dataset.filter;
+    renderSignals();
+  });
+});
+
+async function load(){
+  try{
+    const res=await fetch('/api/stats',{cache:'no-store'});
+    if(!res.ok){if(res.status===401||res.status===403)window.location.href='/admin.html';return;}
+    const d=await res.json();
+    if(!d.is_admin){window.location.href='/admin.html';return;}
+    const vip=d.signals?.vip||[];
+    allSignals=vip.filter(r=>!r.locked);
+    renderSignals();
+    $('lastUpd').textContent=new Date().toLocaleTimeString('ro-RO');
+    $('userDisplay').textContent=d.admin_user||'VIP';
+  }catch(e){console.error(e);}
+}
+
+$('refreshBtn').addEventListener('click',load);
+$('logoutBtn').addEventListener('click',async()=>{
+  try{await fetch('/api/logout',{method:'POST'});}catch(_){}
+  window.location.href='/';
+});
+
+/* auth check */
+(async()=>{
+  try{
+    const d=await(await fetch('/api/me',{cache:'no-store'})).json();
+    if(!d.authenticated){window.location.href='/admin.html';return;}
+    $('userDisplay').textContent=d.username||'VIP';
+  }catch(_){window.location.href='/admin.html';}
+})();
+
+/* particle bg */
+(function(){
+  const c=document.getElementById('bgCanvas');if(!c)return;
+  const ctx=c.getContext('2d');let w,h,pts;
+  function r(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;
+    pts=Array.from({length:40},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.4+.5}));}
+  r();window.addEventListener('resize',r);
+  (function t(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(120,150,240,.4)';ctx.fill();}
+    requestAnimationFrame(t);})();
+})();
+
+load();
+setInterval(load,15000);
+</script>
+</body>
+</html>
