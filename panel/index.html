@@ -1,234 +1,257 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Romania Crypto Signals — Semnale Crypto AI în timp real</title>
-  <meta name="description" content="Romania Crypto Signals (RCB) — bot AI care livrează semnale crypto BUY/SELL în timp real pe Discord. Statistici live, performanță reală, FREE & VIP." />
-
-  <!-- Open Graph / social preview -->
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="Romania Crypto Signals — Semnale Crypto AI" />
-  <meta property="og:description" content="Semnale crypto inteligente livrate de AI în timp real. Vezi statisticile live ale comunității." />
-  <meta property="og:image" content="/assets/rcb-logo.png" />
-  <meta name="twitter:card" content="summary_large_image" />
-
-  <link rel="icon" type="image/png" href="/assets/rcb-logo.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/assets/styles.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Romania Crypto Signals — AI Trading Bot</title>
+  <meta name="description" content="Semnale crypto AI în timp real. FREE & VIP. Comunitate Discord. Romania Crypto Signals — RCB Bot."/>
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="Romania Crypto Signals — Semnale Crypto AI"/>
+  <meta property="og:description" content="Semnale crypto inteligente livrate de AI 24/7. Date live din Discord."/>
+  <meta property="og:image" content="/assets/rcb-logo.png"/>
+  <meta name="twitter:card" content="summary_large_image"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/assets/styles.css"/>
 </head>
 <body>
-  <canvas id="bgCanvas"></canvas>
-  <div class="bg-grid"></div>
-  <div class="bg-glow glow-blue"></div>
-  <div class="bg-glow glow-red"></div>
+<canvas id="bgCanvas"></canvas>
+<div class="bg-grid"></div>
+<div class="bg-glow glow-blue"></div>
+<div class="bg-glow glow-red"></div>
 
-  <!-- live ticker tape -->
-  <div class="ticker" id="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+<!-- TICKER -->
+<div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
 
-  <!-- NAV -->
-  <header class="nav">
-    <div class="nav-inner">
-      <a class="brand" href="#top">
-        <img src="/assets/rcb-logo.png" alt="RCB logo" class="brand-logo" />
-        <div class="brand-text">
-          <span class="brand-name">Romania Crypto Signals</span>
-          <span class="brand-tag">AI Trading Bot · RCB</span>
-        </div>
-      </a>
-      <nav class="nav-links">
-        <a href="#stats">Statistici</a>
-        <a href="#market">Piață</a>
-        <a href="#free">Semnale FREE</a>
-        <a href="#vip">VIP</a>
-        <a href="#performance">Performanță</a>
-      </nav>
-      <div class="nav-right">
-        <div class="nav-status">
-          <span id="botStatusDot" class="dot dot-off"></span>
-          <span id="botStatusText">Conectare…</span>
-        </div>
-        <a class="btn btn-vip-sm" id="navVip" href="#vip">💎 VIP</a>
-        <a class="nav-admin-link" id="navAdmin" href="/admin.html" title="Admin">🔐</a>
+<!-- NAV -->
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top">
+      <img src="/assets/rcb-logo.png" alt="RCB" class="brand-logo"/>
+      <div class="brand-text">
+        <span class="brand-name">Romania Crypto Signals</span>
+        <span class="brand-tag">AI Trading Bot · RCB</span>
       </div>
-    </div>
-  </header>
-
-  <!-- ADMIN BANNER (shown only when logged in) -->
-  <div class="admin-banner hidden" id="adminBanner">
-    <div class="admin-banner-inner">
-      <span>🔓 Mod administrator activ — vezi semnalele VIP complete. Salut, <b id="adminName">admin</b>!</span>
-      <button class="admin-logout" id="adminLogout">Deconectare</button>
+    </a>
+    <nav class="nav-links">
+      <a href="#stats">Live</a>
+      <a href="#market">Piață</a>
+      <a href="#free">FREE</a>
+      <a href="#vip">VIP</a>
+      <a href="#performance">Performanță</a>
+      <a href="#discord">Discord</a>
+    </nav>
+    <div class="nav-right">
+      <div class="nav-status">
+        <span id="botStatusDot" class="dot dot-off"></span>
+        <span id="botStatusText">Conectare…</span>
+      </div>
+      <a class="btn btn-vip-sm" id="navVip" href="#vip">💎 VIP</a>
+      <a class="nav-admin-link" href="/admin.html" title="Admin Panel">🔐</a>
     </div>
   </div>
+</header>
 
-  <!-- HERO -->
-  <section class="hero" id="top">
-    <div class="hero-content">
-      <div class="hero-badge">
-        <span class="ro-flag"></span>
-        Made in Romania · Real-time AI signals
-      </div>
-      <h1 class="hero-title">
-        Semnale Crypto <span class="grad-blue">inteligente</span>,<br />
-        livrate de <span class="grad-red">AI</span> în timp real.
-      </h1>
-      <p class="hero-sub">
-        RCB analizează piața 24/7 cu zeci de indicatori tehnici și trimite semnale
-        BUY / SELL direct pe Discord. Date 100% reale, afișate live mai jos.
-      </p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" id="heroDiscord" href="#free">🚀 Intră pe Discord</a>
-        <a class="btn btn-vip" href="#vip">💎 Devino VIP</a>
-      </div>
-      <div class="hero-mini">
-        <div class="mini">
-          <span class="mini-num" id="heroMembers">—</span>
-          <span class="mini-lbl">Membri</span>
-        </div>
-        <div class="mini-sep"></div>
-        <div class="mini">
-          <span class="mini-num" id="heroSignals">—</span>
-          <span class="mini-lbl">Semnale totale</span>
-        </div>
-        <div class="mini-sep"></div>
-        <div class="mini">
-          <span class="mini-num" id="heroVip">—</span>
-          <span class="mini-lbl">Membri VIP</span>
-        </div>
-      </div>
-    </div>
-    <div class="hero-visual">
-      <div class="hero-logo-wrap">
-        <div class="hero-ring"></div>
-        <img src="/assets/rcb-logo.png" alt="Romania Crypto Signals" class="hero-logo" />
-      </div>
-    </div>
-  </section>
+<!-- ADMIN BANNER -->
+<div class="admin-banner hidden" id="adminBanner">
+  <div class="admin-banner-inner">
+    <span>🔓 Admin activ — VIP deblocat. Salut, <b id="adminName">admin</b>! &nbsp;<a href="/dashboard.html" style="color:var(--green);font-weight:700;">→ Dashboard admin</a></span>
+    <button class="admin-logout" id="adminLogout">Deconectare</button>
+  </div>
+</div>
 
-  <!-- STATS -->
-  <section class="section" id="stats">
-    <div class="section-head">
-      <h2>Statistici <span class="live-pill"><span class="live-dot"></span>LIVE</span></h2>
-      <p>Date reale citite direct din botul de Discord. <span id="lastUpdate" class="muted">—</span></p>
+<!-- HERO -->
+<section class="hero" id="top">
+  <div class="hero-content">
+    <div class="hero-badge"><span class="ro-flag"></span>Made in Romania · AI-Powered · Real-time</div>
+    <h1 class="hero-title">
+      Semnale Crypto <span class="grad-blue">inteligente</span>,<br/>livrate de <span class="grad-red">AI</span> în timp real.
+    </h1>
+    <p class="hero-sub">RCB scanează piața 24/7 cu RSI, MACD, Bollinger Bands și AI — trimite semnale BUY/SELL direct pe Discord cu Entry, TP și SL precis.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" id="heroDiscord" href="#">🚀 Intră pe Discord</a>
+      <a class="btn btn-vip" href="#vip">💎 Devino VIP</a>
     </div>
-    <div class="stat-grid">
-      <div class="stat-card accent-blue"><div class="stat-ic">👥</div><div class="stat-val" id="statMembers">—</div><div class="stat-lbl">Membri totali</div></div>
-      <div class="stat-card accent-green"><div class="stat-ic">🟢</div><div class="stat-val" id="statOnline">—</div><div class="stat-lbl">Membri online</div></div>
-      <div class="stat-card accent-yellow"><div class="stat-ic">⭐</div><div class="stat-val" id="statVip">—</div><div class="stat-lbl">Membri VIP</div></div>
-      <div class="stat-card accent-red"><div class="stat-ic">📡</div><div class="stat-val" id="statSignals">—</div><div class="stat-lbl">Semnale trimise</div></div>
-      <div class="stat-card"><div class="stat-ic">🟩</div><div class="stat-val" id="statBuy">—</div><div class="stat-lbl">Semnale BUY</div></div>
-      <div class="stat-card"><div class="stat-ic">🟥</div><div class="stat-val" id="statSell">—</div><div class="stat-lbl">Semnale SELL</div></div>
-      <div class="stat-card"><div class="stat-ic">🪙</div><div class="stat-val" id="statCoins">—</div><div class="stat-lbl">Monede VIP monitorizate</div></div>
-      <div class="stat-card"><div class="stat-ic">📅</div><div class="stat-val" id="statToday">—</div><div class="stat-lbl">Semnale azi</div></div>
+    <div class="hero-mini">
+      <div class="mini"><span class="mini-num counter" id="heroMembers" data-target="0">—</span><span class="mini-lbl">Membri</span></div>
+      <div class="mini-sep"></div>
+      <div class="mini"><span class="mini-num counter" id="heroSignals" data-target="0">—</span><span class="mini-lbl">Semnale</span></div>
+      <div class="mini-sep"></div>
+      <div class="mini"><span class="mini-num counter" id="heroVip" data-target="0">—</span><span class="mini-lbl">Membri VIP</span></div>
+      <div class="mini-sep"></div>
+      <div class="mini"><span class="mini-num" id="heroOnline">—</span><span class="mini-lbl">Online acum</span></div>
     </div>
-  </section>
+    <!-- Next scan countdown -->
+    <div class="next-scan">
+      <span class="scan-label">⏱ Următor scan AI în</span>
+      <span class="scan-timer" id="scanCountdown">15:00</span>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="hero-logo-wrap">
+      <div class="hero-ring ring1"></div>
+      <div class="hero-ring ring2"></div>
+      <img src="/assets/rcb-logo.png" alt="Romania Crypto Signals" class="hero-logo"/>
+    </div>
+  </div>
+</section>
 
-  <!-- MARKET / LIVE PRICES -->
-  <section class="section" id="market">
-    <div class="section-head">
-      <h2>Piața acum <span class="live-pill"><span class="live-dot"></span>LIVE</span></h2>
-      <p>Prețuri reale + grafic 24h pentru monedele monitorizate gratuit.</p>
-    </div>
-    <div class="fng-row">
-      <div class="fng-card">
-        <div class="fng-gauge">
-          <svg viewBox="0 0 200 110" class="fng-svg">
-            <path d="M10 100 A90 90 0 0 1 190 100" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="14" stroke-linecap="round"/>
-            <path id="fngArc" d="M10 100 A90 90 0 0 1 190 100" fill="none" stroke="url(#fngGrad)" stroke-width="14" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
-            <defs><linearGradient id="fngGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stop-color="#ff2d3f"/><stop offset="50%" stop-color="#ffd02e"/><stop offset="100%" stop-color="#21d07a"/>
-            </linearGradient></defs>
-          </svg>
-          <div class="fng-value"><span id="fngValue">—</span></div>
-        </div>
-        <div class="fng-label" id="fngClass">Fear &amp; Greed Index</div>
-      </div>
-      <div class="price-grid" id="priceGrid">
-        <div class="price-skeleton"></div><div class="price-skeleton"></div>
-        <div class="price-skeleton"></div><div class="price-skeleton"></div>
-      </div>
-    </div>
-  </section>
+<!-- STATS LIVE -->
+<section class="section" id="stats">
+  <div class="section-head">
+    <h2>Statistici <span class="live-pill"><span class="live-dot"></span>LIVE</span></h2>
+    <p>Date reale din botul Discord. Actualizare automată la 15 secunde. <span id="lastUpdate" class="muted">—</span></p>
+  </div>
+  <div class="stat-grid">
+    <div class="stat-card accent-blue"><div class="stat-ic">👥</div><div class="stat-val counter" id="statMembers" data-target="0">—</div><div class="stat-lbl">Membri totali</div></div>
+    <div class="stat-card accent-green"><div class="stat-ic">🟢</div><div class="stat-val" id="statOnline">—</div><div class="stat-lbl">Membri online</div></div>
+    <div class="stat-card accent-yellow"><div class="stat-ic">⭐</div><div class="stat-val counter" id="statVip" data-target="0">—</div><div class="stat-lbl">Membri VIP</div></div>
+    <div class="stat-card accent-red"><div class="stat-ic">📡</div><div class="stat-val counter" id="statSignals" data-target="0">—</div><div class="stat-lbl">Semnale trimise</div></div>
+    <div class="stat-card"><div class="stat-ic">🟩</div><div class="stat-val counter" id="statBuy" data-target="0">—</div><div class="stat-lbl">Semnale BUY</div></div>
+    <div class="stat-card"><div class="stat-ic">🟥</div><div class="stat-val counter" id="statSell" data-target="0">—</div><div class="stat-lbl">Semnale SELL</div></div>
+    <div class="stat-card"><div class="stat-ic">🪙</div><div class="stat-val" id="statCoins">—</div><div class="stat-lbl">Monede VIP monitorizate</div></div>
+    <div class="stat-card"><div class="stat-ic">📅</div><div class="stat-val" id="statToday">—</div><div class="stat-lbl">Semnale azi</div></div>
+  </div>
+</section>
 
-  <!-- FREE SIGNALS -->
-  <section class="section" id="free">
-    <div class="section-head">
-      <div class="head-flex">
-        <div>
-          <h2>Semnale <span class="grad-blue">FREE</span></h2>
-          <p>Semnale gratuite trimise comunității — vizibile complet.</p>
-        </div>
-        <a class="btn btn-primary" id="freeDiscord" href="#">Primește-le pe Discord</a>
+<!-- MARKET LIVE -->
+<section class="section" id="market">
+  <div class="section-head">
+    <h2>Piața acum <span class="live-pill"><span class="live-dot"></span>LIVE</span></h2>
+    <p>Prețuri în timp real + grafice 24h pentru monedele monitorizate.</p>
+  </div>
+  <div class="fng-row">
+    <div class="fng-card">
+      <div class="fng-gauge">
+        <svg viewBox="0 0 200 110" class="fng-svg">
+          <path d="M10 100 A90 90 0 0 1 190 100" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="14" stroke-linecap="round"/>
+          <path id="fngArc" d="M10 100 A90 90 0 0 1 190 100" fill="none" stroke="url(#fngGrad)" stroke-width="14" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
+          <defs><linearGradient id="fngGrad" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#ff2d3f"/><stop offset="50%" stop-color="#ffd02e"/><stop offset="100%" stop-color="#21d07a"/>
+          </linearGradient></defs>
+        </svg>
+        <div class="fng-value"><span id="fngValue">—</span></div>
       </div>
+      <div class="fng-label" id="fngClass">Fear &amp; Greed Index</div>
+      <div class="fng-sub">Sentiment piață crypto</div>
     </div>
-    <div class="signal-cards" id="freeSignals">
-      <div class="empty-card">Se încarcă semnalele FREE…</div>
+    <div class="price-grid" id="priceGrid">
+      <div class="price-skeleton"></div><div class="price-skeleton"></div>
+      <div class="price-skeleton"></div><div class="price-skeleton"></div>
     </div>
-  </section>
+  </div>
+  <!-- VIP tease coins (blurred) -->
+  <div class="vip-coins-tease" id="vipCoinsTease"></div>
+</section>
 
-  <!-- VIP SIGNALS (LOCKED) -->
-  <section class="section vip-section" id="vip">
-    <div class="vip-bg"></div>
-    <div class="section-head">
-      <div class="head-flex">
-        <div>
-          <h2>Semnale <span class="grad-gold">VIP</span> <span class="lock-pill">🔒 Premium</span></h2>
-          <p>Semnale premium cu Entry, TP1/TP2/TP3 și Stop Loss. Deblochează-le ca membru VIP.</p>
-        </div>
-        <a class="btn btn-vip" id="vipCta" href="#">💎 Deblochează VIP</a>
-      </div>
-    </div>
-    <div class="signal-cards" id="vipSignals">
-      <div class="empty-card">Se încarcă semnalele VIP…</div>
-    </div>
-
-    <!-- VIP value props -->
-    <div class="vip-benefits">
-      <div class="benefit"><span class="b-ic">🎯</span><b>Entry + TP1/TP2/TP3 + SL</b><span>Plan complet de tranzacționare pentru fiecare semnal.</span></div>
-      <div class="benefit"><span class="b-ic">🪙</span><b>31+ monede scanate</b><span>Acces la toate monedele, nu doar cele FREE.</span></div>
-      <div class="benefit"><span class="b-ic">⚡</span><b>Semnale prioritare</b><span>Primești semnalele premium primul, instant.</span></div>
-      <div class="benefit"><span class="b-ic">📊</span><b>Analiză AI extinsă</b><span>Scor de calitate, R:R și rationale detaliat.</span></div>
-    </div>
-    <div class="vip-price-banner">
+<!-- FREE SIGNALS -->
+<section class="section" id="free">
+  <div class="section-head">
+    <div class="head-flex">
       <div>
-        <span class="vpb-title">Devino membru VIP</span>
-        <span class="vpb-sub" id="vipPriceSub">Acces complet la toate semnalele premium.</span>
+        <h2>Semnale <span class="grad-blue">FREE</span></h2>
+        <p>Gratuite — Entry, scor AI și R:R vizibile complet. Intră pe Discord să le primești instant.</p>
       </div>
-      <a class="btn btn-vip btn-lg" id="vipCta2" href="#">💎 Vreau VIP acum</a>
+      <a class="btn btn-primary" id="freeDiscord" href="#">📲 Primește pe Discord</a>
     </div>
-  </section>
+  </div>
+  <div class="signal-cards" id="freeSignals"><div class="empty-card">Se încarcă…</div></div>
+</section>
 
-  <!-- PERFORMANCE -->
-  <section class="section" id="performance">
-    <div class="section-head">
-      <h2>Performanță (30 zile)</h2>
-      <p>Calculată exclusiv din semnalele urmărite în tracker — fără marketing.</p>
-    </div>
-    <div class="perf-grid">
-      <div class="perf-card">
-        <div class="perf-ring" id="winRing"><span class="perf-ring-val" id="perfWinRate">—</span></div>
-        <div class="perf-ring-lbl">Win rate</div>
+<!-- VIP SIGNALS -->
+<section class="section vip-section" id="vip">
+  <div class="vip-bg"></div>
+  <div class="section-head">
+    <div class="head-flex">
+      <div>
+        <h2>Semnale <span class="grad-gold">VIP</span> <span class="lock-pill">🔒 Premium</span></h2>
+        <p>Entry precis, TP1/TP2/TP3, Stop Loss — 31+ monede. Vizibil doar pentru membrii VIP.</p>
       </div>
-      <div class="perf-stats">
-        <div class="perf-row"><span>Semnale închise</span><b id="perfClosed">—</b></div>
-        <div class="perf-row"><span>Câștigătoare</span><b class="pos" id="perfWins">—</b></div>
-        <div class="perf-row"><span>Pierzătoare</span><b class="neg" id="perfLosses">—</b></div>
-        <div class="perf-row"><span>Semnale deschise</span><b id="perfOpen">—</b></div>
-        <div class="perf-row"><span>PnL mediu / semnal</span><b id="perfPnl">—</b></div>
+      <a class="btn btn-vip" id="vipCta" href="#">💎 Deblochează VIP</a>
+    </div>
+  </div>
+  <div class="signal-cards" id="vipSignals"><div class="empty-card">Se încarcă…</div></div>
+  <div class="vip-benefits">
+    <div class="benefit"><span class="b-ic">🎯</span><b>Entry + TP1/TP2/TP3 + SL</b><span>Plan complet pentru fiecare semnal premium.</span></div>
+    <div class="benefit"><span class="b-ic">🪙</span><b>31+ monede scanate</b><span>Acces la toate perechile, nu doar FREE.</span></div>
+    <div class="benefit"><span class="b-ic">⚡</span><b>Semnale prioritare</b><span>Primești semnalul primul — timing contează.</span></div>
+    <div class="benefit"><span class="b-ic">📊</span><b>Scor AI detaliat</b><span>Calitate, R:R și rationale complet pentru fiecare semnal.</span></div>
+  </div>
+  <div class="vip-price-banner">
+    <div><span class="vpb-title">Devino membru VIP</span><span class="vpb-sub" id="vipPriceSub">Acces complet la toate semnalele premium.</span></div>
+    <a class="btn btn-vip btn-lg" id="vipCta2" href="#">💎 Vreau VIP acum</a>
+  </div>
+</section>
+
+<!-- DISCORD LIVE SECTION -->
+<section class="section" id="discord">
+  <div class="section-head">
+    <h2>Discord <span class="live-pill"><span class="live-dot"></span>LIVE</span></h2>
+    <p>Date live din serverul nostru de Discord — sincronizat 100% cu botul.</p>
+  </div>
+  <div class="discord-grid">
+    <div class="discord-card dc-server" id="dcServerCard">
+      <div class="dc-header"><span class="dc-ic">🏠</span><b id="dcServerName">Romania Crypto Signals</b></div>
+      <div class="dc-rows" id="dcRows">
+        <div class="dc-row"><span>👥 Membri totali</span><b id="dcMembers">—</b></div>
+        <div class="dc-row"><span>🟢 Online acum</span><b id="dcOnline">—</b></div>
+        <div class="dc-row"><span>⭐ Membri VIP</span><b id="dcVip">—</b></div>
+        <div class="dc-row"><span>🤖 Boturi</span><b id="dcBots">—</b></div>
+        <div class="dc-row"><span>💬 Canale text</span><b id="dcText">—</b></div>
+        <div class="dc-row"><span>🔊 Canale voce</span><b id="dcVoice">—</b></div>
+        <div class="dc-row"><span>🎭 Roluri</span><b id="dcRoles">—</b></div>
+        <div class="dc-row"><span>🚀 Boosturi</span><b id="dcBoosts">—</b></div>
       </div>
     </div>
-  </section>
-
-  <footer class="footer">
-    <div class="footer-inner">
-      <div class="footer-brand"><img src="/assets/rcb-logo.png" alt="RCB" /><span>Romania Crypto Signals</span></div>
-      <p class="footer-disclaimer">Semnalele NU sunt sfaturi financiare. Investește responsabil. · Powered by RCB Bot</p>
+    <div class="discord-card dc-joins">
+      <div class="dc-header"><span class="dc-ic">🆕</span><b>Membri noi (24h)</b></div>
+      <div class="dc-join-list" id="dcJoinList"><div class="dc-empty">Se încarcă…</div></div>
     </div>
-  </footer>
+    <div class="discord-card dc-signal-activity">
+      <div class="dc-header"><span class="dc-ic">📊</span><b>Activitate semnale</b></div>
+      <div class="signal-activity-bars" id="activityBars">
+        <div class="act-row"><span>BUY total</span><div class="act-bar-wrap"><div class="act-bar buy" id="barBuy"></div></div><b id="lblBuy">—</b></div>
+        <div class="act-row"><span>SELL total</span><div class="act-bar-wrap"><div class="act-bar sell" id="barSell"></div></div><b id="lblSell">—</b></div>
+        <div class="act-row"><span>FREE azi</span><div class="act-bar-wrap"><div class="act-bar free" id="barFree"></div></div><b id="lblFree">—</b></div>
+        <div class="act-row"><span>VIP azi</span><div class="act-bar-wrap"><div class="act-bar vip" id="barVip"></div></div><b id="lblVip">—</b></div>
+      </div>
+    </div>
+  </div>
+</section>
 
-  <script src="/assets/app.js"></script>
+<!-- PERFORMANCE -->
+<section class="section" id="performance">
+  <div class="section-head">
+    <h2>Performanță (30 zile)</h2>
+    <p>Calculată din semnalele urmărite în tracker — fără marketing, fără cifre inventate.</p>
+  </div>
+  <div class="perf-grid">
+    <div class="perf-card">
+      <div class="perf-ring" id="winRing"><span class="perf-ring-val" id="perfWinRate">—</span></div>
+      <div class="perf-ring-lbl">Win rate</div>
+    </div>
+    <div class="perf-stats">
+      <div class="perf-row"><span>Semnale închise</span><b id="perfClosed">—</b></div>
+      <div class="perf-row"><span>Câștigătoare</span><b class="pos" id="perfWins">—</b></div>
+      <div class="perf-row"><span>Pierzătoare</span><b class="neg" id="perfLosses">—</b></div>
+      <div class="perf-row"><span>Semnale deschise</span><b id="perfOpen">—</b></div>
+      <div class="perf-row"><span>PnL mediu / semnal</span><b id="perfPnl">—</b></div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand"><img src="/assets/rcb-logo.png" alt="RCB"/><span>Romania Crypto Signals</span></div>
+    <p class="footer-disclaimer">Semnalele NU sunt sfaturi financiare. Investește responsabil. · Powered by RCB AI Bot</p>
+  </div>
+</footer>
+
+<!-- toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/assets/app.js"></script>
 </body>
 </html>

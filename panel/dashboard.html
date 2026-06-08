@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Admin Dashboard · Romania Crypto Signals</title>
+  <meta name="robots" content="noindex,nofollow"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="/assets/styles.css"/>
+</head>
+<body class="dash-body">
+<canvas id="bgCanvas"></canvas>
+<div class="bg-glow glow-blue"></div>
+
+<!-- HEADER -->
+<div class="dash-header">
+  <div class="dash-header-left">
+    <a href="/"><img src="/assets/rcb-logo.png" alt="RCB"/></a>
+    <div>
+      <h1>Admin Dashboard</h1>
+      <p>Romania Crypto Signals — panou de control <span id="dhUser" style="color:var(--green)"></span></p>
+    </div>
+  </div>
+  <div class="dash-header-right">
+    <div class="nav-status">
+      <span id="dashBotDot" class="dot dot-off"></span>
+      <span id="dashBotTxt">Se conectează…</span>
+    </div>
+    <a href="/" class="btn btn-primary" style="padding:9px 18px;font-size:13px">← Site public</a>
+    <button class="btn-danger" id="dashLogout">Deconectare</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="dash-grid">
+  <!-- KPIs -->
+  <div class="dash-kpis">
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-ic">👥</div>
+      <div class="kpi-val" id="kpiMembers">—</div>
+      <div class="kpi-lbl">Membri Discord</div>
+    </div>
+    <div class="kpi-card kpi-green">
+      <div class="kpi-ic">🌐</div>
+      <div class="kpi-val" id="kpiVisitors">—</div>
+      <div class="kpi-lbl">Vizitatori unici site</div>
+    </div>
+    <div class="kpi-card kpi-yellow">
+      <div class="kpi-ic">👁️</div>
+      <div class="kpi-val" id="kpiActive">—</div>
+      <div class="kpi-lbl">Activi pe site acum</div>
+    </div>
+    <div class="kpi-card kpi-red">
+      <div class="kpi-ic">📡</div>
+      <div class="kpi-val" id="kpiSignals">—</div>
+      <div class="kpi-lbl">Semnale trimise total</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+      <div class="kpi-ic">⭐</div>
+      <div class="kpi-val" id="kpiVip">—</div>
+      <div class="kpi-lbl">Membri VIP</div>
+    </div>
+  </div>
+
+  <!-- PANELS -->
+  <div class="dash-panels">
+    <!-- LEFT: login log + Discord info -->
+    <div>
+      <div class="dash-panel" style="margin-bottom:20px">
+        <h3>🔐 Log autentificări admin</h3>
+        <div class="online-indicator" id="dashOnline">
+          <span class="dot dot-on"></span> <span id="dashActiveCount">—</span> utilizatori activi pe site acum
+        </div>
+        <table class="log-table" id="loginTable">
+          <thead>
+            <tr>
+              <th>Utilizator</th>
+              <th>Rezultat</th>
+              <th>IP (hash)</th>
+              <th>Timp</th>
+            </tr>
+          </thead>
+          <tbody id="loginTableBody">
+            <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Se încarcă…</td></tr>
+          </tbody>
+        </table>
+        <div class="refresh-label" id="dashUpdated">—</div>
+      </div>
+
+      <!-- Page views + signal stats -->
+      <div class="dash-panel">
+        <h3>📊 Statistici site & semnale</h3>
+        <div class="dc-rows">
+          <div class="dc-row"><span>👁️ Vizualizări totale</span><b id="dsTotalViews">—</b></div>
+          <div class="dc-row"><span>👥 Vizitatori unici</span><b id="dsUnique">—</b></div>
+          <div class="dc-row"><span>🟩 Semnale BUY</span><b id="dsBuy">—</b></div>
+          <div class="dc-row"><span>🟥 Semnale SELL</span><b id="dsSell">—</b></div>
+          <div class="dc-row"><span>📅 Semnale FREE azi</span><b id="dsFreeToday">—</b></div>
+          <div class="dc-row"><span>💎 Semnale VIP azi</span><b id="dsVipToday">—</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Discord info + VIP signals -->
+    <div>
+      <div class="dash-panel" style="margin-bottom:20px">
+        <h3>🤖 Status Discord Bot</h3>
+        <div class="dc-rows">
+          <div class="dc-row"><span>🏠 Server</span><b id="dsServer">—</b></div>
+          <div class="dc-row"><span>👥 Membri totali</span><b id="dsMembers">—</b></div>
+          <div class="dc-row"><span>🟢 Online</span><b id="dsOnline">—</b></div>
+          <div class="dc-row"><span>⭐ Membri VIP</span><b id="dsVipM">—</b></div>
+          <div class="dc-row"><span>🤖 Boturi</span><b id="dsBots">—</b></div>
+          <div class="dc-row"><span>🚀 Boosturi</span><b id="dsBoosts">—</b></div>
+          <div class="dc-row"><span>💬 Canale text</span><b id="dsTextCh">—</b></div>
+          <div class="dc-row"><span>🔊 Canale voce</span><b id="dsVoiceCh">—</b></div>
+          <div class="dc-row"><span>🎭 Roluri</span><b id="dsRoles">—</b></div>
+          <div class="dc-row"><span>📡 Semnale total</span><b id="dsSigTotal">—</b></div>
+        </div>
+        <!-- Recent joins -->
+        <div style="margin-top:16px;border-top:1px solid var(--card-border);padding-top:14px">
+          <b style="font-size:13px;color:var(--muted)">Membri noi (24h)</b>
+          <div class="dc-join-list" id="dsJoins" style="margin-top:10px;max-height:160px"></div>
+        </div>
+      </div>
+
+      <!-- Latest VIP signals -->
+      <div class="dash-panel">
+        <h3>💎 Ultimele semnale VIP</h3>
+        <div class="dash-signal-list" id="dashVipSignals">
+          <div style="color:var(--muted);font-size:14px;text-align:center;padding:20px">Se încarcă…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+function fmt(n) { if (n==null||isNaN(n)) return '—'; return Number(n).toLocaleString('ro-RO'); }
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const sec = Math.floor(Date.now()/1000 - Number(ts));
+  if (sec<60) return `${sec}s în urmă`;
+  if (sec<3600) return `${Math.floor(sec/60)}m în urmă`;
+  if (sec<86400) return `${Math.floor(sec/3600)}h în urmă`;
+  return `${Math.floor(sec/86400)}z în urmă`;
+}
+function setText(id, v) { const e=$(id); if(e) e.textContent=v; }
+function fmtPrice(v) {
+  if (v==null||isNaN(v)) return '—';
+  const n=Number(v), dec=n>=1000?2:n>=1?3:6;
+  return '$'+n.toLocaleString('en-US',{maximumFractionDigits:dec});
+}
+
+async function load() {
+  try {
+    const res = await fetch('/api/stats', { cache: 'no-store' });
+    if (!res.ok) { if (res.status===401||res.status===403) window.location.href='/admin.html'; return; }
+    const d = await res.json();
+    if (!d.is_admin) { window.location.href = '/admin.html'; return; }
+
+    // header
+    const dot=$('dashBotDot'), txt=$('dashBotTxt');
+    if (d.discord_ready) { dot.className='dot dot-on'; txt.textContent='Bot online'; }
+    else { dot.className='dot dot-off'; txt.textContent='Bot offline'; }
+    setText('dhUser', d.admin_user ? `· ${d.admin_user}` : '');
+
+    // KPIs
+    const s = d.server||{}, sig = d.signals||{}, an = d.analytics||{};
+    setText('kpiMembers', fmt(s.total_members));
+    setText('kpiVisitors', fmt(an.unique_visitors));
+    setText('kpiActive', fmt(an.active_now));
+    setText('kpiSignals', fmt(sig.total));
+    setText('kpiVip', fmt(s.vip_members));
+
+    // analytics
+    setText('dashActiveCount', fmt(an.active_now));
+    setText('dsTotalViews', fmt(an.total_views));
+    setText('dsUnique', fmt(an.unique_visitors));
+    setText('dsBuy', fmt(sig.buy)); setText('dsSell', fmt(sig.sell));
+    setText('dsFreeToday', fmt(sig.today_free)); setText('dsVipToday', fmt(sig.today_vip));
+
+    // discord info
+    setText('dsServer', s.name||'—'); setText('dsMembers', fmt(s.total_members));
+    setText('dsOnline', fmt(s.online_members)); setText('dsVipM', fmt(s.vip_members));
+    setText('dsBots', fmt(s.bot_members)); setText('dsBoosts', fmt(s.boosts));
+    setText('dsTextCh', fmt(s.text_channels)); setText('dsVoiceCh', fmt(s.voice_channels));
+    setText('dsRoles', fmt(s.roles)); setText('dsSigTotal', fmt(sig.total));
+
+    // recent joins
+    const joinEl = $('dsJoins');
+    const joins = s.recent_joins || [];
+    if (joinEl) joinEl.innerHTML = joins.length
+      ? joins.map(j=>`<div class="dc-join-item"><span class="dc-join-name">👤 ${j.name}</span><span class="dc-join-ago">${timeAgo(Date.now()/1000-j.joined_ago)}</span></div>`).join('')
+      : '<div class="dc-empty">Niciun membru nou în 24h.</div>';
+
+    // VIP signals
+    const vipEl = $('dashVipSignals');
+    const vipSigs = sig.vip || [];
+    if (vipEl) vipEl.innerHTML = vipSigs.length
+      ? vipSigs.slice(0,8).map(r=>{
+          const buy=r.side==='BUY';
+          return `<div class="dsl-item">
+            <b style="font-family:'JetBrains Mono',monospace">${r.name||'—'}</b>
+            <span class="badge ${buy?'badge-buy':'badge-sell'}">${r.side}</span>
+            <span>Entry: <b>${fmtPrice(r.entry)}</b></span>
+            <span>SL: ${r.sl?fmtPrice(r.sl):'—'}</span>
+            <span class="badge badge-status">${r.status||'—'}</span>
+            <span style="color:var(--muted);font-size:12px">${timeAgo(r.sent_at)}</span>
+          </div>`;
+        }).join('')
+      : '<div style="color:var(--muted);text-align:center;padding:20px;font-size:14px">Niciun semnal VIP.</div>';
+
+    // login log
+    const tbody = $('loginTableBody');
+    const logs = an.recent_logins || an.login_log || [];
+    if (tbody) tbody.innerHTML = logs.length
+      ? logs.slice(0,20).map(l=>`<tr>
+          <td style="font-weight:700">${l.username||'?'}</td>
+          <td class="${l.success?'log-success':'log-fail'}">${l.success?'✅ Succes':'❌ Eșuat'}</td>
+          <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)">${l.ip_hash||'—'}</td>
+          <td style="color:var(--muted);font-size:12px">${timeAgo(l.ts)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Niciun log disponibil încă.</td></tr>';
+
+    setText('dashUpdated', 'Actualizat ' + new Date().toLocaleTimeString('ro-RO'));
+  } catch(e) { console.error('dashboard error', e); }
+}
+
+// logout
+document.addEventListener('click', async e => {
+  if (e.target && e.target.id === 'dashLogout') {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch(_) {}
+    window.location.href = '/';
+  }
+});
+
+// check session on load
+(async function checkAuth() {
+  try {
+    const r = await fetch('/api/me', { cache: 'no-store' });
+    const d = await r.json();
+    if (!d.authenticated) window.location.href = '/admin.html';
+    else { setText('dhUser', d.username ? `· ${d.username}` : ''); }
+  } catch(e) { window.location.href = '/admin.html'; }
+})();
+
+// particle bg
+(function(){
+  const c=document.getElementById('bgCanvas');
+  if(!c)return;const ctx=c.getContext('2d');let w,h,pts;
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight;pts=Array.from({length:40},()=>({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,r:Math.random()*1.4+.5}));}
+  resize();window.addEventListener('resize',resize);
+  (function tick(){ctx.clearRect(0,0,w,h);for(let i=0;i<pts.length;i++){const p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(120,150,240,.4)';ctx.fill();}requestAnimationFrame(tick);})();
+})();
+
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>

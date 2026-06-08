@@ -6852,6 +6852,12 @@ except Exception as _e:  # pragma: no cover
     panel_auth = None
     print(f"[panel] panel_auth not available: {_e}", flush=True)
 
+try:
+    import panel_analytics
+except Exception as _e:  # pragma: no cover
+    panel_analytics = None
+    print(f"[panel] panel_analytics not available: {_e}", flush=True)
+
 PANEL_DIR = Path(__file__).with_name("panel")
 
 _PANEL_CONTENT_TYPES = {
@@ -6885,6 +6891,16 @@ def _panel_stats_payload(is_admin: bool = False) -> dict:
         )
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:400]}
+
+def _panel_record_visit(handler) -> str:
+    """Record a page visit and return the client IP."""
+    ip = _panel_client_ip(handler)
+    if panel_analytics is not None:
+        try:
+            panel_analytics.record_visit(ip)
+        except Exception:
+            pass
+    return ip
 
 def _panel_client_ip(handler) -> str:
     """Best-effort client IP behind Railway's proxy (for rate limiting)."""
@@ -7051,7 +7067,13 @@ class _PingHandler(BaseHTTPRequestHandler):
             data = self._read_json_body()
             username = str(data.get("username", ""))[:64]
             password = str(data.get("password", ""))[:128]
-            if panel_auth.check_credentials(username, password):
+            success = panel_auth.check_credentials(username, password)
+            if panel_analytics is not None:
+                try:
+                    panel_analytics.record_login(username, ip, success)
+                except Exception:
+                    pass
+            if success:
                 panel_auth.reset_attempts(ip)
                 token = panel_auth.create_token(username.strip().lower())
                 cookie = panel_auth.make_set_cookie(token, secure=secure)
