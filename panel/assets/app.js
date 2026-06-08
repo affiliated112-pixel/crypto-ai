@@ -56,8 +56,23 @@ async function _fetchDirectPrices() {
 }
 
 // Fetch direct prices immediately on load, then every 15s.
-_fetchDirectPrices();
-setInterval(_fetchDirectPrices, 15000);
+// After first fetch resolves, paint the market section right away
+// (before /api/stats returns, so the page is never empty).
+_fetchDirectPrices().then(() => {
+  if(Object.keys(_DIRECT_PRICES).length) {
+    renderPrices({market:{prices:Object.values(_DIRECT_PRICES)}});
+    renderTicker({market:{prices:Object.values(_DIRECT_PRICES)}});
+  }
+});
+setInterval(() => {
+  _fetchDirectPrices().then(() => {
+    // Re-paint only if /api/stats hasn't already provided server prices.
+    if(!(_market.prices&&_market.prices.length) && Object.keys(_DIRECT_PRICES).length) {
+      renderPrices({market:{prices:Object.values(_DIRECT_PRICES)}});
+      renderTicker({market:{prices:Object.values(_DIRECT_PRICES)}});
+    }
+  });
+}, 15000);
 
 // ── Helpers ──────────────────────────────────────────
 const $  = id => document.getElementById(id);
@@ -703,6 +718,7 @@ async function loadData(){
   if(coin) set('tfPrice',fmtUsd(getPrice(coin)));
 }
 
-loadData();
+// Wait for direct prices first so the very first loadData() render has fallback data ready.
+_fetchDirectPrices().then(loadData);
 setInterval(loadData, REFRESH_MS);
 setInterval(renderPT, 5000);
