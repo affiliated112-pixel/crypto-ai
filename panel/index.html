@@ -21,6 +21,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="/assets/styles.css"/>
+  <style>
+    /* Notif button */
+    .notif-btn{
+      background:none;border:1px solid var(--border);
+      border-radius:8px;padding:6px 10px;cursor:pointer;
+      font-size:16px;color:var(--muted);transition:all .2s;
+    }
+    .notif-btn:hover{background:rgba(255,255,255,.06);color:var(--text)}
+    .notif-btn.notif-on{border-color:var(--gold);color:var(--gold);background:rgba(245,168,0,.08)}
+    .notif-btn.notif-denied{border-color:var(--red);color:var(--red);opacity:.7}
+  </style>
 </head>
 <body>
 <canvas id="bgCanvas"></canvas>
@@ -79,6 +90,7 @@
         Discord
       </a>
       <a href="/vip.html" class="btn-vip-nav">💎 VIP $25/lună</a>
+      <button class="notif-btn" id="notifBtn" onclick="RCB_NOTIF && RCB_NOTIF.toggle()" title="Activează notificările pentru semnale noi">🔕</button>
       <button class="theme-toggle-btn" id="themeToggle" onclick="toggleTheme()" title="Dark/Light mode">☀️</button>
       <button class="lang-toggle" id="langToggle" onclick="toggleLang()" title="Language">🇷🇴 RO</button>
       <a href="/profile.html" class="btn-admin-nav" id="profileNavBtn" title="Profilul meu" style="display:none">👤</a>
@@ -613,6 +625,7 @@
         <a href="#paper">Demo Trading</a>
         <a href="#news">News</a>
         <a href="/vip.html">VIP</a>
+        <a href="/about.html">Despre noi</a>
         <a href="/profile.html">Profilul meu</a>
         <a href="/admin.html">Login</a>
       </div>
@@ -681,6 +694,7 @@ document.addEventListener('DOMContentLoaded', buildTVWidget);
 <script src="/assets/app.js"></script>
 <script src="/assets/i18n.js"></script>
 <script src="/assets/realtime.js"></script>
+<script src="/assets/push.js"></script>
 <script>
 // PWA service worker
 if ('serviceWorker' in navigator) {

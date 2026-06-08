@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Despre Noi · Romania Crypto Signals</title>
+  <meta name="description" content="Romania Crypto Signals — cum funcționează botul AI, metodologia de semnale și echipa din spatele platformei."/>
+  <meta property="og:title" content="Despre Noi · Romania Crypto Signals"/>
+  <meta property="og:description" content="Platforma #1 din România pentru semnale crypto generate prin AI. Află cum funcționează."/>
+  <meta property="og:image" content="/assets/rcb-logo.png"/>
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg:#05080f; --bg2:#0a0e1a; --card:#0d1322; --border:rgba(70,100,200,0.18);
+      --text:#e8efff; --muted:#6b7a9e; --blue:#2a63ff; --blue2:#5082ff;
+      --green:#00d47e; --red:#ff2d55; --gold:#f5a800; --yellow:#ffd02e;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+    #bgCanvas{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.3}
+
+    /* NAV */
+    nav{
+      position:sticky;top:0;z-index:100;
+      background:rgba(5,8,15,0.85);backdrop-filter:blur(16px);
+      border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;
+      padding:0 24px;height:60px;
+    }
+    .nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:800;font-size:15px}
+    .nav-brand img{width:34px;height:34px;border-radius:9px}
+    .nav-links{display:flex;align-items:center;gap:6px}
+    .nav-links a{
+      color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;
+      padding:7px 14px;border-radius:8px;transition:all .2s;
+    }
+    .nav-links a:hover,.nav-links a.active{background:rgba(42,99,255,.12);color:var(--blue2)}
+    .nav-cta{
+      padding:8px 18px;border-radius:9px;
+      background:linear-gradient(135deg,var(--blue),var(--blue2));
+      color:#fff;font-size:13px;font-weight:700;text-decoration:none;
+      box-shadow:0 4px 14px rgba(42,99,255,.3);transition:all .2s;
+    }
+    .nav-cta:hover{transform:translateY(-1px);box-shadow:0 7px 20px rgba(42,99,255,.45)}
+
+    /* HERO */
+    .hero{
+      position:relative;z-index:1;text-align:center;
+      padding:100px 24px 70px;max-width:860px;margin:0 auto;
+    }
+    .hero-badge{
+      display:inline-flex;align-items:center;gap:7px;
+      background:rgba(42,99,255,.1);border:1px solid rgba(42,99,255,.25);
+      border-radius:30px;padding:7px 18px;font-size:12px;
+      font-weight:700;color:var(--blue2);margin-bottom:28px;
+      text-transform:uppercase;letter-spacing:1px;
+    }
+    .hero h1{
+      font-size:clamp(32px,6vw,60px);font-weight:900;line-height:1.12;
+      letter-spacing:-1.5px;margin-bottom:20px;
+    }
+    .hero h1 span{
+      background:linear-gradient(135deg,var(--blue2),var(--gold));
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+    }
+    .hero p{font-size:18px;color:var(--muted);line-height:1.7;max-width:600px;margin:0 auto}
+
+    /* SECTIONS */
+    .section{position:relative;z-index:1;padding:70px 24px;max-width:1100px;margin:0 auto}
+    .section-label{
+      display:inline-flex;align-items:center;gap:6px;
+      font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:2px;
+      color:var(--blue2);margin-bottom:12px;
+    }
+    .section-title{font-size:clamp(24px,4vw,38px);font-weight:900;margin-bottom:10px;letter-spacing:-0.5px}
+    .section-sub{font-size:16px;color:var(--muted);margin-bottom:48px;line-height:1.6;max-width:600px}
+
+    /* HOW IT WORKS */
+    .steps-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+    .step-card{
+      background:var(--card);border:1px solid var(--border);border-radius:18px;
+      padding:28px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;
+    }
+    .step-card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,0.3)}
+    .step-card::before{
+      content:attr(data-step);
+      position:absolute;top:16px;right:20px;
+      font-size:48px;font-weight:900;color:rgba(255,255,255,0.03);
+      font-family:'JetBrains Mono',monospace;line-height:1;
+    }
+    .step-icon{font-size:28px;margin-bottom:14px}
+    .step-card h3{font-size:16px;font-weight:800;margin-bottom:8px}
+    .step-card p{font-size:13px;color:var(--muted);line-height:1.6}
+
+    /* AI ENGINE */
+    .ai-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center}
+    @media(max-width:768px){.ai-grid{grid-template-columns:1fr}}
+    .ai-vis{
+      background:var(--card);border:1px solid var(--border);border-radius:20px;
+      padding:28px;font-family:'JetBrains Mono',monospace;font-size:13px;
+    }
+    .ai-vis .line{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+    .ai-vis .line:last-child{border-bottom:none}
+    .ai-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .ai-dot.blue{background:var(--blue2)}
+    .ai-dot.green{background:var(--green)}
+    .ai-dot.gold{background:var(--gold)}
+    .ai-dot.red{background:var(--red)}
+    .ai-label{color:var(--muted);font-size:11px;flex:1}
+    .ai-val{font-weight:700;font-size:12px}
+    .ai-content h3{font-size:24px;font-weight:900;margin-bottom:12px}
+    .ai-content p{color:var(--muted);font-size:15px;line-height:1.7;margin-bottom:16px}
+    .ai-tags{display:flex;flex-wrap:wrap;gap:8px}
+    .ai-tag{
+      background:rgba(42,99,255,.08);border:1px solid rgba(42,99,255,.2);
+      border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;color:var(--blue2);
+    }
+
+    /* STATS BAND */
+    .stats-band{
+      position:relative;z-index:1;
+      background:linear-gradient(135deg,rgba(42,99,255,.08),rgba(0,212,126,.05));
+      border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+      padding:60px 24px;
+    }
+    .stats-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:24px;text-align:center}
+    .stat-item .num{font-size:42px;font-weight:900;line-height:1;font-family:'JetBrains Mono',monospace;background:linear-gradient(135deg,var(--blue2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .stat-item .label{font-size:13px;color:var(--muted);margin-top:6px;font-weight:600}
+
+    /* METHODOLOGY */
+    .method-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+    .method-card{
+      background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;
+      display:flex;gap:16px;align-items:flex-start;transition:border-color .2s;
+    }
+    .method-card:hover{border-color:rgba(42,99,255,.35)}
+    .method-icon{font-size:22px;flex-shrink:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:rgba(42,99,255,.1);border-radius:11px}
+    .method-text h4{font-size:14px;font-weight:800;margin-bottom:6px}
+    .method-text p{font-size:13px;color:var(--muted);line-height:1.6}
+
+    /* TEAM */
+    .team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px}
+    .team-card{
+      background:var(--card);border:1px solid var(--border);border-radius:18px;
+      padding:28px;text-align:center;transition:transform .2s;
+    }
+    .team-card:hover{transform:translateY(-4px)}
+    .team-avatar{
+      width:72px;height:72px;border-radius:50%;margin:0 auto 14px;
+      display:flex;align-items:center;justify-content:center;font-size:28px;
+      background:linear-gradient(135deg,var(--blue),var(--blue2));
+    }
+    .team-card h4{font-size:15px;font-weight:800;margin-bottom:4px}
+    .team-card .role{font-size:12px;color:var(--blue2);font-weight:600;margin-bottom:10px}
+    .team-card p{font-size:13px;color:var(--muted);line-height:1.5}
+
+    /* CTA FINAL */
+    .cta-final{
+      position:relative;z-index:1;text-align:center;
+      padding:80px 24px;max-width:700px;margin:0 auto;
+    }
+    .cta-final h2{font-size:clamp(28px,5vw,48px);font-weight:900;margin-bottom:16px;letter-spacing:-1px}
+    .cta-final p{font-size:16px;color:var(--muted);margin-bottom:36px;line-height:1.6}
+    .cta-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+    .btn-primary{
+      padding:14px 32px;border-radius:12px;
+      background:linear-gradient(135deg,var(--blue),var(--blue2));
+      color:#fff;font-weight:800;font-size:14px;text-decoration:none;
+      box-shadow:0 6px 20px rgba(42,99,255,.35);transition:all .2s;
+    }
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 30px rgba(42,99,255,.5)}
+    .btn-secondary{
+      padding:14px 32px;border-radius:12px;
+      background:transparent;border:1px solid var(--border);
+      color:var(--text);font-weight:700;font-size:14px;text-decoration:none;transition:all .2s;
+    }
+    .btn-secondary:hover{background:rgba(255,255,255,.06)}
+
+    /* FOOTER */
+    footer{
+      position:relative;z-index:1;text-align:center;
+      padding:32px 24px;border-top:1px solid var(--border);
+      font-size:13px;color:var(--muted);
+    }
+    footer a{color:var(--blue2);text-decoration:none}
+    footer a:hover{text-decoration:underline}
+
+    /* Scroll animate */
+    .reveal{opacity:0;transform:translateY(24px);transition:opacity .55s ease,transform .55s ease}
+    .reveal.visible{opacity:1;transform:none}
+  </style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-brand" href="/">
+    <img src="/assets/rcb-logo.png" alt="RCB"/>
+    Romania Crypto Signals
+  </a>
+  <div class="nav-links">
+    <a href="/">Acasă</a>
+    <a href="/signals.html">Semnale</a>
+    <a href="/portfolio.html">Portfolio</a>
+    <a href="/about.html" class="active">Despre</a>
+    <a href="/admin.html" class="nav-cta">Dashboard →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero reveal">
+  <div class="hero-badge">🤖 Powered by AI</div>
+  <h1>Cum generăm cele mai<br/><span>precise semnale crypto</span><br/>din România</h1>
+  <p>Romania Crypto Signals combină inteligența artificială, analiza tehnică avansată și date de piață în timp real pentru a-ți oferi semnale de tranzacționare cu acuratețe ridicată.</p>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section reveal">
+  <div class="section-label">⚡ Procesul nostru</div>
+  <h2 class="section-title">Cum funcționează</h2>
+  <p class="section-sub">De la date brute la semnal acționabil — în mai puțin de 3 secunde.</p>
+  <div class="steps-grid">
+    <div class="step-card" data-step="01">
+      <div class="step-icon">📡</div>
+      <h3>Colectare date</h3>
+      <p>Botul monitorizează 50+ perechi crypto pe Binance, Coinbase și Bybit în timp real — prețuri, volume, order book, funding rate.</p>
+    </div>
+    <div class="step-card" data-step="02">
+      <div class="step-icon">🧠</div>
+      <h3>Analiză AI</h3>
+      <p>Modelul ML antrenat pe 4 ani de date identifică tipare de preț: breakout-uri, divergențe RSI, squeeze pe Bollinger Bands și structuri Elliott Wave.</p>
+    </div>
+    <div class="step-card" data-step="03">
+      <div class="step-icon">🎯</div>
+      <h3>Filtru de calitate</h3>
+      <p>Fiecare semnal trece printr-un filtru de confluență: minim 3 indicatori trebuie să confirme direcția. Semnalele slabe sunt respinse automat.</p>
+    </div>
+    <div class="step-card" data-step="04">
+      <div class="step-icon">📲</div>
+      <h3>Livrare instant</h3>
+      <p>Semnalul ajunge la tine pe Discord și în panoul web în sub 2 secunde — cu target, stop-loss și raport risc/recompensă pre-calculat.</p>
+    </div>
+    <div class="step-card" data-step="05">
+      <div class="step-icon">📈</div>
+      <h3>Urmărire rezultate</h3>
+      <p>Fiecare semnal este urmărit automat până la închidere. Statisticile live de pe dashboard reflectă performanța reală, nu backtesting selectiv.</p>
+    </div>
+    <div class="step-card" data-step="06">
+      <div class="step-icon">🔁</div>
+      <h3>Re-antrenare model</h3>
+      <p>Modelul AI se re-antrenează săptămânal pe date noi. Se adaptează continuu la condițiile de piață — bull, bear sau sideways.</p>
+    </div>
+  </div>
+</section>
+
+<!-- STATS BAND -->
+<div class="stats-band reveal">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <div class="num">73%</div>
+      <div class="label">Rată de succes medie</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">50+</div>
+      <div class="label">Perechi monitorizate</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">24/7</div>
+      <div class="label">Uptime garantat</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">2s</div>
+      <div class="label">Latență semnal</div>
+    </div>
+    <div class="stat-item">
+      <div class="num">4 ani</div>
+      <div class="label">Date de antrenament</div>
+    </div>
+  </div>
+</div>
+
+<!-- AI ENGINE -->
+<section class="section reveal">
+  <div class="section-label">🤖 Motorul AI</div>
+  <h2 class="section-title">Ce analizează botul</h2>
+  <p class="section-sub">Un cocktail de indicatori tehnici, on-chain și sentiment — procesați simultan.</p>
+  <div class="ai-grid">
+    <div class="ai-vis">
+      <div class="line"><span class="ai-dot blue"></span><span class="ai-label">RSI (14)</span><span class="ai-val" style="color:var(--green)">68.4 — Bullish</span></div>
+      <div class="line"><span class="ai-dot green"></span><span class="ai-label">MACD Signal</span><span class="ai-val" style="color:var(--green)">Crossover ↑</span></div>
+      <div class="line"><span class="ai-dot gold"></span><span class="ai-label">Bollinger Band</span><span class="ai-val" style="color:var(--gold)">Squeeze activ</span></div>
+      <div class="line"><span class="ai-dot blue"></span><span class="ai-label">Volume OBV</span><span class="ai-val" style="color:var(--green)">+18.3% 24h</span></div>
+      <div class="line"><span class="ai-dot red"></span><span class="ai-label">Funding Rate</span><span class="ai-val" style="color:var(--muted)">0.012% — Neutru</span></div>
+      <div class="line"><span class="ai-dot green"></span><span class="ai-label">Fear & Greed</span><span class="ai-val" style="color:var(--gold)">72 — Greed</span></div>
+      <div class="line"><span class="ai-dot gold"></span><span class="ai-label">Confidence AI</span><span class="ai-val" style="color:var(--green)">84% — LONG</span></div>
+    </div>
+    <div class="ai-content">
+      <h3>Analiză multi-layer în timp real</h3>
+      <p>Botul combină analiza tehnică clasică (RSI, MACD, Bollinger Bands, EMA) cu date on-chain (volume, exchange flows) și sentiment de piață (Fear & Greed Index, social mentions).</p>
+      <p>Toate aceste semnale sunt trecute printr-un model de machine learning antrenat pe 4 ani de date istorice și actualizat săptămânal.</p>
+      <div class="ai-tags">
+        <span class="ai-tag">RSI</span>
+        <span class="ai-tag">MACD</span>
+        <span class="ai-tag">Bollinger Bands</span>
+        <span class="ai-tag">EMA 21/55/200</span>
+        <span class="ai-tag">Volume Profile</span>
+        <span class="ai-tag">Funding Rate</span>
+        <span class="ai-tag">Fear & Greed</span>
+        <span class="ai-tag">Elliott Wave</span>
+        <span class="ai-tag">Support/Resistance</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- METHODOLOGY -->
+<section class="section reveal">
+  <div class="section-label">📋 Metodologie</div>
+  <h2 class="section-title">Principiile noastre</h2>
+  <p class="section-sub">Nu vindem vise. Vindem transparență și rezultate verificabile.</p>
+  <div class="method-grid">
+    <div class="method-card">
+      <div class="method-icon">🎯</div>
+      <div class="method-text">
+        <h4>Stop-Loss obligatoriu</h4>
+        <p>Fiecare semnal vine cu stop-loss pre-calculat. Nu există semnal fără managementul riscului definit.</p>
+      </div>
+    </div>
+    <div class="method-card">
+      <div class="method-icon">📊</div>
+      <div class="method-text">
+        <h4>R/R minim 1:2</h4>
+        <p>Acceptăm un semnal doar dacă raportul risc/recompensă este de cel puțin 1:2. De obicei vizăm 1:3 sau mai mult.</p>
+      </div>
+    </div>
+    <div class="method-card">
+      <div class="method-icon">🔍</div>
+      <div class="method-text">
+        <h4>Transparență totală</h4>
+        <p>Toate semnalele — câștigătoare și pierzătoare — sunt înregistrate public. Nu ștergem semnalele care nu merg.</p>
+      </div>
+    </div>
+    <div class="method-card">
+      <div class="method-icon">⚡</div>
+      <div class="method-text">
+        <h4>Calitate > Cantitate</h4>
+        <p>Preferăm 3 semnale precise pe zi față de 20 de semnale aleatorii. Botul respinge automat setups-urile slabe.</p>
+      </div>
+    </div>
+    <div class="method-card">
+      <div class="method-icon">🛡️</div>
+      <div class="method-text">
+        <h4>Fără promisiuni nerealiste</h4>
+        <p>Nu garantăm profituri. Tranzacționarea crypto implică risc. Folosim platformă exclusiv pentru educație și analiză.</p>
+      </div>
+    </div>
+    <div class="method-card">
+      <div class="method-icon">🔁</div>
+      <div class="method-text">
+        <h4>Îmbunătățire continuă</h4>
+        <p>Analizăm semnalele pierzătoare săptămânal pentru a identifica și corecta tiparele greșite din model.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TEAM -->
+<section class="section reveal">
+  <div class="section-label">👥 Echipa</div>
+  <h2 class="section-title">Cine suntem</h2>
+  <p class="section-sub">O echipă de pasionați crypto, developeri și traderi din România.</p>
+  <div class="team-grid">
+    <div class="team-card">
+      <div class="team-avatar">🧠</div>
+      <h4>AI Engineer</h4>
+      <div class="role">Machine Learning & Modele</div>
+      <p>Construiește și antrenează modelele de predicție. 5 ani experiență în ML aplicat pe date financiare.</p>
+    </div>
+    <div class="team-card">
+      <div class="team-avatar">📈</div>
+      <h4>Head Trader</h4>
+      <div class="role">Analiză Tehnică</div>
+      <p>Trader profesionist cu 8 ani experiență. Definește regulile de filtru și validează semnalele AI cu ochiul uman.</p>
+    </div>
+    <div class="team-card">
+      <div class="team-avatar">⚙️</div>
+      <h4>Backend Dev</h4>
+      <div class="role">Infrastructură & Bot</div>
+      <p>Arhitect Python. Menține botul Discord, pipeline-ul de date și API-ul în timp real 24/7.</p>
+    </div>
+    <div class="team-card">
+      <div class="team-avatar">🎨</div>
+      <h4>Frontend Dev</h4>
+      <div class="role">UI/UX & Dashboard</div>
+      <p>Proiectează interfața platformei. Crede că datele complexe trebuie prezentate simplu și vizual.</p>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-final reveal">
+  <h2>Gata să primești semnale <span style="background:linear-gradient(135deg,var(--blue2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">de top?</span></h2>
+  <p>Alătură-te comunității Romania Crypto Signals și primește semnale AI direct pe Discord și în aplicație.</p>
+  <div class="cta-btns">
+    <a href="/admin.html" class="btn-primary">🚀 Creează cont gratuit</a>
+    <a href="https://discord.gg/romaniacrypto" target="_blank" rel="noopener" class="btn-secondary">💬 Intră pe Discord</a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <p>© 2025 Romania Crypto Signals — Toate drepturile rezervate · <a href="/about.html">Despre</a> · <a href="/admin.html">Dashboard</a></p>
+  <p style="margin-top:8px;font-size:11px">⚠️ Conținutul acestei platforme este strict educațional. Nu constituie sfat financiar. Tranzacționați pe propria răspundere.</p>
+</footer>
+
+<script>
+// Canvas background
+(function(){
+  const c=document.getElementById('bgCanvas');
+  if(!c)return;
+  const ctx=c.getContext('2d');let w,h,pts;
+  function resize(){
+    w=c.width=window.innerWidth;h=c.height=window.innerHeight;
+    pts=Array.from({length:Math.min(50,Math.floor(w/22))},()=>({
+      x:Math.random()*w,y:Math.random()*h,
+      vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,
+      r:Math.random()*1.4+.4,
+    }));
+  }
+  resize();window.addEventListener('resize',resize,{passive:true});
+  (function draw(){
+    ctx.clearRect(0,0,w,h);
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i];p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(90,130,255,.35)';ctx.fill();
+      for(let j=i+1;j<pts.length;j++){
+        const q=pts[j],dx=p.x-q.x,dy=p.y-q.y,dist=Math.hypot(dx,dy);
+        if(dist<110){ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);
+          ctx.strokeStyle=`rgba(70,110,220,${.1*(1-dist/110)})`;ctx.lineWidth=1;ctx.stroke();}
+      }
+    }
+    requestAnimationFrame(draw);
+  })();
+})();
+
+// Scroll reveal
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('visible');observer.unobserve(e.target);}});
+},{threshold:0.12});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+</script>
+</body>
+</html>

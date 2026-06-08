@@ -8,7 +8,7 @@ User record schema:
       "username": str,
       "pw_hash": str,          # hex — pbkdf2_hmac sha256
       "pw_salt": str,          # hex
-      "role": "master"|"admin"|"user",
+      "role": "master"|"admin"|"vip"|"user",
       "status": "active"|"pending"|"rejected",
       "created_at": str,       # ISO UTC
       "approved_by": str|null,
@@ -49,8 +49,8 @@ _SECRET_FILE = _HERE / "panel_secret.key"
 # ── in-memory state ───────────────────────────────────────────────────────────
 
 _lock = threading.Lock()
-_users: dict[str, dict] = {}          # username → record
-_failures: dict[str, list[float]] = {}   # ip → [timestamps]
+_users: dict[str, dict] = {}          # username -> record
+_failures: dict[str, list[float]] = {}   # ip -> [timestamps]
 
 # ── secret key (persisted across restarts) ────────────────────────────────────
 
@@ -254,9 +254,9 @@ def register_user(username: str, password: str, ip: str = "") -> tuple[bool, str
         return False, "Username prea lung (maxim 32 caractere)."
     import re
     if not re.match(r'^[a-z0-9._\-]+$', username):
-        return False, "Username poate conține doar litere, cifre, _, -, ."
+        return False, "Username poate contine doar litere, cifre, _, -, ."
     if len(password) < 6:
-        return False, "Parola prea scurtă (minim 6 caractere)."
+        return False, "Parola prea scurta (minim 6 caractere)."
     with _lock:
         if username in _users:
             return False, "Username-ul este deja folosit."
@@ -274,7 +274,7 @@ def register_user(username: str, password: str, ip: str = "") -> tuple[bool, str
         }
         _save_users()
     print(f"[panel_auth] New registration: {username} from {ip}", flush=True)
-    return True, "Cont creat cu succes! Așteaptă aprobarea unui administrator."
+    return True, "Cont creat cu succes! Asteapta aprobarea unui administrator."
 
 def check_credentials(username: str, password: str) -> tuple[bool, str]:
     """Return (ok, role). Role is empty string if not ok."""
@@ -296,7 +296,7 @@ def approve_user(username: str, by: str) -> tuple[bool, str]:
     with _lock:
         rec = _users.get(username)
         if not rec:
-            return False, "Utilizatorul nu există."
+            return False, "Utilizatorul nu exista."
         if rec.get("status") == "active":
             return False, "Contul este deja activ."
         rec["status"] = "active"
@@ -311,9 +311,9 @@ def reject_user(username: str, by: str) -> tuple[bool, str]:
     with _lock:
         rec = _users.get(username)
         if not rec:
-            return False, "Utilizatorul nu există."
+            return False, "Utilizatorul nu exista."
         if rec.get("role") == "master":
-            return False, "Nu poți respinge contul master."
+            return False, "Nu poti respinge contul master."
         rec["status"] = "rejected"
         rec["approved_by"] = by
         rec["approved_at"] = _utcnow()
@@ -326,13 +326,30 @@ def delete_user(username: str) -> tuple[bool, str]:
     with _lock:
         rec = _users.get(username)
         if not rec:
-            return False, "Utilizatorul nu există."
+            return False, "Utilizatorul nu exista."
         if rec.get("role") == "master":
-            return False, "Nu poți șterge contul master."
+            return False, "Nu poti sterge contul master."
         del _users[username]
         _save_users()
     print(f"[panel_auth] Deleted: {username}", flush=True)
-    return True, f"Contul '{username}' a fost șters."
+    return True, f"Contul '{username}' a fost sters."
+
+def change_role(username: str, new_role: str, by: str) -> tuple[bool, str]:
+    """Change a user's role. Allowed roles: user, vip, admin (master cannot be set via API)."""
+    username = username.strip().lower()
+    valid_roles = ("user", "vip", "admin")
+    if new_role not in valid_roles:
+        return False, f"Rol invalid. Valori acceptate: {', '.join(valid_roles)}."
+    with _lock:
+        rec = _users.get(username)
+        if not rec:
+            return False, "Utilizatorul nu exista."
+        if rec.get("role") == "master":
+            return False, "Nu poti modifica rolul contului master."
+        rec["role"] = new_role
+        _save_users()
+    print(f"[panel_auth] Role change: {username} -> {new_role} by {by}", flush=True)
+    return True, f"Rolul utilizatorului '{username}' a fost schimbat in '{new_role}'."
 
 def list_accounts() -> list[dict]:
     """Return all accounts (without pw_hash/pw_salt) sorted by status."""
@@ -349,16 +366,16 @@ def list_accounts() -> list[dict]:
 def change_password(username: str, new_password: str) -> tuple[bool, str]:
     username = username.strip().lower()
     if len(new_password) < 6:
-        return False, "Parola prea scurtă."
+        return False, "Parola prea scurta."
     with _lock:
         rec = _users.get(username)
         if not rec:
-            return False, "Utilizatorul nu există."
+            return False, "Utilizatorul nu exista."
         pw_hash, salt = _hash_password(new_password)
         rec["pw_hash"] = pw_hash
         rec["pw_salt"] = salt
         _save_users()
-    return True, "Parola a fost schimbată."
+    return True, "Parola a fost schimbata."
 
 # ── module init ───────────────────────────────────────────────────────────────
 _init()

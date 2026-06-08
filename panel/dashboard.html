@@ -26,7 +26,7 @@
   <div class="dash-header-right">
     <div class="nav-status">
       <span id="dashBotDot" class="dot dot-off"></span>
-      <span id="dashBotTxt">Se conectează…</span>
+      <span id="dashBotTxt">Se conecteaza...</span>
     </div>
     <a href="/" class="btn btn-primary" style="padding:9px 18px;font-size:13px">← Site public</a>
     <button class="btn-danger" id="dashLogout">Deconectare</button>
@@ -69,7 +69,7 @@
     <!-- LEFT: login log + Discord info -->
     <div>
       <div class="dash-panel" style="margin-bottom:20px">
-        <h3>🔐 Log autentificări admin</h3>
+        <h3>🔐 Log autentificari admin</h3>
         <div class="online-indicator" id="dashOnline">
           <span class="dot dot-on"></span> <span id="dashActiveCount">—</span> utilizatori activi pe site acum
         </div>
@@ -83,7 +83,7 @@
             </tr>
           </thead>
           <tbody id="loginTableBody">
-            <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Se încarcă…</td></tr>
+            <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Se incarca...</td></tr>
           </tbody>
         </table>
         <div class="refresh-label" id="dashUpdated">—</div>
@@ -93,7 +93,7 @@
       <div class="dash-panel">
         <h3>📊 Statistici site & semnale</h3>
         <div class="dc-rows">
-          <div class="dc-row"><span>👁️ Vizualizări totale</span><b id="dsTotalViews">—</b></div>
+          <div class="dc-row"><span>👁️ Vizualizari totale</span><b id="dsTotalViews">—</b></div>
           <div class="dc-row"><span>👥 Vizitatori unici</span><b id="dsUnique">—</b></div>
           <div class="dc-row"><span>🟩 Semnale BUY</span><b id="dsBuy">—</b></div>
           <div class="dc-row"><span>🟥 Semnale SELL</span><b id="dsSell">—</b></div>
@@ -103,13 +103,23 @@
       </div>
     </div>
 
-    <!-- RIGHT: Discord info + VIP signals -->
+    <!-- RIGHT: Discord info + user management + VIP signals -->
     <div>
       <!-- Pending account approvals -->
       <div class="dash-panel" style="margin-bottom:20px">
-        <h3>⏳ Conturi în așteptare <span id="pendingBadge" style="font-size:12px;color:var(--gold);font-weight:700;margin-left:6px">—</span></h3>
+        <h3>⏳ Conturi in asteptare <span id="pendingBadge" style="font-size:12px;color:var(--gold);font-weight:700;margin-left:6px">—</span></h3>
         <div id="pendingList" style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-          <div style="color:var(--muted);font-size:14px;padding:10px 0">Se încarcă…</div>
+          <div style="color:var(--muted);font-size:14px;padding:10px 0">Se incarca...</div>
+        </div>
+      </div>
+
+      <!-- All User Management -->
+      <div class="dash-panel" style="margin-bottom:20px">
+        <h3>👥 Gestionare utilizatori
+          <button onclick="loadAllUsers()" style="font-size:11px;background:rgba(42,99,255,.15);border:1px solid rgba(42,99,255,.3);color:var(--blue2);border-radius:6px;padding:3px 10px;cursor:pointer;font-family:inherit;margin-left:8px">🔄 Refresh</button>
+        </h3>
+        <div id="allUsersList" style="display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:340px;overflow-y:auto">
+          <div style="color:var(--muted);font-size:14px;padding:10px 0">Se incarca...</div>
         </div>
       </div>
 
@@ -138,7 +148,7 @@
       <div class="dash-panel">
         <h3>💎 Ultimele semnale VIP</h3>
         <div class="dash-signal-list" id="dashVipSignals">
-          <div style="color:var(--muted);font-size:14px;text-align:center;padding:20px">Se încarcă…</div>
+          <div style="color:var(--muted);font-size:14px;text-align:center;padding:20px">Se incarca...</div>
         </div>
       </div>
     </div>
@@ -151,10 +161,10 @@ function fmt(n) { if (n==null||isNaN(n)) return '—'; return Number(n).toLocale
 function timeAgo(ts) {
   if (!ts) return '—';
   const sec = Math.floor(Date.now()/1000 - Number(ts));
-  if (sec<60) return `${sec}s în urmă`;
-  if (sec<3600) return `${Math.floor(sec/60)}m în urmă`;
-  if (sec<86400) return `${Math.floor(sec/3600)}h în urmă`;
-  return `${Math.floor(sec/86400)}z în urmă`;
+  if (sec<60) return `${sec}s in urma`;
+  if (sec<3600) return `${Math.floor(sec/60)}m in urma`;
+  if (sec<86400) return `${Math.floor(sec/3600)}h in urma`;
+  return `${Math.floor(sec/86400)}z in urma`;
 }
 function setText(id, v) { const e=$(id); if(e) e.textContent=v; }
 function fmtPrice(v) {
@@ -203,7 +213,7 @@ async function load() {
     const joins = s.recent_joins || [];
     if (joinEl) joinEl.innerHTML = joins.length
       ? joins.map(j=>`<div class="dc-join-item"><span class="dc-join-name">👤 ${j.name}</span><span class="dc-join-ago">${timeAgo(Date.now()/1000-j.joined_ago)}</span></div>`).join('')
-      : '<div class="dc-empty">Niciun membru nou în 24h.</div>';
+      : '<div class="dc-empty">Niciun membru nou in 24h.</div>';
 
     // VIP signals
     const vipEl = $('dashVipSignals');
@@ -228,16 +238,17 @@ async function load() {
     if (tbody) tbody.innerHTML = logs.length
       ? logs.slice(0,20).map(l=>`<tr>
           <td style="font-weight:700">${l.username||'?'}</td>
-          <td class="${l.success?'log-success':'log-fail'}">${l.success?'✅ Succes':'❌ Eșuat'}</td>
+          <td class="${l.success?'log-success':'log-fail'}">${l.success?'OK':'Esuat'}</td>
           <td style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted)">${l.ip_hash||'—'}</td>
           <td style="color:var(--muted);font-size:12px">${timeAgo(l.ts)}</td>
         </tr>`).join('')
-      : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Niciun log disponibil încă.</td></tr>';
+      : '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">Niciun log disponibil inca.</td></tr>';
 
     setText('dashUpdated', 'Actualizat ' + new Date().toLocaleTimeString('ro-RO'));
 
-    // pending users
+    // load pending + all users
     await loadPendingUsers();
+    await loadAllUsers();
   } catch(e) { console.error('dashboard error', e); }
 }
 
@@ -251,21 +262,55 @@ async function loadPendingUsers() {
     if (badge) badge.textContent = pending.length > 0 ? `${pending.length} nou` : 'niciunul';
     if (!el) return;
     if (!pending.length) {
-      el.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0">Niciun cont în așteptare 🎉</div>';
+      el.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0">Niciun cont in asteptare</div>';
       return;
     }
     el.innerHTML = pending.map(u => `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 14px;background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.2);border-radius:12px;font-size:14px">
         <div>
           <b style="font-size:15px">${u.username}</b>
-          <span style="color:var(--muted);font-size:12px;margin-left:8px">înregistrat ${timeAgo(u.created_at)}</span>
+          <span style="color:var(--muted);font-size:12px;margin-left:8px">inregistrat ${timeAgo(u.created_at)}</span>
         </div>
         <div style="display:flex;gap:8px">
-          <button onclick="approveUser('${u.username}')" style="padding:7px 14px;background:rgba(33,208,122,.15);color:var(--green);border:1px solid rgba(33,208,122,.3);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">✅ Aprobă</button>
-          <button onclick="rejectUser('${u.username}')" style="padding:7px 14px;background:rgba(255,45,63,.1);color:#ff6a76;border:1px solid rgba(255,45,63,.25);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">❌ Respinge</button>
+          <button onclick="approveUser('${u.username}')" style="padding:7px 14px;background:rgba(33,208,122,.15);color:var(--green);border:1px solid rgba(33,208,122,.3);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Aproba</button>
+          <button onclick="rejectUser('${u.username}')" style="padding:7px 14px;background:rgba(255,45,63,.1);color:#ff6a76;border:1px solid rgba(255,45,63,.25);border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Respinge</button>
         </div>
       </div>`).join('');
   } catch(e) { console.error('pending users error', e); }
+}
+
+async function loadAllUsers() {
+  try {
+    const res = await fetch('/api/admin/users', { method: 'GET', cache: 'no-store' });
+    const d = await res.json();
+    const users = (d.users || []);
+    const el = $('allUsersList');
+    if (!el) return;
+    if (!users.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:14px;padding:10px 0">Niciun utilizator inregistrat.</div>';
+      return;
+    }
+    const roleColors = { master: '#f5a800', admin: '#2a63ff', vip: '#00d47e', user: '#6b7a9e' };
+    const roleEmoji  = { master: 'MASTER', admin: 'ADMIN', vip: 'VIP', user: 'USER' };
+    const statusColors = { active: '#00d47e', pending: '#f5a800', rejected: '#ff2d55' };
+    el.innerHTML = users.map(u => {
+      const isProtected = u.role === 'master';
+      return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;font-size:13px">
+        <div style="flex:1;min-width:120px">
+          <b>${u.username}</b>
+          <span style="color:${roleColors[u.role]||'#6b7a9e'};margin-left:6px;font-size:11px;font-weight:700;background:rgba(255,255,255,.06);padding:2px 7px;border-radius:5px">${roleEmoji[u.role]||u.role}</span>
+          <span style="color:${statusColors[u.status]||'#6b7a9e'};margin-left:6px;font-size:11px">${u.status}</span>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          ${!isProtected && u.role !== 'user'  ? `<button onclick="changeRole('${u.username}','user')"  style="padding:4px 9px;font-size:11px;background:rgba(107,122,158,.12);color:#8a9bc2;border:1px solid rgba(107,122,158,.25);border-radius:6px;cursor:pointer;font-family:inherit">User</button>` : ''}
+          ${!isProtected && u.role !== 'vip'   ? `<button onclick="changeRole('${u.username}','vip')"   style="padding:4px 9px;font-size:11px;background:rgba(0,212,126,.1);color:var(--green);border:1px solid rgba(0,212,126,.25);border-radius:6px;cursor:pointer;font-family:inherit">VIP</button>` : ''}
+          ${!isProtected && u.role !== 'admin' ? `<button onclick="changeRole('${u.username}','admin')" style="padding:4px 9px;font-size:11px;background:rgba(42,99,255,.1);color:var(--blue2);border:1px solid rgba(42,99,255,.25);border-radius:6px;cursor:pointer;font-family:inherit">Admin</button>` : ''}
+          ${!isProtected ? `<button onclick="deleteUserDash('${u.username}')" style="padding:4px 9px;font-size:11px;background:rgba(255,45,63,.08);color:#ff6a76;border:1px solid rgba(255,45,63,.2);border-radius:6px;cursor:pointer;font-family:inherit">Sterge</button>` : ''}
+          ${isProtected ? '<span style="font-size:11px;color:var(--muted)">protejat</span>' : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { console.error('loadAllUsers error', e); }
 }
 
 async function approveUser(username) {
@@ -274,18 +319,43 @@ async function approveUser(username) {
     body: JSON.stringify({ username }),
   });
   const d = await res.json();
-  alert(d.ok ? `✅ ${d.message}` : `❌ ${d.message}`);
+  alert(d.ok ? 'Aprobat: ' + d.message : 'Eroare: ' + d.message);
   await loadPendingUsers();
+  await loadAllUsers();
 }
 
 async function rejectUser(username) {
-  if (!confirm(`Respinge contul ${username}?`)) return;
+  if (!confirm('Respinge contul ' + username + '?')) return;
   const res = await fetch('/api/admin/reject', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ username }),
   });
   const d = await res.json();
-  alert(d.ok ? `✅ ${d.message}` : `❌ ${d.message}`);
+  alert(d.ok ? 'Respins: ' + d.message : 'Eroare: ' + d.message);
+  await loadPendingUsers();
+  await loadAllUsers();
+}
+
+async function changeRole(username, role) {
+  if (!confirm('Schimba rolul lui ' + username + ' la ' + role + '?')) return;
+  const res = await fetch('/api/admin/role', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ username, role }),
+  });
+  const d = await res.json();
+  alert(d.ok ? 'Rol schimbat: ' + d.message : 'Eroare: ' + d.message);
+  await loadAllUsers();
+}
+
+async function deleteUserDash(username) {
+  if (!confirm('STERGE contul ' + username + '? Ireversibil.')) return;
+  const res = await fetch('/api/admin/delete', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ username }),
+  });
+  const d = await res.json();
+  alert(d.ok ? 'Sters: ' + d.message : 'Eroare: ' + d.message);
+  await loadAllUsers();
   await loadPendingUsers();
 }
 
