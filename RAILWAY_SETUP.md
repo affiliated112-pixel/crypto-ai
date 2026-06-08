@@ -102,6 +102,31 @@ Railway health endpoint:
 
 `/health` include DB backend, budget, last scan, last signal, queue size și erori recente.
 
+## 7b. Web Panel — Romania Crypto Signals
+
+Același serviciu Railway servește și un **panel web** (site) cu date reale din bot.
+Nu trebuie un deploy separat — totul rulează în același proces.
+
+După deploy, deschide URL-ul public Railway (același folosit pentru `/health`):
+
+```text
+https://<numele-tau>.up.railway.app/        → panel-ul (site)
+https://<numele-tau>.up.railway.app/api/stats  → datele live (JSON)
+```
+
+Panel-ul arată live: număr de membri, membri online, membri VIP, semnale BUY/SELL,
+performanță 30 zile și ultimele semnale — toate citite direct din botul de Discord.
+
+### Membri online (opțional)
+
+Numărul de membri și VIP merge din start. Pentru **membri online** activează
+Presence Intent:
+
+1. Discord Developer Portal → app-ul tău → **Bot** → activează **Presence Intent**.
+2. În Railway adaugă variabila: `PRESENCE_INTENT=1`.
+
+Fără ea, panel-ul merge oricum — doar card-ul "Online" rămâne 0.
+
 ## 8. Backtesting praguri
 
 După ce instalezi requirements:

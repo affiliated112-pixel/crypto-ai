@@ -304,6 +304,10 @@ def conf_stars(confidence: str) -> str:
 intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
+# Online member count for the web panel needs the privileged Presence intent.
+# Enable PRESENCE_INTENT in Railway + the Discord Developer Portal to activate it.
+if _env_flag("PRESENCE_INTENT", "0"):
+    intents.presences = True
 
 client = discord.Client(intents=intents)
 tree   = app_commands.CommandTree(client)
@@ -6812,12 +6816,98 @@ async def prediction_checker_loop():
             print(f"Prediction checker error: {e}")
 
 # ══════════════════════════════════════════════
-#   KEEP-ALIVE + HEALTH (Railway PORT)
+#   WEB PANEL + KEEP-ALIVE + HEALTH (Railway PORT)
 # ══════════════════════════════════════════════
 
+try:
+    import panel_data
+except Exception as _e:  # pragma: no cover
+    panel_data = None
+    print(f"[panel] panel_data not available: {_e}", flush=True)
+
+PANEL_DIR = Path(__file__).with_name("panel")
+
+_PANEL_CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".json": "application/json; charset=utf-8",
+    ".woff2": "font/woff2",
+}
+
+def _panel_stats_payload() -> dict:
+    """Collect live panel data from the Discord client + database."""
+    if panel_data is None:
+        return {"ok": False, "error": "panel_data module not loaded"}
+    try:
+        return panel_data.collect_stats(
+            client,
+            signal_stats=SIGNAL_STATS,
+            symbols=SYMBOLS,
+            all_symbols=ALL_SYMBOLS,
+            vip_role_name=VIP_ROLE_NAME,
+            started_at=runtime_state.STATE.get("started_at"),
+        )
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:400]}
+
 class _PingHandler(BaseHTTPRequestHandler):
+    def _serve_panel_file(self, rel_path: str) -> bool:
+        """Serve a static file from the panel/ directory. Returns True if handled."""
+        if not PANEL_DIR.is_dir():
+            return False
+        rel_path = rel_path.lstrip("/") or "index.html"
+        target = (PANEL_DIR / rel_path).resolve()
+        try:
+            # Prevent path traversal outside the panel directory.
+            if not str(target).startswith(str(PANEL_DIR.resolve())):
+                return False
+        except Exception:
+            return False
+        if target.is_dir():
+            target = target / "index.html"
+        if not target.is_file():
+            return False
+        ctype = _PANEL_CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
+        try:
+            data = target.read_bytes()
+        except Exception:
+            return False
+        self.send_response(200)
+        self.send_header("Content-type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        if target.suffix.lower() in (".css", ".js", ".png", ".jpg", ".jpeg", ".svg", ".woff2", ".ico"):
+            self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        self.wfile.write(data)
+        return True
+
     def do_GET(self):
         path = (self.path or "/").split("?")[0]
+
+        # ── Web panel API ──
+        if path == "/api/stats":
+            payload = _panel_stats_payload()
+            body = json.dumps(payload, default=str).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        # ── Static panel assets ──
+        if path.startswith("/assets/"):
+            if self._serve_panel_file(path):
+                return
+
         if path in ("/health", "/healthz"):
             ready = client.is_ready()
             runtime_state.mark_discord_ready(ready)
@@ -6847,15 +6937,25 @@ class _PingHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
+        # ── Web panel home (Romania Crypto Signals) ──
+        if path in ("/", "/index.html", "/panel"):
+            if self._serve_panel_file("index.html"):
+                return
+
+        # Try to serve any other path as a panel file (e.g. /favicon, deep links).
+        if path not in ("/",) and self._serve_panel_file(path):
+            return
+
+        # Fallback plain-text status page if panel files are missing.
         self.send_response(200)
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
         uptime_info = (
-            f"<h2 style='color:#00c896;font-family:monospace'>Crypto Signals Bot — ONLINE</h2>"
+            f"<h2 style='color:#00c896;font-family:monospace'>Romania Crypto Signals — ONLINE</h2>"
             f"<p>Signals: BUY <b>{SIGNAL_STATS['BUY']}</b> | SELL <b>{SIGNAL_STATS['SELL']}</b> | Total <b>{SIGNAL_STATS['total']}</b></p>"
             f"<p>Discord: <b>{'connected' if client.is_ready() else 'starting...'}</b></p>"
             f"<p style='color:#8b949e'>Last ping: {utcnow().strftime('%d %b %Y %H:%M:%S UTC')}</p>"
-            f"<p><a href='/health'>/health</a> JSON</p>"
+            f"<p><a href='/health'>/health</a> JSON · <a href='/api/stats'>/api/stats</a></p>"
         )
         self.wfile.write(uptime_info.encode("utf-8"))
 
@@ -6886,10 +6986,17 @@ def print_startup_config():
 
 def keep_alive():
     port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), _PingHandler)
+    try:
+        from http.server import ThreadingHTTPServer
+        server_cls = ThreadingHTTPServer
+    except Exception:
+        server_cls = HTTPServer
+    server = server_cls(("0.0.0.0", port), _PingHandler)
     t = threading.Thread(target=server.serve_forever, daemon=True)
     t.start()
     print(f"[config] Health check: http://0.0.0.0:{port}/health", flush=True)
+    print(f"[config] Web panel: http://0.0.0.0:{port}/  (Romania Crypto Signals)", flush=True)
+    print(f"[config] Panel API: http://0.0.0.0:{port}/api/stats", flush=True)
     print(f"Keep-alive server running on port {port}", flush=True)
 
 
