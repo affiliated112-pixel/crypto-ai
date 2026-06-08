@@ -1,0 +1,37 @@
+MARKER_START
+// ── Position Calculator ──
+function calcPosition() {
+  const capital = parseFloat(document.getElementById('calcCapital')?.value) || 0;
+  const riskPct = parseFloat(document.getElementById('calcRisk')?.value) || 0;
+  const entry   = parseFloat(document.getElementById('calcEntry')?.value) || 0;
+  const sl      = parseFloat(document.getElementById('calcSL')?.value) || 0;
+  const riskUsd = capital * riskPct / 100;
+  const slDist  = Math.abs(entry - sl);
+  const lot     = (slDist > 0 && entry > 0) ? riskUsd / slDist : 0;
+  const pnl21   = riskUsd * 2;
+  const fmtU = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmtC = v => v.toLocaleString('en-US', {minimumFractionDigits:4, maximumFractionDigits:4});
+  const ru = document.getElementById('calcRiskUsd');
+  const lo = document.getElementById('calcLot');
+  const pn = document.getElementById('calcPnl');
+  if (ru) ru.textContent = (capital && riskPct) ? fmtU(riskUsd) : '—';
+  if (lo) lo.textContent = lot > 0 ? fmtC(lot) : '—';
+  if (pn) pn.textContent = pnl21 > 0 ? '+' + fmtU(pnl21) : '—';
+}
+
+// ── Show profile/login nav button based on auth ──
+(async function checkNavAuth() {
+  try {
+    const r = await fetch('/api/me', {cache:'no-store'});
+    const d = await r.json();
+    if (d.authenticated) {
+      const prof = document.getElementById('profileNavBtn');
+      const login = document.getElementById('loginNavBtn');
+      if (prof) prof.style.display = 'inline-flex';
+      if (login) login.style.display = 'none';
+    }
+  } catch(_) {}
+})();
+</script>
+</body>
+</html>

@@ -7,7 +7,6 @@
   <meta name="description" content="Cea mai avansată platformă de semnale crypto din România. AI-powered, TradingView live, paper trading, Fear & Greed Index, news live, alerte de preț."/>
   <link rel="canonical" href="https://romaniacrypto.app/"/>
   <meta name="theme-color" content="#05080f"/>
-  <!-- Open Graph / social share -->
   <meta property="og:type" content="website"/>
   <meta property="og:title" content="Romania Crypto Signals — AI Trading Platform"/>
   <meta property="og:description" content="Semnale crypto AI 24/7, TradingView live, paper trading, alerte de preț și news live. Intră gratuit pe Discord."/>
@@ -80,6 +79,7 @@
         Discord
       </a>
       <a href="/vip.html" class="btn-vip-nav">💎 VIP $25/lună</a>
+      <button class="theme-toggle-btn" id="themeToggle" onclick="toggleTheme()" title="Dark/Light mode">☀️</button>
       <button class="lang-toggle" id="langToggle" onclick="toggleLang()" title="Language">🇷🇴 RO</button>
       <a href="/profile.html" class="btn-admin-nav" id="profileNavBtn" title="Profilul meu" style="display:none">👤</a>
       <a href="/admin.html" class="btn-admin-nav" id="loginNavBtn" title="Login / Cont">🔐</a>
@@ -107,7 +107,7 @@
     <h1 class="hero-h1">
       Semnale Crypto<br/>
       <span class="h1-blue">AI Inteligente</span><br/>
-      <span class="h1-red">& Precise</span>
+      <span class="h1-red">&amp; Precise</span>
     </h1>
     <p class="hero-desc" data-i18n="hero_desc">Bot AI care scanează 30+ monede 24/7 cu RSI, MACD, Bollinger Bands. Entry exact, TP și SL calculat automat. Trimis pe Discord înainte să ratezi mișcarea.</p>
     <div class="hero-actions">
@@ -229,7 +229,6 @@
         </div>
       </div>
     </div>
-    <!-- TradingView Iframe Widget — exact aceiași indicatori ca VIP -->
     <div class="tv-chart-wrap">
       <div id="tvContainer"></div>
     </div>
@@ -283,7 +282,6 @@
 <!-- ══ SIGNALS ══ -->
 <section class="section" id="signals">
   <div class="container">
-    <!-- FREE -->
     <div class="sig-block">
       <div class="sig-block-hdr">
         <div>
@@ -297,7 +295,6 @@
       </div>
     </div>
 
-    <!-- VIP -->
     <div class="sig-block" id="vip-section">
       <div class="vip-block-bg"></div>
       <div class="sig-block-hdr">
@@ -305,19 +302,17 @@
           <h2 class="section-title">⭐ Semnale <span style="color:var(--gold)">VIP</span> <span class="locked-pill">🔒 Premium</span></h2>
           <p class="section-sub">Entry precis · TP1/TP2/TP3 · Stop Loss · 30+ monede · Leverage Alerts</p>
         </div>
-        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip">💎 Deblochează VIP — $25/lună</a>
+        <a href="/vip.html" class="cta-vip">💎 Deblochează VIP — $25/lună</a>
       </div>
       <div class="signal-grid" id="vipSignalGrid">
         <div class="sig-empty">Se încarcă semnale VIP…</div>
       </div>
-      <!-- VIP Benefits -->
       <div class="vip-benefits-grid">
         <div class="vip-benefit"><span>🎯</span><div><b>Entry + TP1/TP2/TP3 + SL</b><p>Plan complet pentru fiecare trade.</p></div></div>
         <div class="vip-benefit"><span>🪙</span><div><b>30+ monede scanate</b><p>Toate altcoin-urile importante.</p></div></div>
         <div class="vip-benefit"><span>⚡</span><div><b>Leverage Alerts</b><p>Semnale futures cu risc calculat.</p></div></div>
         <div class="vip-benefit"><span>🤖</span><div><b>Scor AI detaliat</b><p>Calitate, R:R și justificare completă.</p></div></div>
       </div>
-      <!-- Price -->
       <div class="vip-price-card">
         <div class="vpc-left">
           <div class="vpc-badge">💎 VIP MEMBERSHIP</div>
@@ -332,7 +327,7 @@
             <li>✅ Leverage alerts prioritare</li>
             <li>✅ Suport direct din comunitate</li>
           </ul>
-          <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip cta-lg">💎 Vreau VIP acum →</a>
+          <a href="/vip.html" class="cta-vip cta-lg">💎 Vreau VIP acum →</a>
         </div>
       </div>
     </div>
@@ -345,7 +340,7 @@
     <div class="section-header">
       <div>
         <h2 class="section-title" data-i18n="alerts_title">🔔 Alerte de preț</h2>
-        <p class="section-sub" data-i18n="alerts_sub">Primește o notificare în browser când prețul atinge ținta ta.</p>
+        <p class="section-sub" data-i18n="alerts_sub">Primești o notificare în browser când prețul atinge ținta ta.</p>
       </div>
     </div>
     <div class="alerts-layout">
@@ -400,7 +395,6 @@
       <button class="cta-secondary" onclick="resetPT()">🔄 Reset ($10,000)</button>
     </div>
     <div class="paper-grid">
-      <!-- Portfolio -->
       <div class="paper-card">
         <div class="pc-title">💰 Portofoliu Virtual</div>
         <div class="pt-balance">
@@ -425,7 +419,6 @@
         </div>
       </div>
 
-      <!-- Trade form -->
       <div class="paper-card">
         <div class="pc-title">⚡ Deschide Poziție</div>
         <div class="trade-form">
@@ -477,7 +470,6 @@
         </div>
       </div>
 
-      <!-- History -->
       <div class="paper-card">
         <div class="pc-title">📋 Istoricul tranzacțiilor</div>
         <div class="history-list" id="ptHistory">
@@ -485,7 +477,7 @@
         </div>
       </div>
 
-      <!-- Calculator de pozitie -->
+      <!-- Calculator de poziție -->
       <div class="pos-calc">
         <div class="pc-title">🧮 Calculator de poziție</div>
         <div class="pc-grid">
@@ -598,7 +590,7 @@
         <div class="dc-div"></div>
         <h3 style="color:var(--gold)">💎 Upgrade VIP</h3>
         <p>Entry precis, TP/SL, canal privat. Doar <b>$25/lună</b>.</p>
-        <a href="https://discord.gg/romaniacrypto" target="_blank" class="cta-vip" style="margin-top:12px;width:100%;justify-content:center">Deblochează VIP →</a>
+        <a href="/vip.html" class="cta-vip" style="margin-top:12px;width:100%;justify-content:center">Deblochează VIP →</a>
       </div>
     </div>
   </div>
@@ -620,7 +612,9 @@
         <a href="#chart">Chart Live</a>
         <a href="#paper">Demo Trading</a>
         <a href="#news">News</a>
-        <a href="/admin.html">Login VIP</a>
+        <a href="/vip.html">VIP</a>
+        <a href="/profile.html">Profilul meu</a>
+        <a href="/admin.html">Login</a>
       </div>
     </div>
     <div class="footer-disc">⚠️ Semnalele nu sunt sfaturi financiare. Tranzacționați responsabil. · Romania Crypto Signals © 2025</div>
@@ -629,7 +623,6 @@
 
 <div id="toastContainer" class="toast-container"></div>
 
-<!-- JSON-LD structured data for SEO -->
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -643,12 +636,8 @@
 </script>
 
 <script>
-// ══════════════════════════════════════════
-// TradingView — Exact indicatori VIP
-// ══════════════════════════════════════════
 let _tvSymbol = 'BINANCE:BTCUSDT';
 let _tvInterval = '60';
-let _tvLoaded = false;
 
 function buildTVWidget() {
   const cont = document.getElementById('tvContainer');
@@ -675,22 +664,16 @@ function buildTVWidget() {
     'popup_height=650'
   ].join('&');
   const src = 'https://s.tradingview.com/widgetembed/?' + params;
-  cont.innerHTML = `<iframe id="tvFrame" src="${src}" style="width:100%;height:540px;border:none;" allowtransparency="true" frameborder="0" scrolling="no"></iframe>`;
+  cont.innerHTML = '<iframe id="tvFrame" src="' + src + '" style="width:100%;height:540px;border:none;" allowtransparency="true" frameborder="0" scrolling="no"></iframe>';
 }
 
-function changeChartSymbol(sym) {
-  _tvSymbol = sym;
-  buildTVWidget();
-}
-
+function changeChartSymbol(sym) { _tvSymbol = sym; buildTVWidget(); }
 function setInterval_(iv, btn) {
   _tvInterval = iv;
   document.querySelectorAll('.ci-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   buildTVWidget();
 }
-
-// Build on load
 document.addEventListener('DOMContentLoaded', buildTVWidget);
 </script>
 
@@ -699,12 +682,12 @@ document.addEventListener('DOMContentLoaded', buildTVWidget);
 <script src="/assets/i18n.js"></script>
 <script src="/assets/realtime.js"></script>
 <script>
-// Register the service worker for PWA / offline support.
+// PWA service worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 
-// ── Dark / Light mode toggle ──
+// ── Dark / Light mode ──
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light-mode');
   localStorage.setItem('rcb_theme', isLight ? 'light' : 'dark');
@@ -712,55 +695,46 @@ function toggleTheme() {
   if (btn) btn.textContent = isLight ? '🌙' : '☀️';
 }
 (function applyTheme() {
-  const saved = localStorage.getItem('rcb_theme');
-  if (saved === 'light') {
+  if (localStorage.getItem('rcb_theme') === 'light') {
     document.body.classList.add('light-mode');
     const btn = document.getElementById('themeToggle');
     if (btn) btn.textContent = '🌙';
   }
 })();
 
-// ── Scroll reveal (Intersection Observer) ──
+// ── Scroll reveal ──
 (function initReveal() {
-  const els = document.querySelectorAll('.section, .price-card, .sig-card, .tool-card, .news-card, .perf-card, .dc-panel');
-  els.forEach((el, i) => {
-    el.classList.add('reveal');
-    el.style.transitionDelay = (i % 4) * 0.08 + 's';
-  });
   const obs = new IntersectionObserver((entries) => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
   }, { threshold: 0.08 });
-  document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+  document.querySelectorAll('.section, .price-card, .sig-card, .tool-card, .news-card, .perf-card, .dc-panel').forEach((el, i) => {
+    el.classList.add('reveal');
+    el.style.transitionDelay = (i % 4) * 0.08 + 's';
+    obs.observe(el);
+  });
 })();
 
 // ── Position Calculator ──
 function calcPosition() {
-  const capital = parseFloat(document.getElementById('calcCapital')?.value) || 0;
-  const riskPct = parseFloat(document.getElementById('calcRisk')?.value) || 0;
-  const entry   = parseFloat(document.getElementById('calcEntry')?.value) || 0;
-  const sl      = parseFloat(document.getElementById('calcSL')?.value) || 0;
+  const capital = parseFloat(document.getElementById('calcCapital').value) || 0;
+  const riskPct = parseFloat(document.getElementById('calcRisk').value) || 0;
+  const entry   = parseFloat(document.getElementById('calcEntry').value) || 0;
+  const sl      = parseFloat(document.getElementById('calcSL').value) || 0;
   const riskUsd = capital * riskPct / 100;
   const slDist  = Math.abs(entry - sl);
-  const lot     = (slDist > 0 && entry > 0) ? riskUsd / (slDist / entry * entry) : 0;
+  const lot     = (slDist > 0 && entry > 0) ? riskUsd / slDist : 0;
   const pnl21   = riskUsd * 2;
-  const fmtU = v => '
-</body>
-</html>
- + v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const fmtC = v => v.toLocaleString('en-US',{minimumFractionDigits:4,maximumFractionDigits:4});
-  const ru = document.getElementById('calcRiskUsd');
-  const lo = document.getElementById('calcLot');
-  const pn = document.getElementById('calcPnl');
-  if (ru) ru.textContent = capital && riskPct ? fmtU(riskUsd) : '—';
-  if (lo) lo.textContent = lot > 0 ? fmtC(lot) : '—';
-  if (pn) pn.textContent = pnl21 > 0 ? '+' + fmtU(pnl21) : '—';
+  const fmtU = v => '$' + v.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmtC = v => v.toLocaleString('en-US', {minimumFractionDigits:4, maximumFractionDigits:4});
+  document.getElementById('calcRiskUsd').textContent = (capital && riskPct) ? fmtU(riskUsd) : '—';
+  document.getElementById('calcLot').textContent = lot > 0 ? fmtC(lot) : '—';
+  document.getElementById('calcPnl').textContent = pnl21 > 0 ? '+' + fmtU(pnl21) : '—';
 }
 
-// ── Show profile/login nav button based on auth ──
+// ── Auth nav (arată profil sau login) ──
 (async function checkNavAuth() {
   try {
-    const r = await fetch('/api/me', {cache:'no-store'});
-    const d = await r.json();
+    const d = await fetch('/api/me', {cache:'no-store'}).then(r => r.json());
     if (d.authenticated) {
       const prof = document.getElementById('profileNavBtn');
       const login = document.getElementById('loginNavBtn');
