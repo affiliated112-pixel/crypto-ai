@@ -170,12 +170,16 @@ function renderSignals(d) {
       : '<div class="empty-card">Niciun semnal FREE încă. Botul îl va afișa imediat ce trimite unul.</div>';
   }
 
+  const isAdmin = !!d.is_admin;
   const vipEl = document.getElementById('vipSignals');
   if (vipEl) {
-    if (vip.length) {
+    if (isAdmin) {
+      vipEl.innerHTML = vip.length
+        ? vip.slice(0, 6).map(sigCardVipAdmin).join('')
+        : '<div class="empty-card">Niciun semnal VIP încă.</div>';
+    } else if (vip.length) {
       vipEl.innerHTML = vip.slice(0, 6).map((r) => sigCardVip(r, invite)).join('');
     } else {
-      // show enticing locked placeholders even when none yet
       const placeholders = [
         { name: 'BTC', side: 'BUY', status: 'live' },
         { name: 'ETH', side: 'SELL', status: 'live' },
@@ -205,6 +209,35 @@ function renderPerformance(d) {
     const deg = Math.max(0, Math.min(100, winRate)) * 3.6;
     const color = winRate >= 50 ? 'var(--green)' : winRate > 0 ? 'var(--yellow)' : 'rgba(255,255,255,0.06)';
     ring.style.background = `conic-gradient(${color} ${deg}deg, rgba(255,255,255,0.06) ${deg}deg)`;
+  }
+}
+
+function sigCardVipAdmin(r) {
+  const buy = r.side === 'BUY';
+  return `<div class="sig-card" style="border-color:rgba(255,184,0,0.35)">
+    <div class="sig-top">
+      <div class="sig-coin"><b>${r.name || '—'}</b> <span class="lock-pill">VIP</span></div>
+      <span class="badge ${buy ? 'badge-buy' : 'badge-sell'}">${r.side || '—'}</span>
+    </div>
+    <div class="sig-rows">
+      <div class="sig-r"><span>Entry</span><b>${fmtPrice(r.entry)}</b></div>
+      <div class="sig-r"><span>Scor calitate</span><b>${r.score ?? '—'}/100</b></div>
+      <div class="sig-r"><span>R:R</span><b>${r.rr ? Number(r.rr).toFixed(2) : '—'}</b></div>
+      <div class="sig-r"><span>Stop Loss</span><b>${r.sl ? fmtPrice(r.sl) : '—'}</b></div>
+      <div class="sig-r"><span>Status</span><span class="badge badge-status">${r.status || '—'}</span></div>
+    </div>
+    <div class="sig-time">⏱ ${timeAgo(r.sent_at)}</div>
+  </div>`;
+}
+
+function renderAdmin(d) {
+  const banner = document.getElementById('adminBanner');
+  if (!banner) return;
+  if (d.is_admin) {
+    banner.classList.remove('hidden');
+    setText('adminName', d.admin_user || 'admin');
+  } else {
+    banner.classList.add('hidden');
   }
 }
 
@@ -255,7 +288,7 @@ async function load() {
     const d = await res.json();
     renderStatus(d); renderLinks(d); renderStats(d);
     renderTicker(d); renderPrices(d); renderFng(d);
-    renderSignals(d); renderPerformance(d);
+    renderSignals(d); renderPerformance(d); renderAdmin(d);
   } catch (e) {
     const dot = document.getElementById('botStatusDot');
     const txt = document.getElementById('botStatusText');
@@ -264,6 +297,14 @@ async function load() {
     console.error('panel load error', e);
   }
 }
+
+/* logout handler */
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'adminLogout') {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
+    window.location.href = '/';
+  }
+});
 
 initParticles();
 load();

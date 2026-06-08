@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin · Romania Crypto Signals</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" type="image/png" href="/assets/rcb-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+<body class="auth-body">
+  <canvas id="bgCanvas"></canvas>
+  <div class="bg-glow glow-blue"></div>
+  <div class="bg-glow glow-red"></div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <a href="/" class="auth-brand">
+        <img src="/assets/rcb-logo.png" alt="RCB" />
+        <div>
+          <span class="auth-title">Romania Crypto Signals</span>
+          <span class="auth-sub">Panou Administrare</span>
+        </div>
+      </a>
+
+      <!-- TABS -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Autentificare</button>
+        <button class="auth-tab" data-tab="register">Înregistrare</button>
+      </div>
+
+      <!-- LOGIN -->
+      <form id="loginForm" class="auth-form">
+        <label>Username
+          <input type="text" id="loginUser" autocomplete="username" required placeholder="admin" />
+        </label>
+        <label>Parolă
+          <input type="password" id="loginPass" autocomplete="current-password" required placeholder="••••••••" />
+        </label>
+        <button type="submit" class="btn btn-primary auth-submit">🔐 Intră în panou</button>
+        <div class="auth-msg" id="loginMsg"></div>
+      </form>
+
+      <!-- REGISTER -->
+      <form id="registerForm" class="auth-form hidden">
+        <label>Username nou
+          <input type="text" id="regUser" autocomplete="username" required placeholder="ex: marius" />
+        </label>
+        <label>Parolă (min 6 caractere)
+          <input type="password" id="regPass" autocomplete="new-password" required placeholder="••••••••" />
+        </label>
+        <label>Cod de înregistrare
+          <input type="password" id="regCode" required placeholder="cod secret admin" />
+        </label>
+        <button type="submit" class="btn btn-vip auth-submit">✨ Creează cont admin</button>
+        <div class="auth-msg" id="registerMsg"></div>
+        <p class="auth-hint">Înregistrarea necesită codul secret <b>ADMIN_REGISTER_CODE</b> setat în server.</p>
+      </form>
+
+      <a href="/" class="auth-back">← Înapoi la site</a>
+    </div>
+    <p class="auth-footer">🔒 Conexiune securizată · Sesiuni semnate · Protecție brute-force</p>
+  </div>
+
+  <script src="/assets/auth.js"></script>
+</body>
+</html>

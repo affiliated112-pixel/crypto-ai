@@ -84,4 +84,22 @@ AUTO_TRADE_ALLOW_LIVE_AUTO=false
 # BINANCE_SECRET=
 # TRADER_USER_ID=
 
+# === WEB PANEL (Romania Crypto Signals) ===
+# Link-ul de invite Discord (folosit de butoanele de pe site).
+DISCORD_INVITE_URL=https://discord.gg/PUNE_LINKUL_TAU
+# Text preț VIP afișat pe site (ex: "Acces VIP — 99 RON/lună").
+VIP_PRICE=Acces VIP — contactează-ne pe Discord
+
+# === PANEL ADMIN / SECURITATE ===
+# Login admin pentru panou. SCHIMBĂ parola în producție!
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin666
+# Cheie secretă pentru semnarea sesiunilor (pune un string lung, aleator, min 32 caractere).
+SECRET_KEY=schimba-cu-un-string-lung-si-aleator-de-minim-32-caractere
+# OPȚIONAL: cod pentru a permite înregistrarea de admini noi. Lasă gol = înregistrare dezactivată.
+ADMIN_REGISTER_CODE=
+
+# Membri online pe panel (necesită Presence Intent activat în Discord Developer Portal).
+PRESENCE_INTENT=0
+
 # PORT este setat automat de Railway — nu îl adăuga manual.

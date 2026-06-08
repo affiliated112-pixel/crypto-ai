@@ -225,7 +225,7 @@ def _signal_counts(signal_stats: dict | None) -> dict:
         base["total"] = _safe_int(signal_stats.get("total"))
     return base
 
-def _split_signals() -> dict:
+def _split_signals(is_admin: bool = False) -> dict:
     out = {"free": [], "vip": []}
     if db is None:
         return out
@@ -239,16 +239,35 @@ def _split_signals() -> dict:
         symbol = r.get("symbol")
         sent_at = r.get("sent_at") or r.get("reserved_at")
         if tier == "vip":
-            # LOCKED teaser — show that a premium signal exists, hide the edge.
-            out["vip"].append({
-                "symbol": symbol,
-                "name": (symbol or "").replace("USDT", ""),
-                "side": side,
-                "tier": "vip",
-                "status": r.get("status"),
-                "sent_at": sent_at,
-                "locked": True,
-            })
+            if is_admin:
+                # Admin sees the full premium signal.
+                m = r.get("meta") if isinstance(r.get("meta"), dict) else {}
+                out["vip"].append({
+                    "symbol": symbol,
+                    "name": (symbol or "").replace("USDT", ""),
+                    "side": side,
+                    "tier": "vip",
+                    "entry": _safe_float(r.get("entry")),
+                    "score": r.get("score"),
+                    "rr": _safe_float(r.get("rr")),
+                    "confidence": r.get("confidence"),
+                    "tp": m.get("tp") or m.get("targets"),
+                    "sl": m.get("sl") or m.get("stop"),
+                    "status": r.get("status"),
+                    "sent_at": sent_at,
+                    "locked": False,
+                })
+            else:
+                # LOCKED teaser — show that a premium signal exists, hide the edge.
+                out["vip"].append({
+                    "symbol": symbol,
+                    "name": (symbol or "").replace("USDT", ""),
+                    "side": side,
+                    "tier": "vip",
+                    "status": r.get("status"),
+                    "sent_at": sent_at,
+                    "locked": True,
+                })
         else:
             out["free"].append({
                 "symbol": symbol,
@@ -292,7 +311,8 @@ def _db_meta() -> dict:
 def collect_stats(client: Any = None, *, signal_stats: dict | None = None,
                   symbols: Optional[list] = None, all_symbols: Optional[list] = None,
                   vip_role_name: str = "VIP", started_at: Optional[str] = None,
-                  discord_invite: str = "", vip_price: str = "") -> dict:
+                  discord_invite: str = "", vip_price: str = "",
+                  is_admin: bool = False) -> dict:
     discord_ready = False
     bot_user = None
     try:
@@ -304,7 +324,7 @@ def collect_stats(client: Any = None, *, signal_stats: dict | None = None,
     guild = _guild_stats(client, vip_role_name)
     counts = _signal_counts(signal_stats)
     meta = _db_meta()
-    signals = _split_signals()
+    signals = _split_signals(is_admin=is_admin)
     prices = _live_prices(symbols or [], all_symbols or [])
     fng = _fear_greed()
 
@@ -313,6 +333,7 @@ def collect_stats(client: Any = None, *, signal_stats: dict | None = None,
         "updated_at": _utcnow_iso(),
         "discord_ready": discord_ready,
         "bot_user": bot_user,
+        "is_admin": is_admin,
         "started_at": started_at,
         "links": {
             "discord_invite": discord_invite or "",

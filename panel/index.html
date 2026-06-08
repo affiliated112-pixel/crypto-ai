@@ -51,9 +51,18 @@
           <span id="botStatusText">Conectare…</span>
         </div>
         <a class="btn btn-vip-sm" id="navVip" href="#vip">💎 VIP</a>
+        <a class="nav-admin-link" id="navAdmin" href="/admin.html" title="Admin">🔐</a>
       </div>
     </div>
   </header>
+
+  <!-- ADMIN BANNER (shown only when logged in) -->
+  <div class="admin-banner hidden" id="adminBanner">
+    <div class="admin-banner-inner">
+      <span>🔓 Mod administrator activ — vezi semnalele VIP complete. Salut, <b id="adminName">admin</b>!</span>
+      <button class="admin-logout" id="adminLogout">Deconectare</button>
+    </div>
+  </div>
 
   <!-- HERO -->
   <section class="hero" id="top">

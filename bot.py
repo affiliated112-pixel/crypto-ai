@@ -6846,6 +6846,12 @@ except Exception as _e:  # pragma: no cover
     panel_data = None
     print(f"[panel] panel_data not available: {_e}", flush=True)
 
+try:
+    import panel_auth
+except Exception as _e:  # pragma: no cover
+    panel_auth = None
+    print(f"[panel] panel_auth not available: {_e}", flush=True)
+
 PANEL_DIR = Path(__file__).with_name("panel")
 
 _PANEL_CONTENT_TYPES = {
@@ -6861,7 +6867,7 @@ _PANEL_CONTENT_TYPES = {
     ".woff2": "font/woff2",
 }
 
-def _panel_stats_payload() -> dict:
+def _panel_stats_payload(is_admin: bool = False) -> dict:
     """Collect live panel data from the Discord client + database."""
     if panel_data is None:
         return {"ok": False, "error": "panel_data module not loaded"}
@@ -6875,11 +6881,56 @@ def _panel_stats_payload() -> dict:
             started_at=runtime_state.STATE.get("started_at"),
             discord_invite=_env("DISCORD_INVITE_URL", ""),
             vip_price=_env("VIP_PRICE", ""),
+            is_admin=is_admin,
         )
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:400]}
 
+def _panel_client_ip(handler) -> str:
+    """Best-effort client IP behind Railway's proxy (for rate limiting)."""
+    fwd = handler.headers.get("X-Forwarded-For") if handler.headers else None
+    if fwd:
+        return fwd.split(",")[0].strip()
+    try:
+        return handler.client_address[0]
+    except Exception:
+        return "unknown"
+
+def _panel_current_user(handler):
+    """Return the logged-in admin username from the session cookie, or None."""
+    if panel_auth is None:
+        return None
+    try:
+        cookies = panel_auth.parse_cookie(handler.headers.get("Cookie", "") if handler.headers else "")
+        return panel_auth.verify_token(cookies.get(panel_auth.COOKIE_NAME, ""))
+    except Exception:
+        return None
+
 class _PingHandler(BaseHTTPRequestHandler):
+    def _send_json(self, payload: dict, status: int = 200, extra_headers: dict | None = None):
+        body = json.dumps(payload, default=str).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json_body(self) -> dict:
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            if length <= 0 or length > 8192:
+                return {}
+            raw = self.rfile.read(length)
+            return json.loads(raw.decode("utf-8"))
+        except Exception:
+            return {}
+
     def _serve_panel_file(self, rel_path: str) -> bool:
         """Serve a static file from the panel/ directory. Returns True if handled."""
         if not PANEL_DIR.is_dir():
@@ -6915,15 +6966,17 @@ class _PingHandler(BaseHTTPRequestHandler):
 
         # ── Web panel API ──
         if path == "/api/stats":
-            payload = _panel_stats_payload()
-            body = json.dumps(payload, default=str).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
+            user = _panel_current_user(self)
+            payload = _panel_stats_payload(is_admin=bool(user))
+            if user:
+                payload["admin_user"] = user
+            self._send_json(payload)
+            return
+
+        # ── Who am I (is the session a logged-in admin?) ──
+        if path == "/api/me":
+            user = _panel_current_user(self)
+            self._send_json({"ok": True, "authenticated": bool(user), "username": user})
             return
 
         # ── Static panel assets ──
@@ -6981,6 +7034,59 @@ class _PingHandler(BaseHTTPRequestHandler):
             f"<p><a href='/health'>/health</a> JSON · <a href='/api/stats'>/api/stats</a></p>"
         )
         self.wfile.write(uptime_info.encode("utf-8"))
+
+    def do_POST(self):
+        path = (self.path or "/").split("?")[0]
+        if panel_auth is None:
+            self._send_json({"ok": False, "error": "auth indisponibil"}, status=503)
+            return
+        secure = self.headers.get("X-Forwarded-Proto", "https") != "http"
+        ip = _panel_client_ip(self)
+
+        # ── LOGIN ──
+        if path == "/api/login":
+            if panel_auth.is_locked(ip):
+                self._send_json({"ok": False, "error": "Prea multe încercări. Încearcă din nou mai târziu."}, status=429)
+                return
+            data = self._read_json_body()
+            username = str(data.get("username", ""))[:64]
+            password = str(data.get("password", ""))[:128]
+            if panel_auth.check_credentials(username, password):
+                panel_auth.reset_attempts(ip)
+                token = panel_auth.create_token(username.strip().lower())
+                cookie = panel_auth.make_set_cookie(token, secure=secure)
+                print(f"[panel] admin login OK: {username} from {ip}", flush=True)
+                self._send_json({"ok": True, "username": username}, extra_headers={"Set-Cookie": cookie})
+            else:
+                panel_auth.record_failure(ip)
+                left = panel_auth.attempts_left(ip)
+                print(f"[panel] admin login FAIL: {username} from {ip} ({left} left)", flush=True)
+                self._send_json({"ok": False, "error": "Date de autentificare greșite.", "attempts_left": left}, status=401)
+            return
+
+        # ── REGISTER (requires ADMIN_REGISTER_CODE) ──
+        if path == "/api/register":
+            if panel_auth.is_locked(ip):
+                self._send_json({"ok": False, "error": "Prea multe încercări. Încearcă mai târziu."}, status=429)
+                return
+            data = self._read_json_body()
+            ok, msg = panel_auth.register_admin(
+                str(data.get("username", ""))[:64],
+                str(data.get("password", ""))[:128],
+                str(data.get("code", ""))[:128],
+            )
+            if not ok:
+                panel_auth.record_failure(ip)
+            self._send_json({"ok": ok, "message": msg}, status=200 if ok else 400)
+            return
+
+        # ── LOGOUT ──
+        if path == "/api/logout":
+            cookie = panel_auth.make_clear_cookie(secure=secure)
+            self._send_json({"ok": True}, extra_headers={"Set-Cookie": cookie})
+            return
+
+        self._send_json({"ok": False, "error": "not found"}, status=404)
 
     def log_message(self, format, *args):
         pass
