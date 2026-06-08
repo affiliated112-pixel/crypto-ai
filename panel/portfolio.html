@@ -181,7 +181,7 @@ async function fetchPrices(){
   const ids=[..._portfolio.map(h=>h.id), 'bitcoin','ethereum','solana'];
   const uniq=[...new Set(ids)].join(',');
   try{
-    const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${uniq}&vs_currencies=usd&include_24hr_change=true`);
+    const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${uniq}&vs_currencies=usd&include_24hr_change=true`,{signal:AbortSignal.timeout(8000)});
     const data=await res.json();
     Object.assign(_prices,data);
     renderPortfolio();

@@ -722,3 +722,4 @@ async function loadData(){
 _fetchDirectPrices().then(loadData);
 setInterval(loadData, REFRESH_MS);
 setInterval(renderPT, 5000);
+setInterval(()=>{ const c=($('ptCoin')||{}).value; if(c) set('tfPrice',fmtUsd(getPrice(c))); }, 3000);
