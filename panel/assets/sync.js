@@ -10,6 +10,9 @@ const Sync = (() => {
   let _authed = false;
   let _checked = false;
   const _listeners = [];
+  // Pending sections to flush + one debounce timer shared across calls.
+  // We MERGE pending sections so a paper save never cancels an alerts save.
+  let _pending = {};
   let _saveTimer = null;
 
   /** Has the current visitor an authenticated session? */
@@ -39,28 +42,48 @@ const Sync = (() => {
     } catch (_) { return null; }
   }
 
+  /** Flush all pending sections in a single request. */
+  async function _flush() {
+    const payload = _pending;
+    _pending = {};
+    if (!_authed || !Object.keys(payload).length) return;
+    try {
+      await fetch('/api/userdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (_) { /* offline — localStorage already has it */ }
+  }
+
   /**
-   * Push one or more sections to the account (debounced).
+   * Push one or more sections to the account (debounced + merged).
    * @param {{paper?:object, portfolio?:object, alerts?:object}} sections
    */
   function push(sections) {
-    if (!_authed) return;
+    if (!_authed || !sections) return;
+    Object.assign(_pending, sections); // merge, never overwrite other sections
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(async () => {
-      try {
-        await fetch('/api/userdata', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sections),
-        });
-      } catch (_) { /* offline — localStorage already has it */ }
-    }, 600);
+    _saveTimer = setTimeout(_flush, 600);
   }
 
   /** Register a callback fired once the auth state is known. */
   function onReady(cb) {
+    if (typeof cb !== 'function') return;
     if (_checked) cb(_authed);
     else _listeners.push(cb);
+  }
+
+  // Flush any pending writes before the tab closes (best-effort).
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+      if (!_authed || !Object.keys(_pending).length) return;
+      try {
+        const blob = new Blob([JSON.stringify(_pending)], { type: 'application/json' });
+        navigator.sendBeacon('/api/userdata', blob);
+        _pending = {};
+      } catch (_) {}
+    });
   }
 
   // Resolve auth state once on load and notify listeners.
